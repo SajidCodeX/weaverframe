@@ -1,0 +1,204 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── TENANT (BUILDER) ────────────────────────────────────────────────────────
+model Builder {
+  id          String   @id @default(uuid())
+  companyName String                           // "Horizon Homes LLC"
+  contactName String                           // "Mike Patterson"
+  email       String   @unique
+  phone       String?
+  plan        String   @default("professional") // "trial" | "professional" | "enterprise"
+  isActive    Boolean  @default(true)
+  adSpendBalance Float   @default(0.0)
+  paymentMethod  String? @default("None")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users           User[]
+  leads           Lead[]
+  appointments    Appointment[]
+  messages        Message[]
+  activities      Activity[]
+  reviewRequests  ReviewRequest[]
+  reviewPlatforms ReviewPlatform[]
+  integrations    Integration[]
+  publicReviews   PublicReview[]
+}
+
+// ─── USERS (ADMIN & BUILDER STAFF) ───────────────────────────────────────────
+model User {
+  id                String    @id @default(uuid())
+  builderId         String?                        // null = Super Admin
+  email             String    @unique
+  passwordHash      String                         // bcrypt hash — NEVER plaintext
+  role              String    @default("builder")  // "admin" | "builder"
+  displayName       String
+  forcePasswordReset Boolean  @default(false)
+  lastLoginAt       DateTime?
+  isActive          Boolean   @default(true)
+  
+  // Team Permissions
+  builderRole       String    @default("owner")    // "owner" | "member"
+  permissions       String[]  @default([])         // e.g. ["leads:read", "settings:write"]
+  
+  resetToken        String?
+  resetTokenExpires DateTime?
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  builder   Builder?  @relation(fields: [builderId], references: [id], onDelete: Cascade)
+}
+
+// ─── LEADS ───────────────────────────────────────────────────────────────────
+model Lead {
+  id              String     @id @default(uuid())
+  builderId       String
+  builder         Builder    @relation(fields: [builderId], references: [id], onDelete: Cascade)
+  
+  name            String
+  county          String     
+  state           String     
+  landPrice       Int        
+  estimatedBudget Int        
+  purchaseDate    DateTime   
+  phone           String?    
+  email           String?    
+  status          String     // "New", "Emailed", "Opened", "Replied", "Appointment"
+  scoreTier       String     // "Hot", "Warm", "Cold"
+  source          String     @default("Organic / Local SEO")
+  
+  activities      Activity[]
+  reviewRequests  ReviewRequest[]
+  appointments    Appointment[]
+  messages        Message[]
+  
+  createdAt       DateTime   @default(now())
+}
+
+// ─── REVIEW PLATFORMS ────────────────────────────────────────────────────────
+model ReviewPlatform {
+  id           String   @id @default(uuid())
+  builderId    String
+  builder      Builder  @relation(fields: [builderId], references: [id], onDelete: Cascade)
+  
+  name         String   // "Google Business", "Houzz", "GuildQuality"
+  rating       Float    // e.g., 4.8
+  reviewCount  Int      // e.g., 42
+  profileUrl   String
+  reviewsGoal  Int      // Target number of reviews
+  createdAt    DateTime @default(now())
+}
+
+// ─── REVIEW REQUESTS ─────────────────────────────────────────────────────────
+model ReviewRequest {
+  id          String   @id @default(uuid())
+  builderId   String
+  builder     Builder  @relation(fields: [builderId], references: [id], onDelete: Cascade)
+  
+  leadId      String?
+  clientName  String
+  clientEmail String?
+  clientPhone String?
+  rating      Int?     // 1-5 star selection
+  status      String   // "Sent", "Opened", "Completed", "Feedback"
+  feedback    String?  // Internal feedback for 1-3 stars
+  platform    String?  // Targeted platform for 4-5 stars
+  createdAt   DateTime @default(now())
+  sentAt      DateTime @default(now())
+  
+  lead        Lead?    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+}
+
+// ─── ACTIVITY TIMELINE ───────────────────────────────────────────────────────
+model Activity {
+  id        String   @id @default(uuid())
+  builderId String
+  builder   Builder  @relation(fields: [builderId], references: [id], onDelete: Cascade)
+  
+  leadId    String
+  action    String   
+  createdAt DateTime @default(now())
+  
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+}
+
+// ─── APPOINTMENTS ────────────────────────────────────────────────────────────
+model Appointment {
+  id        String   @id @default(uuid())
+  builderId String
+  builder   Builder  @relation(fields: [builderId], references: [id], onDelete: Cascade)
+  
+  leadId    String
+  type      String   // "Phone call" | "Site visit" | "Follow-up"
+  dateTime  DateTime
+  location  String
+  status    String   // "Confirmed" | "Pending" | "Cancelled"
+  notes     String?
+  createdAt DateTime @default(now())
+  
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+}
+
+// ─── MESSAGES ────────────────────────────────────────────────────────────────
+model Message {
+  id        String   @id @default(uuid())
+  builderId String
+  builder   Builder  @relation(fields: [builderId], references: [id], onDelete: Cascade)
+  
+  leadId    String
+  sender    String   // "lead" | "user" | "system"
+  content   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+}
+
+// ─── INTEGRATIONS ────────────────────────────────────────────────────────────
+model Integration {
+  id           String   @id @default(uuid())
+  builderId    String
+  builder      Builder  @relation(fields: [builderId], references: [id], onDelete: Cascade)
+  
+  platformId   String   
+  isConnected  Boolean  @default(false)
+  configSecure String
+  updatedAt    DateTime @updatedAt
+  createdAt    DateTime @default(now())
+  
+  @@unique([builderId, platformId])
+}
+
+// ─── PUBLIC REVIEWS (EXTERNAL SITES) ─────────────────────────────────────────
+model PublicReview {
+  id          String   @id @default(uuid())
+  builderId   String
+  builder     Builder  @relation(fields: [builderId], references: [id], onDelete: Cascade)
+  
+  clientName  String
+  platform    String   // "Google Business", "Houzz", "GuildQuality"
+  rating      Int
+  sentAt      DateTime @default(now())
+  reviewText  String   @db.Text
+  projectType String?
+  location    String?
+  status      String   @default("Unanswered") // "Unanswered" | "Answered"
+  replyText   String?  @db.Text
+  createdAt   DateTime @default(now())
+}
+
+// ─── PLATFORM SETTINGS ───────────────────────────────────────────────────────
+model PlatformSettings {
+  id               String   @id @default("global")
+  supportEmail     String   @default("support@buildersedge.com")
+  defaultTrialDays Int      @default(14)
+  maintenanceMode  Boolean  @default(false)
+  updatedAt        DateTime @updatedAt
+}

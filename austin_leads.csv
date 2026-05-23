@@ -1,0 +1,21 @@
+name,phone,address,city,state,zip,budget,permit_type,issue_date,score_tier,status,county
+Homeowner (Direct),(512) 573-1610,3336 Mount Bonnell Rd,Austin,TX,78731,4161600,New,2022-06-30,Hot,New,Travis County
+Homeowner (Direct),(512) 328-7706,4901 Mirador Dr,Austin,TX,78735,3355600,New,2022-06-03,Hot,New,Travis County
+Homeowner (Direct),(512) 351-7665,700 E Monroe St,Austin,TX,78704,1000000,New,2022-10-06,Hot,New,Travis County
+Homeowner (Direct),(512) 848-4511,4825 Laguna Ln,Austin,TX,78746,900000,New,2023-08-03,Hot,New,Travis County
+Homeowner (Direct),(512) 338-5300,2707 Dulce Ln Bldg 21 Unit 8,Austin,TX,78704,758000,New,2023-07-27,Hot,New,Travis County
+Homeowner (Direct),(512) 338-5300,2707 Dulce Ln Bldg 21 Unit 6,Austin,TX,78704,758000,New,2023-07-27,Hot,New,Travis County
+Homeowner (Direct),(512) 338-5300,2707 Dulce Ln Bldg 21 Unit 7,Austin,TX,78704,758000,New,2023-07-27,Hot,New,Travis County
+Homeowner (Direct),(512) 338-5300,2707 Dulce Ln Bldg 22 Unit 11,Austin,TX,78704,758000,New,2023-02-21,Hot,New,Travis County
+Homeowner (Direct),(512) 338-5300,2707 Dulce Ln Bldg 22 Unit 10,Austin,TX,78704,758000,New,2023-02-21,Hot,New,Travis County
+Homeowner (Direct),(512) 338-5300,2707 Dulce Ln Bldg 22 Unit 9,Austin,TX,78704,758000,New,2023-02-21,Hot,New,Travis County
+Homeowner (Direct),(512) 338-5300,2707 Dulce Ln Bldg 24,Austin,TX,78704,756000,New,2022-12-07,Hot,New,Travis County
+Homeowner (Direct),(512) 338-5300,2707 Dulce Ln Bldg 24,Austin,TX,78704,756000,New,2022-12-07,Hot,New,Travis County
+Homeowner (Direct),(512) 338-5300,2707 Dulce Ln Bldg 24,Austin,TX,78704,756000,New,2022-12-07,Hot,New,Travis County
+Homeowner (Direct),(979) 820-9146,5608 Shady Oak Ct,Austin,TX,78756,700000,New,2023-02-24,Hot,New,Travis County
+Homeowner (Direct),(512) 539-3678,8709 Lullwater Trl,Austin,TX,78744,683000,New,2023-06-29,Hot,New,Travis County
+Homeowner (Direct),(281) 370-6687,2311 Quarry Rd,Austin,TX,78703,675000,New,2022-09-09,Hot,New,Travis County
+Homeowner (Direct),(512) 539-3678,8605 Lullwater Trl,Austin,TX,78744,622500,New,2023-06-29,Hot,New,Travis County
+Homeowner (Direct),(512) 539-3678,8600 Aracari Cv,Austin,TX,78744,610950,New,2024-05-22,Hot,New,Travis County
+Homeowner (Direct),(512) 539-3678,8501 Lullwater Trl,Austin,TX,78744,585500,New,2024-01-09,Hot,New,Travis County
+Homeowner (Direct),(512) 338-5300,3517 Cepeda St,Austin,TX,78723,570000,New,2022-08-22,Hot,New,Travis County
