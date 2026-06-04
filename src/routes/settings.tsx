@@ -25,9 +25,27 @@ import { jsPDF } from "jspdf";
 
 export const Route = createFileRoute("/settings")({
   loader: async () => {
+    // FIX-6: SSR bypass — mirrors the pattern used in index.tsx and admin routes.
+    // Without this, the server runs requireAuth() during SSR without the client's
+    // x-active-role header, causing getSessionFromCookie() to return null when
+    // multiple cookies are present (admin + builder), which crashes the page on
+    // hard refresh with a 401 UNAUTHORIZED error.
+    if (typeof window === 'undefined') {
+      return {
+        _isSsrPlaceholder: true,
+        integrationsStatus: {},
+        builderProfile: {},
+        qualRules: {},
+        notifSettings: {},
+        webhookUrl: '',
+        billingProfile: { adSpendBalance: 0, paymentMethod: "None", plan: "trial" },
+      };
+    }
+
+    const activeRole = typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? localStorage.getItem('active_role') ?? undefined) : undefined;
     const [integrationsStatus, builderProfile, qualRules, notifSettings, webhookUrl, billingProfile] = await Promise.all([
       getIntegrationsStatus(),
-      getBuilderProfile(),
+      getBuilderProfile({ data: { activeRole } }),
       getQualificationRules(),
       getNotificationSettings(),
       getWebhookUrl(),
@@ -42,7 +60,7 @@ export const Route = createFileRoute("/settings")({
       billingProfile: billingProfile || { adSpendBalance: 0, paymentMethod: "None", plan: "trial" },
     };
   },
-  head: () => ({ meta: [{ title: "Settings — LeadForge" }, { name: "description", content: "Configure your account, qualification rules, and integrations." }] }),
+  head: () => ({ meta: [{ title: "Settings — Builder's Edge" }, { name: "description", content: "Configure your account, qualification rules, and integrations." }] }),
   component: SettingsPage,
 });
 
@@ -52,6 +70,14 @@ function SettingsPage() {
   const loaderData = useLoaderData({ from: "/settings" }) || {};
   const { integrationsStatus: loadedStatuses = {}, builderProfile: loadedProfile = {}, qualRules: loadedQualRules = {}, notifSettings: loadedNotif = {}, webhookUrl: loadedWebhookUrl = '', billingProfile: loadedBillingProfile = { adSpendBalance: 0, paymentMethod: "None", plan: "trial" } } = loaderData as any;
   const router = useRouter();
+
+  // FIX-6: Hydration invalidation — if the SSR placeholder was served, trigger a
+  // client-side refetch immediately after hydration to load the real settings data.
+  useEffect(() => {
+    if ((loaderData as any)?._isSsrPlaceholder) {
+      router.invalidate()
+    }
+  }, [loaderData, router])
 
   const [active, setActive] = useState<typeof sections[number]>("Builder Profile");
   const [expandedIntegration, setExpandedIntegration] = useState<string | null>(null);
@@ -80,7 +106,7 @@ function SettingsPage() {
   
   // Card update form state
   const [cardForm, setCardForm] = useState({
-    name: "Horizon Homes LLC",
+    name: loadedProfile.companyName || "Your Company LLC",
     number: "4242",
     expiry: "12/28",
     cvc: "123"
@@ -89,19 +115,20 @@ function SettingsPage() {
   const [cardUpdateSuccess, setCardUpdateSuccess] = useState(false);
 
   const downloadInvoicePDF = (date: string, amount: string, status: string) => {
+    const company = loadedProfile.companyName || "Your Company LLC";
     const doc = new jsPDF();
     doc.setFont("helvetica", "bold");
     doc.setFontSize(20);
-    doc.text("HORIZON HOMES LLC — INVOICE", 20, 20);
+    doc.text(`${company} — INVOICE`, 20, 20);
     
     doc.setFont("helvetica", "normal");
     doc.setFontSize(12);
     doc.text(`Invoice Date: ${date}`, 20, 40);
-    doc.text(`Client Name: Horizon Homes LLC`, 20, 50);
-    doc.text(`Contract ID: LF-2026-904`, 20, 60);
-    doc.text(`Platform Fees: LeadForge SaaS Professional Plan`, 20, 70);
+    doc.text(`Client Name: ${company}`, 20, 50);
+    doc.text(`Contract ID: BE-2026-904`, 20, 60);
+    doc.text(`Platform Fees: Builder's Edge SaaS Professional Plan`, 20, 70);
     doc.text(`Payment Status: ${status} (Visa •••• 4242)`, 20, 80);
-    doc.text(`Merchant: LeadForge Inc.`, 20, 90);
+    doc.text(`Merchant: Builder's Edge Inc.`, 20, 90);
 
     doc.setLineWidth(0.5);
     doc.line(20, 100, 190, 100);
@@ -113,7 +140,7 @@ function SettingsPage() {
     doc.line(20, 115, 190, 115);
 
     doc.setFont("helvetica", "normal");
-    doc.text("LeadForge SaaS Monthly Platform Licensing", 20, 125);
+    doc.text("Builder's Edge SaaS Monthly Platform Licensing", 20, 125);
     doc.text("- Travis County permit feed streaming & ingestion", 25, 135);
     doc.text("- Advanced AI nurture concierge", 25, 145);
     doc.text("- Google Business reputation optimization", 25, 155);
@@ -127,16 +154,16 @@ function SettingsPage() {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
     doc.text("Thank you for your business! If you have any questions, reach out to", 20, 210);
-    doc.text("billing@leadforge.com. Built by Google DeepMind team.", 20, 215);
+    doc.text("billing@buildersedge.com. Built by Google DeepMind team.", 20, 215);
 
-    doc.save(`LF_Invoice_${date.replace(/\s+/g, '_').replace(/,/g, '')}.pdf`);
+    doc.save(`BE_Invoice_${date.replace(/\s+/g, '_').replace(/,/g, '')}.pdf`);
   };
 
   // ── Builder Profile State ───────────────────────────────────────────────────
   const [profileForm, setProfileForm] = useState({
-    companyName: loadedProfile.companyName || "Horizon Homes LLC",
-    primaryContact: loadedProfile.primaryContact || "Mike Patterson",
-    email: loadedProfile.email || "mike@horizonhomes.com",
+    companyName: loadedProfile.companyName || "Your Company LLC",
+    primaryContact: loadedProfile.primaryContact || "Your Name",
+    email: loadedProfile.email || "youremail@example.com",
     phone: loadedProfile.phone || "+1 512-555-0100",
     businessAddress: loadedProfile.businessAddress || "1100 S Lamar Blvd, Austin, TX 78704",
     targetZipCodes: loadedProfile.targetZipCodes || "78704, 78703, 78731, 78613, 78641",
@@ -161,14 +188,32 @@ function SettingsPage() {
       return;
     }
 
+    // Email Validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(profileForm.email.trim())) {
+      alert("Please enter a valid email address.");
+      return;
+    }
+
+    // Phone Validation (US and India formats)
+    const phoneTrimmed = profileForm.phone.trim();
+    const usPhoneRegex = /^(?:\+?1[-.\s]?)?\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})$/;
+    const indiaPhoneRegex = /^(?:\+?91|0)?[\s-]?[6789]\d{9}$/;
+    
+    if (!usPhoneRegex.test(phoneTrimmed) && !indiaPhoneRegex.test(phoneTrimmed)) {
+      alert("Please enter a valid US or Indian phone number.");
+      return;
+    }
+
     setIsSavingProfile(true);
     try {
       await saveBuilderProfile({ data: profileForm });
+      await router.invalidate();
       setProfileSaved(true);
       setTimeout(() => setProfileSaved(false), 2500);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert("Failed to save profile.");
+      alert("Failed to save profile: " + (err?.message || err));
     } finally {
       setIsSavingProfile(false);
     }
@@ -226,7 +271,7 @@ function SettingsPage() {
   };
 
   // ── Webhook URL State ───────────────────────────────────────────────────
-  const [webhookUrl, setWebhookUrl] = useState(loadedWebhookUrl || 'https://your-app.com/webhook/leadforge');
+  const [webhookUrl, setWebhookUrl] = useState(loadedWebhookUrl || 'https://your-app.com/webhook/buildersedge');
   const [isSavingWebhook, setIsSavingWebhook] = useState(false);
   const [webhookSaved, setWebhookSaved] = useState(false);
 
@@ -363,7 +408,7 @@ function SettingsPage() {
       icon: "Hz",
       fields: [
         { key: "apiKey", label: "Houzz Partner API Key", type: "password", required: true, placeholder: "Enter Partner API Key" },
-        { key: "profileUrl", label: "Houzz Profile URL", type: "text", required: true, placeholder: "e.g. houzz.com/pro/horizonhomes" }
+        { key: "profileUrl", label: "Houzz Profile URL", type: "text", required: true, placeholder: "e.g. houzz.com/pro/yourcompany" }
       ]
     },
     {
@@ -630,7 +675,7 @@ function SettingsPage() {
                   <Input
                     value={webhookUrl}
                     onChange={e => setWebhookUrl(e.target.value)}
-                    placeholder="https://your-app.com/webhook/leadforge"
+                    placeholder="https://your-app.com/webhook/buildersedge"
                   />
                 </Row>
                 <p className="text-[10px] text-muted-foreground">
@@ -901,7 +946,7 @@ function SettingsPage() {
                               type="text"
                               value={cardForm.name}
                               onChange={(e) => setCardForm((prev) => ({ ...prev, name: e.target.value }))}
-                              placeholder="Horizon Homes LLC"
+                              placeholder="Your Company LLC"
                               className="w-full bg-[#141414] border border-border focus:border-primary/60 rounded-md px-3 py-2 text-xs text-white focus:outline-none"
                             />
                           </div>

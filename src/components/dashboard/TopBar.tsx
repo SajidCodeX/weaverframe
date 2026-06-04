@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
-import { Bell, Calendar as CalIcon, ChevronDown, Search, X, Check, ArrowRight } from "lucide-react";
-import { getLeadsData, getNotificationsData } from "@/lib/dashboard";
+import { useRouteContext, useRouter } from "@tanstack/react-router";
+import { Bell, Calendar as CalIcon, ChevronDown, Search, X, Check, ArrowRight, RefreshCw } from "lucide-react";
+import { getLeadsData, getNotificationsData, getLastSyncTime } from "@/lib/dashboard";
 
 function formatRelativeTime(dateString: string): string {
   const date = new Date(dateString);
@@ -24,13 +25,26 @@ function formatRelativeTime(dateString: string): string {
   }
 }
 
-export function TopBar({ title, isCollapsed }: { title: string; isCollapsed?: boolean }) {
+export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCollapsed?: boolean; lastSyncAt?: string | null }) {
+  const router = useRouter();
+  const { session } = useRouteContext({ strict: false }) as any;
+  const isAdmin = session?.role === "admin" && !session?.actingAsBuilderId;
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [leads, setLeads] = useState<any[]>([]);
   const [loadingLeads, setLoadingLeads] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [userInitials, setUserInitials] = useState("?");
+  const [realSyncTime, setRealSyncTime] = useState<string | null>(lastSyncAt || null);
+
+  useEffect(() => {
+    if (!lastSyncAt && !isAdmin) {
+      const activeRole = sessionStorage.getItem('active_role') ?? localStorage.getItem('active_role') ?? undefined;
+      getLastSyncTime({ data: { activeRole } }).then(time => {
+        if (time) setRealSyncTime(time);
+      });
+    }
+  }, [lastSyncAt, isAdmin]);
 
   // Reset activeIndex when query or open status changes
   useEffect(() => {
@@ -39,8 +53,21 @@ export function TopBar({ title, isCollapsed }: { title: string; isCollapsed?: bo
 
   // Fetch dynamic user profile for avatar
   useEffect(() => {
+    if (session?.displayName) {
+      const initials = session.displayName
+        .split(" ")
+        .map((n: string) => n[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase();
+      setUserInitials(initials || "?");
+    }
+    if (isAdmin) {
+      return;
+    }
     import("@/lib/dashboard").then(({ getBuilderProfile }) => {
-      getBuilderProfile().then((profile) => {
+      const activeRole = sessionStorage.getItem('active_role') ?? localStorage.getItem('active_role') ?? undefined;
+      getBuilderProfile({ data: { activeRole } }).then((profile) => {
         if (profile?.primaryContact) {
           const initials = profile.primaryContact
             .split(" ")
@@ -52,15 +79,23 @@ export function TopBar({ title, isCollapsed }: { title: string; isCollapsed?: bo
         }
       });
     });
-  }, []);
+  }, [isAdmin, session?.displayName]);
 
-  const quickNavItems = [
-    { title: "Dashboard Overview", url: "/" },
-    { title: "Leads Database", url: "/leads" },
-    { title: "Review Booster", url: "/reviews" },
-    { title: "AI Activity Logs", url: "/ai-activity" },
-    { title: "Appointments Calendar", url: "/appointments" },
-  ];
+  const quickNavItems = isAdmin
+    ? [
+        { title: "Global Overview", url: "/admin/" },
+        { title: "Builders", url: "/admin/builders" },
+        { title: "Billing", url: "/admin/billing" },
+        { title: "Users", url: "/admin/users" },
+        { title: "Platform Settings", url: "/admin/settings" },
+      ]
+    : [
+        { title: "Dashboard Overview", url: "/" },
+        { title: "Leads Database", url: "/leads" },
+        { title: "Review Booster", url: "/reviews" },
+        { title: "AI Activity Logs", url: "/ai-activity" },
+        { title: "Appointments Calendar", url: "/appointments" },
+      ];
 
   // Popover states
   const [isNotifOpen, setIsNotifOpen] = useState(false);
@@ -105,9 +140,11 @@ export function TopBar({ title, isCollapsed }: { title: string; isCollapsed?: bo
       const rangeData = { label, start, end };
       sessionStorage.setItem("globalDateRange", JSON.stringify(rangeData));
       (window as any).__globalDateRange = rangeData;
-      window.dispatchEvent(new CustomEvent("globalDateRangeChanged", {
-        detail: rangeData
-      }));
+      window.dispatchEvent(
+        new CustomEvent("globalDateRangeChanged", {
+          detail: rangeData,
+        }),
+      );
     }
   };
 
@@ -122,16 +159,30 @@ export function TopBar({ title, isCollapsed }: { title: string; isCollapsed?: bo
 
   // Fetch dynamic notifications on open/mount
   useEffect(() => {
-    getNotificationsData()
+    if (isAdmin) {
+      setNotifications([]);
+      return;
+    }
+    const activeRole =
+      sessionStorage.getItem('active_role') ??
+      localStorage.getItem('active_role') ??
+      undefined;
+    getNotificationsData({ data: { activeRole } })
       .then((data) => {
-        setNotifications(data);
+        try {
+          const readIds = JSON.parse(sessionStorage.getItem('read_notifs') || '[]');
+          const updated = data.map(n => readIds.includes(n.id) ? { ...n, unread: false } : n);
+          setNotifications(updated);
+        } catch {
+          setNotifications(data);
+        }
       })
       .catch((err) => {
         console.error("Failed to load notifications:", err);
       });
-  }, [isNotifOpen]);
+  }, [isAdmin]);
 
-  const hasUnread = notifications.some(n => n.unread);
+  const hasUnread = notifications.some((n) => n.unread);
 
   // OS Detection
   const [isMac, setIsMac] = useState(false);
@@ -143,8 +194,8 @@ export function TopBar({ title, isCollapsed }: { title: string; isCollapsed?: bo
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const isTriggered = isMac
-        ? (e.metaKey && e.key.toLowerCase() === "f")
-        : (e.altKey && e.key.toLowerCase() === "f");
+        ? e.metaKey && e.key.toLowerCase() === "f"
+        : e.altKey && e.key.toLowerCase() === "f";
       if (isTriggered) {
         e.preventDefault();
         setIsSearchOpen(true);
@@ -161,16 +212,20 @@ export function TopBar({ title, isCollapsed }: { title: string; isCollapsed?: bo
 
   // Fetch leads on search open
   useEffect(() => {
+    if (isAdmin) {
+      return;
+    }
     if (isSearchOpen && leads.length === 0) {
       setLoadingLeads(true);
-      getLeadsData()
+      const activeRole = sessionStorage.getItem('active_role') ?? localStorage.getItem('active_role') ?? undefined;
+      getLeadsData({ data: { activeRole } })
         .then((data) => {
           setLeads(data);
           setLoadingLeads(false);
         })
         .catch(() => setLoadingLeads(false));
     }
-  }, [isSearchOpen]);
+  }, [isAdmin, isSearchOpen, leads.length]);
 
   // Click outside hooks
   const notifRef = useRef<HTMLDivElement>(null);
@@ -190,15 +245,30 @@ export function TopBar({ title, isCollapsed }: { title: string; isCollapsed?: bo
   }, []);
 
   const markAllRead = () => {
-    setNotifications(notifications.map(n => ({ ...n, unread: false })));
+    const updated = notifications.map((n) => ({ ...n, unread: false }));
+    setNotifications(updated);
+    try {
+      const readIds = updated.filter(u => !u.unread).map(u => u.id);
+      sessionStorage.setItem('read_notifs', JSON.stringify(readIds));
+    } catch {}
   };
 
   // Global search filters
-  const filteredLeads = searchQuery.trim() === "" ? [] : leads.filter(l =>
-    l.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    l.county.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (l.phone && l.phone.includes(searchQuery))
-  ).slice(0, 5);
+  const filteredLeads =
+    searchQuery.trim() === ""
+      ? []
+      : leads
+          .filter(
+            (l) =>
+              l.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+              l.county.toLowerCase().includes(searchQuery.toLowerCase()) ||
+              (l.phone && l.phone.includes(searchQuery)),
+          )
+          .slice(0, 5);
+  const filteredNavItems =
+    searchQuery.trim() === ""
+      ? quickNavItems
+      : quickNavItems.filter((nav) => nav.title.toLowerCase().includes(searchQuery.toLowerCase()));
 
   const shortcutText = isMac ? "⌘F" : "Alt+F";
 
@@ -216,6 +286,20 @@ export function TopBar({ title, isCollapsed }: { title: string; isCollapsed?: bo
 
         {/* Actions */}
         <div className="flex items-center gap-2">
+          {/* Refresh Button */}
+          <button
+            onClick={() => {
+              const icon = document.getElementById('global-refresh-icon');
+              if (icon) icon.classList.add('animate-spin');
+              router.invalidate().finally(() => {
+                if (icon) icon.classList.remove('animate-spin');
+              });
+            }}
+            className="hidden sm:flex items-center justify-center size-[34px] text-foreground/80 bg-secondary/80 border border-border/80 rounded-md hover:border-white/30 hover:text-foreground transition-all duration-150"
+            title="Refresh Page Data"
+          >
+            <RefreshCw id="global-refresh-icon" className="size-4 text-foreground/60" />
+          </button>
           {/* Cmd+K Search trigger */}
           <button
             id="topbar-search"
@@ -231,9 +315,19 @@ export function TopBar({ title, isCollapsed }: { title: string; isCollapsed?: bo
             </kbd>
           </button>
 
+          {/* Data Last Updated */}
+          <div className="hidden sm:flex items-center justify-center h-[34px] text-[11px] text-success/80 bg-success/10 border border-success/20 rounded-md px-3 cursor-default font-medium">
+            <div className="size-1.5 rounded-full bg-success mr-2 animate-pulse" />
+            Live DB Sync: {realSyncTime ? new Date(realSyncTime).toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' }) : new Date().toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' })}
+          </div>
+
           {/* Today's Date (mm/dd/yy) */}
           <div className="hidden sm:flex items-center justify-center w-[100px] h-[34px] text-[13px] text-foreground/80 font-mono tracking-widest bg-secondary/80 border border-border/80 rounded-md cursor-default">
-            {new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: '2-digit' })}
+            {new Date().toLocaleDateString("en-US", {
+              month: "2-digit",
+              day: "2-digit",
+              year: "2-digit",
+            })}
           </div>
 
           {/* Date range - Visible on Leads & Reports pages */}
@@ -251,9 +345,18 @@ export function TopBar({ title, isCollapsed }: { title: string; isCollapsed?: bo
 
               {isDateOpen && (
                 <div className="absolute right-0 mt-2 w-64 rounded-lg bg-card border border-border p-3 shadow-none z-50 animate-in fade-in slide-in-from-top-2 duration-150">
-                  <div className="text-[10px] font-semibold text-foreground/50 uppercase tracking-widest px-3 py-2 border-b border-border/40 mb-1">Select Range</div>
+                  <div className="text-[10px] font-semibold text-foreground/50 uppercase tracking-widest px-3 py-2 border-b border-border/40 mb-1">
+                    Select Range
+                  </div>
                   <div className="space-y-0.5 py-1">
-                    {["All Time", "Today", "Yesterday", "Last 7 Days", "Last 30 Days", "This Month"].map((range) => (
+                    {[
+                      "All Time",
+                      "Today",
+                      "Yesterday",
+                      "Last 7 Days",
+                      "Last 30 Days",
+                      "This Month",
+                    ].map((range) => (
                       <button
                         key={range}
                         onClick={() => {
@@ -270,7 +373,9 @@ export function TopBar({ title, isCollapsed }: { title: string; isCollapsed?: bo
 
                   {/* Custom Date Inputs inside the popup */}
                   <div className="flex flex-col gap-2 p-2 border-t border-border/40 mt-1.5 pt-2">
-                    <div className="text-[9px] uppercase tracking-wider text-foreground/50 font-semibold font-mono">Custom Range</div>
+                    <div className="text-[9px] uppercase tracking-wider text-foreground/50 font-semibold font-mono">
+                      Custom Range
+                    </div>
                     <div className="flex gap-1.5 items-center justify-between">
                       <input
                         type="date"
@@ -322,7 +427,10 @@ export function TopBar({ title, isCollapsed }: { title: string; isCollapsed?: bo
                 <div className="flex items-center justify-between px-3 py-2 border-b border-border/40 mb-1">
                   <span className="text-xs font-semibold text-white/90">Notifications</span>
                   {hasUnread && (
-                    <button onClick={markAllRead} className="text-[10px] text-primary hover:underline font-semibold">
+                    <button
+                      onClick={markAllRead}
+                      className="text-[10px] text-primary hover:underline font-semibold"
+                    >
                       Mark all as read
                     </button>
                   )}
@@ -332,18 +440,33 @@ export function TopBar({ title, isCollapsed }: { title: string; isCollapsed?: bo
                     <div
                       key={n.id}
                       onClick={() => {
-                        setNotifications(notifications.map(item => item.id === n.id ? { ...item, unread: false } : item));
+                        const updated = notifications.map((item) =>
+                          item.id === n.id ? { ...item, unread: false } : item
+                        );
+                        setNotifications(updated);
+                        try {
+                          sessionStorage.setItem('read_notifs', JSON.stringify(updated.filter(u => !u.unread).map(u => u.id)));
+                        } catch {}
                         setIsNotifOpen(false);
-                        window.location.href = n.title.toLowerCase().includes('lead') || n.title.toLowerCase().includes('appointment') ? '/leads' : '/messages';
+                        window.location.href =
+                          n.title.toLowerCase().includes("lead") ||
+                          n.title.toLowerCase().includes("appointment")
+                            ? "/leads"
+                            : "/messages";
                       }}
-                      className={`p-2.5 rounded-md text-left transition-colors cursor-pointer ${n.unread
-                        ? "bg-white/[0.05] hover:bg-white/[0.09]"
-                        : "hover:bg-white/[0.05]"
-                        }`}
+                      className={`p-2.5 rounded-md text-left transition-colors cursor-pointer ${
+                        n.unread ? "bg-white/[0.05] hover:bg-white/[0.09]" : "hover:bg-white/[0.05]"
+                      }`}
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <span className={`text-xs font-medium ${n.unread ? "text-white font-semibold" : "text-foreground/80"}`}>{n.title}</span>
-                        <span className="text-[9px] text-foreground/45 shrink-0 font-mono mt-0.5">{formatRelativeTime(n.time)}</span>
+                        <span
+                          className={`text-xs font-medium ${n.unread ? "text-white font-semibold" : "text-foreground/80"}`}
+                        >
+                          {n.title}
+                        </span>
+                        <span className="text-[9px] text-foreground/45 shrink-0 font-mono mt-0.5">
+                          {formatRelativeTime(n.time)}
+                        </span>
                       </div>
                       <p className="text-xs text-foreground/70 mt-0.5 leading-snug">{n.desc}</p>
                     </div>
@@ -353,13 +476,7 @@ export function TopBar({ title, isCollapsed }: { title: string; isCollapsed?: bo
             )}
           </div>
 
-          {/* Avatar */}
-          <div
-            id="topbar-avatar"
-            className="size-9 rounded-full bg-white/10 border border-white/15 text-foreground flex items-center justify-center text-sm font-semibold font-display cursor-pointer hover:border-white/30 transition-all duration-150"
-          >
-            {userInitials}
-          </div>
+          {/* Avatar removed as requested */}
         </div>
       </header>
 
@@ -377,7 +494,11 @@ export function TopBar({ title, isCollapsed }: { title: string; isCollapsed?: bo
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => {
                   const isQueryEmpty = searchQuery.trim() === "";
-                  const itemsCount = isQueryEmpty ? quickNavItems.length : filteredLeads.length;
+                  const itemsCount = isQueryEmpty
+                    ? quickNavItems.length
+                    : isAdmin
+                      ? filteredNavItems.length
+                      : filteredLeads.length;
                   if (itemsCount === 0) return;
 
                   if (e.key === "ArrowDown") {
@@ -389,8 +510,13 @@ export function TopBar({ title, isCollapsed }: { title: string; isCollapsed?: bo
                   } else if (e.key === "Enter") {
                     e.preventDefault();
                     setIsSearchOpen(false);
-                    if (isQueryEmpty) {
-                      window.location.href = quickNavItems[activeIndex].url;
+                    if (isQueryEmpty || isAdmin) {
+                      const selectedNav = (isQueryEmpty ? quickNavItems : filteredNavItems)[
+                        activeIndex
+                      ];
+                      if (selectedNav) {
+                        window.location.href = selectedNav.url;
+                      }
                     } else {
                       const selectedLead = filteredLeads[activeIndex];
                       if (selectedLead) {
@@ -399,7 +525,9 @@ export function TopBar({ title, isCollapsed }: { title: string; isCollapsed?: bo
                     }
                   }
                 }}
-                placeholder="Search leads by name, city, or phone..."
+                placeholder={
+                  isAdmin ? "Search admin navigation..." : "Search leads by name, city, or phone..."
+                }
                 className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
               />
               <button
@@ -414,47 +542,88 @@ export function TopBar({ title, isCollapsed }: { title: string; isCollapsed?: bo
             <div className="p-2 max-h-80 overflow-y-auto">
               {searchQuery.trim() === "" ? (
                 <div>
-                  <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-3 py-1.5">Quick Navigation</div>
+                  <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-3 py-1.5">
+                    Quick Navigation
+                  </div>
                   {quickNavItems.map((nav, index) => (
                     <a
                       key={nav.title}
                       href={nav.url}
                       onClick={() => setIsSearchOpen(false)}
-                      className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs text-foreground transition-colors ${index === activeIndex
-                        ? "bg-white/[0.08] border-l-2 border-l-primary pl-2.5"
-                        : "hover:bg-white/[0.04]"
-                        }`}
+                      className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs text-foreground transition-colors ${
+                        index === activeIndex
+                          ? "bg-white/[0.08] border-l-2 border-l-primary pl-2.5"
+                          : "hover:bg-white/[0.04]"
+                      }`}
                     >
                       <span>{nav.title}</span>
                       <ArrowRight className="size-3 text-muted-foreground" />
                     </a>
                   ))}
                 </div>
+              ) : isAdmin ? (
+                <div>
+                  <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-3 py-1.5">
+                    Navigation Results ({filteredNavItems.length})
+                  </div>
+                  {filteredNavItems.length > 0 ? (
+                    filteredNavItems.map((nav, index) => (
+                      <a
+                        key={nav.title}
+                        href={nav.url}
+                        onClick={() => setIsSearchOpen(false)}
+                        className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs text-foreground transition-colors ${
+                          index === activeIndex
+                            ? "bg-white/[0.08] border-l-2 border-l-primary pl-2.5"
+                            : "hover:bg-white/[0.04]"
+                        }`}
+                      >
+                        <span>{nav.title}</span>
+                        <ArrowRight className="size-3 text-muted-foreground" />
+                      </a>
+                    ))
+                  ) : (
+                    <div className="text-center py-6 text-xs text-muted-foreground font-mono">
+                      No matching admin routes
+                    </div>
+                  )}
+                </div>
               ) : loadingLeads ? (
-                <div className="text-center py-6 text-xs text-muted-foreground font-mono">Searching database...</div>
+                <div className="text-center py-6 text-xs text-muted-foreground font-mono">
+                  Searching database...
+                </div>
               ) : filteredLeads.length > 0 ? (
                 <div>
-                  <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-3 py-1.5">Leads Found ({filteredLeads.length})</div>
+                  <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-3 py-1.5">
+                    Leads Found ({filteredLeads.length})
+                  </div>
                   {filteredLeads.map((l, index) => (
                     <a
                       key={l.id}
                       href={`/leads?id=${l.id}`}
                       onClick={() => setIsSearchOpen(false)}
-                      className={`block px-3 py-2 rounded-lg text-left transition-colors ${index === activeIndex
-                        ? "bg-white/[0.08] border-l-2 border-l-primary pl-2.5"
-                        : "hover:bg-white/[0.04]"
-                        }`}
+                      className={`block px-3 py-2 rounded-lg text-left transition-colors ${
+                        index === activeIndex
+                          ? "bg-white/[0.08] border-l-2 border-l-primary pl-2.5"
+                          : "hover:bg-white/[0.04]"
+                      }`}
                     >
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-semibold text-foreground">{l.name}</span>
-                        <span className="text-[10px] font-mono bg-white/[0.06] text-muted-foreground px-2 py-0.5 rounded border border-white/5">{l.scoreTier}</span>
+                        <span className="text-[10px] font-mono bg-white/[0.06] text-muted-foreground px-2 py-0.5 rounded border border-white/5">
+                          {l.scoreTier}
+                        </span>
                       </div>
-                      <div className="text-[10px] text-muted-foreground mt-0.5 font-mono">{l.county} · {l.phone || "No phone"}</div>
+                      <div className="text-[10px] text-muted-foreground mt-0.5 font-mono">
+                        {l.county} · {l.phone || "No phone"}
+                      </div>
                     </a>
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-6 text-xs text-muted-foreground font-mono">No matching records found</div>
+                <div className="text-center py-6 text-xs text-muted-foreground font-mono">
+                  No matching records found
+                </div>
               )}
             </div>
 
@@ -469,4 +638,3 @@ export function TopBar({ title, isCollapsed }: { title: string; isCollapsed?: bo
     </>
   );
 }
-

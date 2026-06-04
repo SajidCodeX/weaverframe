@@ -1,16 +1,34 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
+import { getSessionFn } from "@/lib/auth";
 import { Shell } from "@/components/dashboard/Shell";
 import { Card } from "@/components/dashboard/primitives";
 import { getAdminStats } from "@/lib/admin";
 import { Server, Users, DollarSign, Activity } from "lucide-react";
 
 export const Route = createFileRoute("/admin/")({
+  beforeLoad: async ({ context }) => {
+    // FIX-9: SECURITY MODEL — SSR Bypass Trust Architecture
+    // On SSR, context.session is null by design (see __root.tsx SSR bypass).
+    // The client-side hydration guard below is the ACTUAL auth enforcement layer.
+    // This is safe because:
+    //   1. No sensitive data is rendered server-side (loaders also SSR-bypass)
+    //   2. The client enforces session checks before showing any protected content
+    //   3. All server functions (requireAdmin) independently verify auth via cookie
+    // If TanStack Start ever executes beforeLoad server-side for these routes,
+    // add a secondary requireAdmin() call here as a failsafe.
+    if (typeof window === 'undefined') return;
+    const session = context.session
+    if (!session || session.role !== 'admin') {
+      throw redirect({ to: '/' })
+    }
+  },
   loader: async () => {
+    if (typeof window === 'undefined') return { totalMRR: 0, activeBuilders: 0, totalLeads: 0, trends: { mrr: '', builders: '', leads: '' } };
     return await getAdminStats();
   },
   head: () => ({
     meta: [
-      { title: "Global Overview — LeadForge Admin" },
+      { title: "Global Overview — Builder's Edge Admin" },
     ],
   }),
   component: AdminOverview,
@@ -54,7 +72,7 @@ function AdminOverview() {
         </div>
         <h3 className="text-2xl font-bold text-foreground tracking-tight">System Administrator Console</h3>
         <p className="mt-2 text-muted-foreground max-w-md">
-          Welcome to the LeadForge global administration dashboard. Use the sidebar to manage builders, monitor system health, and configure global settings.
+          Welcome to the Builder's Edge global administration dashboard. Use the sidebar to manage builders, monitor system health, and configure global settings.
         </p>
       </Card>
     </Shell>

@@ -9,7 +9,9 @@ import {
   bookAppointment,
   getAiToggleMap,
   setLeadAiToggle,
-  getIntegrationsStatus
+  getIntegrationsStatus,
+  summarizeConversation,
+  simulateLeadMessage
 } from "@/lib/dashboard";
 import { 
   MessageSquare, 
@@ -28,12 +30,17 @@ import {
   X, 
   ChevronRight,
   ChevronDown,
-  ExternalLink
+  ExternalLink,
+  BrainCircuit
 } from "lucide-react";
 
 export const Route = createFileRoute("/messages")({
-  loader: async () => {
-    const conversations = await getConversations();
+  loader: async ({ context }) => {
+    if (typeof window === 'undefined' && !context.session) {
+      return { conversations: [], aiToggleMap: {}, integrationsStatus: {} };
+    }
+    const activeRole = typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? localStorage.getItem('active_role') ?? undefined) : undefined;
+    const conversations = await getConversations({ data: { activeRole } });
     const aiToggleMap = await getAiToggleMap();
     const integrationsStatus = await getIntegrationsStatus();
     return { conversations, aiToggleMap, integrationsStatus };
@@ -41,7 +48,7 @@ export const Route = createFileRoute("/messages")({
   staleTime: 2000,
   head: () => ({ 
     meta: [
-      { title: "Messages — LeadForge" }, 
+      { title: "Messages — Builder's Edge" }, 
       { name: "description", content: "Direct messages and AI lead nurture workspace." }
     ] 
   }),
@@ -66,7 +73,7 @@ function MessagesPage() {
   const [portfolios, setPortfolios] = useState<{ id: string; name: string; size: string }[]>(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("portfolios");
-      return saved ? JSON.parse(saved) : [{ id: "default", name: "Horizon Homes Custom Specifications and Premium Design Portfolio", size: "4.8 MB" }];
+      return saved ? JSON.parse(saved) : [{ id: "default", name: "Your Company Custom Specifications and Premium Design Portfolio", size: "4.8 MB" }];
     }
     return [];
   });
@@ -143,6 +150,10 @@ function MessagesPage() {
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [aiToggleMap, setAiToggleMap] = useState<Record<string, boolean>>(initialAiToggleMap || {});
   const isAiActive = selectedLeadId ? (aiToggleMap[selectedLeadId] ?? true) : true;
+  
+  // Summarize feature
+  const [isSummarizing, setIsSummarizing] = useState(false);
+  const [chatSummary, setChatSummary] = useState<string | null>(null);
 
   // Custom dropdown states
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -178,10 +189,11 @@ function MessagesPage() {
     const fetchChat = async () => {
       if (loadedLeadIdRef.current !== selectedLeadId) {
         setIsLoadingChat(true);
+        setChatSummary(null); // Reset summary when lead changes
       }
       try {
         const lead = initialConversations.find(c => c.leadId === selectedLeadId);
-        const messages = await getMessagesForLead({ data: selectedLeadId });
+        const { messages } = await getMessagesForLead({ data: { leadId: selectedLeadId, activeRole: sessionStorage.getItem('active_role') ?? localStorage.getItem('active_role') ?? undefined } });
         if (isMounted) {
           setActiveChat({ lead, messages });
           loadedLeadIdRef.current = selectedLeadId;
@@ -303,12 +315,11 @@ function MessagesPage() {
       const res = await sendMessage({
         data: {
           leadId: selectedLeadId,
-          content: originalText,
-          enableAiReply: isAiActive
+          content: originalText
         }
       });
 
-      // Update state optimistically with both the user message and instant lead response
+      // Update state optimistically with the user message
       setActiveChat(prev => {
         if (!prev) return null;
         const updatedMsgs = [
@@ -321,27 +332,17 @@ function MessagesPage() {
             isRead: true
           }
         ];
-        if (res.leadMessage) {
-          updatedMsgs.push({
-            id: res.leadMessage.id,
-            sender: "lead" as const,
-            content: res.leadMessage.content,
-            createdAt: new Date(Date.now() + 500).toISOString(),
-            isRead: false
-          });
-        }
         return {
           ...prev,
           messages: updatedMsgs
         };
       });
 
-      // Invalidate route so the left sidebar reflects the updated last message / unread counts
       await router.invalidate();
     } catch (err) {
       console.error("Failed to send message:", err);
-      // Restore input text on failure
       setNewMessageText(originalText);
+      alert("Error sending message. Please try again.");
     } finally {
       setIsSending(false);
       setTimeout(scrollToBottom, 60);
@@ -486,6 +487,19 @@ function MessagesPage() {
     } finally {
       setIsBooking(false);
       setTimeout(scrollToBottom, 60);
+    }
+  };
+
+  const handleSummarizeChat = async () => {
+    if (!selectedLeadId || isSummarizing) return;
+    setIsSummarizing(true);
+    try {
+      const summary = await summarizeConversation({ data: { leadId: selectedLeadId } });
+      setChatSummary(summary);
+    } catch (err) {
+      console.error("Failed to summarize chat", err);
+    } finally {
+      setIsSummarizing(false);
     }
   };
 
@@ -693,14 +707,6 @@ function MessagesPage() {
                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
                       {selectedThread.isOnline ? (
                         <span className="text-success">Active now</span>
-                      ) : selectedThread.lastMessageTime ? (
-                        <span>Last seen {formatMsgTime(selectedThread.lastMessageTime)}</span>
-                      ) : null}
-                      {selectedThread.estimatedBudget ? (
-                        <>
-                          <span>·</span>
-                          <span>Estimated budget: ${Math.round(selectedThread.estimatedBudget / 1000)}K</span>
-                        </>
                       ) : null}
                     </div>
                   </div>
@@ -709,11 +715,6 @@ function MessagesPage() {
                 {/* Lead contacts and fast action links */}
                 <div className="flex items-center gap-4 shrink-0">
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
-                    {selectedThread.phone && (
-                      <a href={`tel:${selectedThread.phone}`} className="p-2 bg-secondary border border-border rounded-md hover:bg-secondary/80 hover:text-white transition-colors" title={selectedThread.phone}>
-                        <Phone className="size-3.5" />
-                      </a>
-                    )}
                     {selectedThread.email && (
                       <a href={`mailto:${selectedThread.email}`} className="p-2 bg-secondary border border-border rounded-md hover:bg-secondary/80 hover:text-white transition-colors" title={selectedThread.email}>
                         <Mail className="size-3.5" />
@@ -759,6 +760,15 @@ function MessagesPage() {
                     </button>
                     
                     <button
+                      onClick={handleSummarizeChat}
+                      disabled={isSummarizing || !activeChat || activeChat.messages.length === 0}
+                      className="px-3 py-1.5 bg-secondary text-primary text-[11px] font-medium rounded-md border border-primary/20 hover:bg-secondary/80 flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                    >
+                      {isSummarizing ? <Loader2 className="size-3.5 animate-spin" /> : <BrainCircuit className="size-3.5" />}
+                      Summarize Chat
+                    </button>
+
+                    <button
                       onClick={() => setIsSchedulingOpen(true)}
                       className="px-3 py-1.5 bg-white text-black text-[11px] font-semibold rounded-md hover:bg-white/95 flex items-center gap-1.5 transition-colors"
                     >
@@ -768,14 +778,74 @@ function MessagesPage() {
                 </div>
               </div>
 
-              {/* CHAT MESSAGES SCROLL CONTAINER */}
+              {/* CONTEXT BAR */}
+              <div className="px-6 py-2.5 bg-[#080808]/90 border-b border-border flex items-center justify-between shadow-sm relative z-20">
+                <div className="flex items-center gap-5 text-xs font-medium">
+                  <div className="flex flex-col">
+                    <span className="text-[9px] text-muted-foreground uppercase tracking-widest font-mono">Score</span>
+                    <span className={`mt-1 px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider uppercase ${selectedThread.scoreTier === 'Hot' ? 'bg-red-500/10 text-red-400 border border-red-500/20' : selectedThread.scoreTier === 'Warm' ? 'bg-warning/10 text-warning border border-warning/20' : 'bg-cold/10 text-cold border border-cold/20'}`}>{selectedThread.scoreTier}</span>
+                  </div>
+                  <div className="w-px h-6 bg-border/50" />
+                  <div className="flex flex-col">
+                    <span className="text-[9px] text-muted-foreground uppercase tracking-widest font-mono">Status</span>
+                    <span className="text-foreground mt-1 text-[11px]">{selectedThread.status}</span>
+                  </div>
+                  <div className="w-px h-6 bg-border/50" />
+                  <div className="flex flex-col">
+                    <span className="text-[9px] text-muted-foreground uppercase tracking-widest font-mono">Est. Budget</span>
+                    <span className="text-foreground mt-1 text-[11px]">${Math.round(selectedThread.estimatedBudget / 1000)}K</span>
+                  </div>
+                </div>
+              </div>
+
               <div 
                 ref={chatContainerRef}
-                className="flex-1 overflow-y-auto p-6 space-y-4 min-h-0 bg-[#060606]/30"
+                className="flex-1 overflow-y-auto p-6 space-y-4 min-h-0 bg-[#060606]/30 relative"
               >
+                {chatSummary && (
+                  <div className="sticky top-0 z-10 mb-4 p-4 rounded-lg bg-primary/10 border border-primary/20 backdrop-blur-md animate-in fade-in slide-in-from-top-4 shadow-lg flex items-start gap-3">
+                    <BrainCircuit className="size-5 text-primary shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <h4 className="text-xs font-bold text-primary mb-1">AI Chat Conclusion</h4>
+                      <p className="text-xs text-foreground/90 leading-relaxed">{chatSummary}</p>
+                    </div>
+                    <button onClick={() => setChatSummary(null)} className="text-muted-foreground hover:text-foreground">
+                      <X className="size-4" />
+                    </button>
+                  </div>
+                )}
                 {activeChat.messages.length > 0 ? (
-                  activeChat.messages.map((msg) => {
-                    const isUser = msg.sender === "user";
+                  activeChat.messages.map((msg, index) => {
+                    const isUser = msg.sender === "user" || msg.sender === "system";
+                    const isAI = msg.sender === "system";
+                    
+                    const msgDate = new Date(msg.createdAt);
+                    const prevMsg = index > 0 ? activeChat.messages[index - 1] : null;
+                    let showDateDivider = false;
+                    let dateLabel = "";
+                    
+                    if (!prevMsg) {
+                      showDateDivider = true;
+                    } else {
+                      const prevDate = new Date(prevMsg.createdAt);
+                      if (msgDate.toDateString() !== prevDate.toDateString()) {
+                        showDateDivider = true;
+                      }
+                    }
+
+                    if (showDateDivider) {
+                      const today = new Date();
+                      const yesterday = new Date();
+                      yesterday.setDate(yesterday.getDate() - 1);
+                      
+                      if (msgDate.toDateString() === today.toDateString()) {
+                        dateLabel = "Today";
+                      } else if (msgDate.toDateString() === yesterday.toDateString()) {
+                        dateLabel = "Yesterday";
+                      } else {
+                        dateLabel = msgDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                      }
+                    }
                     
                     // Render high-fidelity custom cards for brochure shares
                     const isBrochureCard = msg.content.includes("📄 Document Shared");
@@ -783,10 +853,17 @@ function MessagesPage() {
                     const isAppointmentCard = msg.content.includes("📆 Site Visit Booked");
 
                     return (
-                      <div
-                        key={msg.id}
-                        className={`flex flex-col ${isUser ? "items-end" : "items-start"} w-full group animate-in slide-in-from-bottom-2 duration-150`}
-                      >
+                      <div key={msg.id} className="w-full">
+                        {showDateDivider && (
+                          <div className="flex justify-center my-6">
+                            <span className="text-[10px] font-medium text-muted-foreground bg-[#111111] border border-white/10 px-3 py-1 rounded-full uppercase tracking-widest font-mono">
+                              {dateLabel}
+                            </span>
+                          </div>
+                        )}
+                        <div
+                          className={`flex flex-col ${isUser ? "items-end" : "items-start"} w-full group animate-in slide-in-from-bottom-2 duration-150`}
+                        >
                         {isBrochureCard ? (
                           /* Digital specs brochure presentation card */
                           <div className="bg-[#111111] border border-white/[0.08] rounded-xl p-4 max-w-[400px] shadow-2xl relative overflow-hidden group/brochure">
@@ -846,12 +923,17 @@ function MessagesPage() {
                         ) : (
                           /* Standard Message Bubble */
                           <div
-                            className={`p-3 rounded-2xl text-xs leading-relaxed max-w-[70%] font-sans select-text ${
+                            className={`relative p-3 rounded-2xl text-xs leading-relaxed max-w-[70%] font-sans select-text ${
                               isUser
                                 ? "bg-primary text-black rounded-tr-none font-medium shadow-md"
                                 : "bg-white/[0.04] border border-white/[0.08] text-white rounded-tl-none"
                             }`}
                           >
+                            {isAI && (
+                              <div className="absolute -top-2 -left-2 bg-[#0B0B0C] rounded-full p-1 border border-primary/30 text-primary shadow-sm" title="Generated by AI Concierge">
+                                <Sparkles className="size-3" />
+                              </div>
+                            )}
                             <p className="whitespace-pre-line">{msg.content}</p>
                           </div>
                         )}
@@ -860,6 +942,7 @@ function MessagesPage() {
                         <span className="text-[9px] text-muted-foreground/60 mt-1 select-none font-mono px-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
                           {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
+                      </div>
                       </div>
                     );
                   })
@@ -1125,7 +1208,7 @@ function MessagesPage() {
                     <FileText className="size-4 text-primary" />
                     <div>
                       <h3 className="font-semibold text-xs text-white uppercase tracking-wider font-mono">
-                        Lookbook Preview: Horizon Homes Portfolio
+                        Lookbook Preview: Your Company Portfolio
                       </h3>
                       <p className="text-[10px] text-muted-foreground mt-0.5">
                         High-Fidelity Architectural & Custom Specifications

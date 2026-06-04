@@ -14,8 +14,10 @@ import {
   LogOut,
   DollarSign,
   Layers,
+  EyeOff,
 } from "lucide-react";
 import { logoutFn } from "@/lib/auth";
+import { stopBuilderPreview } from "@/lib/admin";
 
 const builderItems = [
   { to: "/",             label: "Overview",     icon: Home,          exact: true },
@@ -46,11 +48,34 @@ export function Sidebar({
 }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { session } = useRouteContext({ strict: false }) as any;
-  const items = session?.role === 'admin' ? adminItems : builderItems;
+  const isAdminView = pathname.startsWith('/admin');
+  const isAdminPreviewingBuilder = session?.role === 'admin' && !!session?.actingAsBuilderId;
+  const items = isAdminView ? adminItems : builderItems;
 
   const handleLogout = async () => {
+    if (typeof window !== 'undefined') {
+      const tabId = sessionStorage.getItem('tab_id');
+      if (tabId) {
+        localStorage.removeItem(`role_${tabId}`);
+      }
+      localStorage.removeItem('active_role');    // BUG-05 FIX: clear persisted role
+      sessionStorage.removeItem('active_role');
+      sessionStorage.removeItem('tab_id');
+    }
     await logoutFn();
     window.location.href = '/login';
+  };
+
+  const handleExitPreview = async () => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('active_role', 'admin');
+      const tabId = sessionStorage.getItem('tab_id');
+      if (tabId) {
+        localStorage.setItem(`role_${tabId}`, 'admin');
+      }
+    }
+    await stopBuilderPreview();
+    window.location.href = '/admin/builders';
   };
 
   return (
@@ -94,6 +119,7 @@ export function Sidebar({
             <Link
               key={item.to}
               to={item.to}
+              preload="intent"
               className={`group relative flex items-center rounded-md text-sm transition-all duration-300 ${
                 active ? "nav-active" : "nav-inactive"
               } px-3 py-2 ${isCollapsed ? "gap-0" : "gap-3"}`}
@@ -139,12 +165,23 @@ export function Sidebar({
           }`}
         >
           <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-widest">
-            {session?.role === 'admin' ? 'Administration' : 'Company'}
+            {isAdminView ? 'Administration' : 'Company'}
           </div>
           <div className="text-sm text-foreground font-medium mt-0.5 truncate">
-            {session?.role === 'admin' ? 'LeadForge Admin' : 'Horizon Homes LLC'}
+            {isAdminView ? "Builder's Edge" : (session?.companyName || 'Company Name')}
           </div>
         </div>
+
+        {isAdminPreviewingBuilder && !isCollapsed && (
+          <button
+            onClick={handleExitPreview}
+            className="w-full inline-flex items-center justify-center gap-1.5 text-xs px-2 py-1.5 rounded-md border border-warning/30 bg-warning/10 text-warning hover:bg-warning/20 transition-colors"
+            title="Exit Builder Preview"
+          >
+            <EyeOff className="size-3.5" />
+            Exit Preview Mode
+          </button>
+        )}
 
         {/* Profile row */}
         <div
@@ -155,7 +192,7 @@ export function Sidebar({
         >
           <div className="relative shrink-0">
             <div className="size-9 rounded-full bg-white/10 border border-white/15 text-foreground flex items-center justify-center text-sm font-semibold font-display">
-               {session?.role === 'admin' ? 'AD' : 'MP'}
+               {isAdminView ? 'AD' : (session?.displayName ? session.displayName[0].toUpperCase() : 'U')}
             </div>
             {/* Online dot with premium pulse animation */}
             <span className="absolute -bottom-0.5 -right-0.5 flex size-2.5 shrink-0">
@@ -170,9 +207,9 @@ export function Sidebar({
             }`}
           >
             <div className="text-sm text-foreground truncate font-medium">
-              {session?.role === 'admin' ? 'System Admin' : 'Mike Patterson'}
+              {isAdminView ? 'SajidAli Ansari' : (session?.displayName || 'User')}
             </div>
-            <div className="text-xs text-muted-foreground">{session?.role === 'admin' ? 'Superuser' : 'Owner'}</div>
+            <div className="text-xs text-muted-foreground">{isAdminView ? 'Superuser' : (session?.builderRole === 'owner' ? 'Owner' : 'Member')}</div>
           </div>
           
           <button 
@@ -189,4 +226,3 @@ export function Sidebar({
     </aside>
   );
 }
-

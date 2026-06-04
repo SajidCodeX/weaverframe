@@ -1,4 +1,6 @@
-import { createFileRoute, redirect, Link } from "@tanstack/react-router";
+import { createFileRoute, redirect, Link, useRouteContext, useRouter } from "@tanstack/react-router";
+import { useEffect, useState, useRef } from "react";
+
 import { ArrowUp, ArrowRight } from "lucide-react";
 import {
   LineChart,
@@ -13,6 +15,7 @@ import { Shell } from "@/components/dashboard/Shell";
 import { Card, CardHeader, ScoreBadge } from "@/components/dashboard/primitives";
 import { getDashboardData } from "../lib/dashboard";
 import { getSessionFn } from "@/lib/auth";
+import { obscurePII } from "@/lib/utils";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -21,16 +24,24 @@ export const Route = createFileRoute("/")({
       { name: "description", content: "Platform overview." },
     ],
   }),
-  loader: async () => {
-    const session = await getSessionFn();
-    if (session?.role === 'admin') {
+  // SSR Blocking Loader: Fetches data on the server and blocks HTML streaming until ready.
+  // This completely eliminates the need for skeleton loading states.
+  loader: async ({ context }) => {
+    const session = context.session;
+    if (session?.role === 'admin' && !session?.actingAsBuilderId) {
       throw redirect({ to: '/admin' })
     }
-    return await getDashboardData();
+    // Pass activeRole so the server function knows which cookie to use
+    const activeRole = typeof window !== 'undefined' 
+      ? (sessionStorage.getItem('active_role') ?? localStorage.getItem('active_role') ?? undefined)
+      : undefined;
+      
+    return await getDashboardData({ data: { activeRole } });
   },
-  staleTime: 60 * 1000, // 1 minute cache
   component: Overview,
 });
+
+
 
 /* ── Vivid avatar color per initials (deterministic) ─── */
 const avatarPalette = ["#FF453A", "#FF9F0A", "#30D158", "#0A84FF", "#BF5AF2", "#FF6B6B", "#34D399"];
@@ -120,7 +131,13 @@ function Kpi({
 
 /* ── Overview Page ───────────────────────────────────── */
 function Overview() {
+  const router = useRouter();
+  const { session } = useRouteContext({ strict: false }) as any;
+  const isPrivacyMode = session?.role === 'admin' && !!session?.actingAsBuilderId;
+
   const data = Route.useLoaderData() as any;
+
+
 
   const {
     totalLeads = 0,
@@ -139,17 +156,28 @@ function Overview() {
     pipelineTrendVal = '+0%',
     avgDaysToBook = 14,
     aiQualRate = 0,
-    weeklyVolume = [],
+    dailyVolume = [],
+    lastSyncAt = null
   } = data;
 
+  const [selectedWeek, setSelectedWeek] = useState(1);
+  const chartScrollRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to the right-most (latest) data when changing views
+  useEffect(() => {
+    if (chartScrollRef.current) {
+      chartScrollRef.current.scrollLeft = chartScrollRef.current.scrollWidth;
+    }
+  }, [dailyVolume]);
+
   return (
-    <Shell title="Overview">
+    <Shell title="Overview" lastSyncAt={lastSyncAt}>
 
       {/* KPI row */}
       <div className="grid grid-cols-4 gap-4">
         <Kpi
           highlight
-          label="Total Leads This Month"
+          label="New Leads (Last 30d)"
           value={leadsThisMonth.toString()}
           sub={leadsMonthSub}
           trend={leadsMonthTrend}
@@ -219,18 +247,21 @@ function Overview() {
                 {activityFeed.slice(0, 20).map((e: any) => (
                   <li
                     key={e.id}
-                    className="flex items-center justify-between px-5 py-2.5"
+                    className="flex items-center justify-between px-5 py-2.5 hover:bg-secondary/20 cursor-pointer transition-colors"
+                    onClick={() => router.navigate({ to: '/messages' })}
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       <div
                         className="size-8 rounded-full flex items-center justify-center text-xs font-semibold shrink-0"
                         style={{ background: avatarColor(e.name) + "30", color: avatarColor(e.name) }}
                       >
-                        {e.name.split(" ").map((s: string) => s[0]).join("")}
+                        {isPrivacyMode 
+                          ? "??" 
+                          : e.name.split(" ").map((s: string) => s[0]).join("")}
                       </div>
                       <div className="min-w-0">
                         <div className="text-sm text-foreground truncate">
-                          <span className="font-medium">{e.name}</span>
+                          <span className="font-medium">{isPrivacyMode ? obscurePII(e.name, 'name') : e.name}</span>
                           <span className="text-muted-foreground"> · {e.action}</span>
                         </div>
                         <div className="text-xs text-muted-foreground">{e.city}</div>
@@ -434,15 +465,34 @@ function Overview() {
         </div>
       </Card>
 
-      {/* Weekly volume line chart */}
+      {/* Lead volume line chart */}
       <Card className="mt-4">
-        <CardHeader title="Weekly Lead Volume" subtitle="Last 30 days" />
+        <div className="px-5 pt-5 pb-3 flex items-center justify-between border-b border-border/50">
+          <div>
+            <h3 className="font-display font-medium text-foreground text-sm tracking-tight">Lead Volume</h3>
+            <p className="text-[11px] text-muted-foreground font-medium mt-0.5">Current Month Breakdown</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex bg-secondary/50 rounded-md p-0.5 border border-border">
+              {Array.from({ length: Math.ceil(dailyVolume.length / 7) }).map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setSelectedWeek(i + 1)}
+                  className={`px-2 py-0.5 text-[10px] font-medium rounded-sm transition-colors ${selectedWeek === i + 1 ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                  Wk {i + 1}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
         <div className="p-5 h-[280px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart
-              data={weeklyVolume}
-              margin={{ top: 5, right: 10, left: -20, bottom: 0 }}
-            >
+          <div style={{ width: '100%', height: '100%', minWidth: '100%' }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart
+                data={dailyVolume.slice((selectedWeek - 1) * 7, selectedWeek * 7)}
+                margin={{ top: 5, right: 40, left: -20, bottom: 0 }}
+              >
               <CartesianGrid strokeDasharray="3 3" stroke="#1A1A1A" vertical={false} />
               <XAxis
                 dataKey="date"
@@ -474,8 +524,9 @@ function Overview() {
                 dot={false}
                 activeDot={{ r: 4, fill: "#30D158", strokeWidth: 0 }}
               />
-            </LineChart>
-          </ResponsiveContainer>
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       </Card>
     </Shell>

@@ -6,20 +6,22 @@ import { getBuildersData, getAdminStats, updateBuilderPlan } from "@/lib/admin";
 import { getSessionFn } from "@/lib/auth";
 
 export const Route = createFileRoute("/admin/billing")({
-  beforeLoad: async () => {
-    const session = await getSessionFn();
+  beforeLoad: async ({ context }) => {
+    if (typeof window === 'undefined') return;
+    const session = context.session;
     if (!session || session.role !== 'admin') {
       throw redirect({ to: '/' })
     }
   },
   loader: async () => {
+    if (typeof window === 'undefined') return { builders: [], stats: { totalMRR: 0, activeBuilders: 0, totalLeads: 0, trends: { mrr: '', builders: '', leads: '' } } };
     const builders = await getBuildersData();
     const stats = await getAdminStats();
     return { builders, stats };
   },
   head: () => ({
     meta: [
-      { title: "Billing & Subscriptions — LeadForge Admin" },
+      { title: "Billing & Subscriptions — Builder's Edge Admin" },
     ],
   }),
   component: AdminBillingRoute,

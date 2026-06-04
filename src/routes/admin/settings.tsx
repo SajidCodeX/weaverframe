@@ -7,20 +7,22 @@ import { useTheme } from "@/components/ThemeProvider";
 import { useState } from "react";
 
 export const Route = createFileRoute("/admin/settings")({
-  beforeLoad: async () => {
-    const session = await getSessionFn();
+  beforeLoad: async ({ context }) => {
+    if (typeof window === 'undefined') return;
+    const session = context.session;
     if (!session || session.role !== 'admin') {
       throw redirect({ to: '/' })
     }
   },
   loader: async () => {
+    if (typeof window === 'undefined') return { settings: { supportEmail: '', defaultTrialDays: 14, maintenanceMode: false }, blockedUsers: [] };
     const settings = await getPlatformSettings();
     const blockedUsers = await getBlockedUsers();
     return { settings, blockedUsers };
   },
   head: () => ({
     meta: [
-      { title: "Platform Settings — LeadForge Admin" },
+      { title: "Platform Settings — Builder's Edge Admin" },
     ],
   }),
   component: AdminSettingsRoute,

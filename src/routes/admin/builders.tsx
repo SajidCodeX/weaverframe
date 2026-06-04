@@ -1,21 +1,26 @@
 import { createFileRoute, redirect, useRouter } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Shell } from '@/components/dashboard/Shell'
 import { Card } from '@/components/dashboard/primitives'
-import { getBuildersData, createBuilderInvite, toggleBuilderStatus, deleteBuilder } from '@/lib/admin'
+import { getBuildersData, createBuilderInvite, toggleBuilderStatus, deleteBuilder, startBuilderPreview } from '@/lib/admin'
 import { getSessionFn } from '@/lib/auth'
+import { MoreHorizontal } from 'lucide-react'
 
 export const Route = createFileRoute('/admin/builders')({
   head: () => ({
     meta: [{ title: "Manage Builders — Builder's Edge Admin" }]
   }),
-  beforeLoad: async () => {
-    const session = await getSessionFn()
+  beforeLoad: async ({ context }) => {
+    if (typeof window === 'undefined') return;
+    const session = context.session
     if (!session || session.role !== 'admin') {
       throw redirect({ to: '/' })
     }
   },
-  loader: async () => await getBuildersData(),
+  loader: async () => {
+    if (typeof window === 'undefined') return [];
+    return await getBuildersData();
+  },
   component: BuildersRoute,
 })
 
@@ -26,7 +31,14 @@ function BuildersRoute() {
   const [email, setEmail] = useState('')
   const [inviteLink, setInviteLink] = useState('')
   const [copied, setCopied] = useState(false)
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const router = useRouter()
+
+  useEffect(() => {
+    const handleDocClick = () => setOpenMenuId(null)
+    document.addEventListener('click', handleDocClick)
+    return () => document.removeEventListener('click', handleDocClick)
+  }, [])
 
   const handleCopy = () => {
     navigator.clipboard.writeText(inviteLink)
@@ -51,6 +63,30 @@ function BuildersRoute() {
       } catch (err) {
         alert('Failed to delete builder')
       }
+    }
+  }
+
+  const handlePreviewBuilder = async (id: string) => {
+    try {
+      sessionStorage.setItem('active_role', 'admin')
+      await startBuilderPreview({ data: id })
+      window.location.href = '/'
+    } catch (err) {
+      alert('Failed to open builder preview')
+    }
+  }
+
+  const handleResetPassword = async (userId: string) => {
+    const { generatePasswordResetLink } = await import('@/lib/dashboard')
+    try {
+      const res = await generatePasswordResetLink({ data: userId })
+      if (res.success && res.inviteLink) {
+        const link = window.location.origin + res.inviteLink
+        navigator.clipboard.writeText(link)
+        alert(`Reset link generated for owner and copied to clipboard!\n\n${link}`)
+      }
+    } catch (err: any) {
+      alert(`Failed to generate reset link: ${err?.message}`)
     }
   }
 
@@ -140,7 +176,7 @@ function BuildersRoute() {
       )}
 
       <Card>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto transition-all duration-200 ease-in-out" style={{ paddingBottom: openMenuId ? '180px' : '0' }}>
           <table className="w-full text-sm text-left">
             <thead className="text-[10px] text-muted-foreground uppercase tracking-wider bg-secondary/30 border-b border-border">
               <tr>
@@ -162,25 +198,55 @@ function BuildersRoute() {
                     <td className="px-6 py-4 text-right text-muted-foreground">
                       {new Date(builder.createdAt).toLocaleDateString()}
                     </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex justify-end gap-2">
-                        <button 
-                          onClick={() => handleToggleStatus(builder.id)}
-                          className={`text-xs font-medium px-2 py-1 rounded transition-colors ${
-                            builder.isActive 
-                              ? 'bg-danger/10 text-danger hover:bg-danger/20' 
-                              : 'bg-success/10 text-success hover:bg-success/20'
-                          }`}
+                    <td className="px-6 py-4 text-right relative">
+                      <button 
+                        onClick={(e) => { 
+                          e.stopPropagation()
+                          e.nativeEvent.stopImmediatePropagation()
+                          setOpenMenuId(openMenuId === builder.id ? null : builder.id) 
+                        }}
+                        className="text-muted-foreground hover:text-white p-2 rounded-md hover:bg-white/5 transition-colors"
+                      >
+                        <MoreHorizontal className="size-4" />
+                      </button>
+                      
+                      {openMenuId === builder.id && (
+                        <div 
+                          className="absolute right-8 top-10 w-40 bg-[#111] border border-[#333] rounded-md shadow-2xl z-10 py-1 overflow-hidden"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            e.nativeEvent.stopImmediatePropagation()
+                          }}
                         >
-                          {builder.isActive ? 'Suspend' : 'Activate'}
-                        </button>
-                        <button 
-                          onClick={() => handleDelete(builder.id, builder.companyName)}
-                          className="text-xs font-medium px-2 py-1 rounded transition-colors bg-red-900/20 text-red-500 hover:bg-red-900/40 hover:text-red-400 border border-red-900/30"
-                        >
-                          Delete
-                        </button>
-                      </div>
+                          <button 
+                            onClick={() => { setOpenMenuId(null); handlePreviewBuilder(builder.id); }}
+                            className="w-full text-left px-4 py-2 text-sm text-foreground hover:bg-white/10 transition-colors"
+                          >
+                            Open Dashboard
+                          </button>
+                          {owner && (
+                            <button 
+                              onClick={() => { setOpenMenuId(null); handleResetPassword(owner.id); }}
+                              className="w-full text-left px-4 py-2 text-sm text-foreground hover:bg-white/10 transition-colors"
+                            >
+                              Reset Password
+                            </button>
+                          )}
+                          <button 
+                            onClick={() => { setOpenMenuId(null); handleToggleStatus(builder.id); }}
+                            className="w-full text-left px-4 py-2 text-sm text-foreground hover:bg-white/10 transition-colors"
+                          >
+                            {builder.isActive ? 'Suspend Builder' : 'Activate Builder'}
+                          </button>
+                          <div className="h-px bg-[#333] my-1" />
+                          <button 
+                            onClick={() => { setOpenMenuId(null); handleDelete(builder.id, builder.companyName); }}
+                            className="w-full text-left px-4 py-2 text-sm text-danger hover:bg-danger/20 transition-colors"
+                          >
+                            Delete Builder
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 )

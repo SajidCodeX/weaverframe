@@ -8,7 +8,22 @@ import { getReportsData, exportLeadsToCsv } from "@/lib/dashboard";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/reports")({
-  loader: () => getReportsData(),
+  loader: async ({ context }) => {
+    if (typeof window === 'undefined' && !context.session) {
+      return {
+        timeframes: {},
+        leadsBySource: [],
+        monthlyTrend: [],
+        allLeads: [],
+        allAppointments: [],
+        allReviewRequests: [],
+        allMessages: [],
+        allActivities: []
+      };
+    }
+    const activeRole = typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? localStorage.getItem('active_role') ?? undefined) : undefined;
+    return await getReportsData({ data: { activeRole } });
+  },
   head: () => ({ meta: [{ title: "Reports — Builder's Edge" }, { name: "description", content: "Monthly ROI and performance reports." }] }),
   component: ReportsPage,
 });
@@ -267,7 +282,7 @@ function ReportsPage() {
     
     // Simulate generation and email transmission
     setTimeout(() => {
-      toast.success("Executive Report successfully emailed to mike@horizonhomes.com!", {
+      toast.success("Executive Report successfully emailed to your email!", {
         id: toastId,
         description: `Includes review analytics and licensing fee ROI for ${timeframe === "Custom" && customRange ? customRange.label : timeframe}.`,
         duration: 4000
@@ -371,7 +386,7 @@ function ReportsPage() {
       <div className="hidden print:block mb-6 border-b border-gray-200 pb-4">
         <div className="flex justify-between items-end">
           <div>
-            <h1 className="text-2xl font-bold text-black font-sans tracking-tight">Horizon Homes</h1>
+            <h1 className="text-2xl font-bold text-black font-sans tracking-tight">Your Company</h1>
             <p className="text-xs text-gray-500 font-sans mt-0.5">B2B Reputation & Lead Quality Performance Report</p>
           </div>
           <div className="text-right">
@@ -483,7 +498,7 @@ function ReportsPage() {
         <ExportButton 
           icon={<FileText className="size-4" />} 
           label="Download PDF Report" 
-          sub="Branded for Horizon Homes" 
+          sub="Branded for Your Company" 
           onClick={() => window.print()}
         />
         <ExportButton 
@@ -496,7 +511,7 @@ function ReportsPage() {
         <ExportButton 
           icon={<Mail className="size-4" />} 
           label="Email Report" 
-          sub={isEmailing ? "Sending..." : "Sends to mike@horizonhomes.com"} 
+          sub={isEmailing ? "Sending..." : "Sends to your email"} 
           onClick={handleEmailReport}
           disabled={isEmailing}
         />

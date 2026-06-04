@@ -67,7 +67,7 @@ function FeedbackPage() {
             A
           </div>
           <span className="text-sm font-semibold tracking-widest uppercase text-foreground/80 font-mono">
-            Horizon Homes Care
+            Your Company Care
           </span>
         </div>
 
@@ -102,7 +102,7 @@ function FeedbackPage() {
                 <ShieldAlert className="size-5 text-[#BF5AF2]" />
               </div>
               <div>
-                <h1 className="text-md font-bold text-white tracking-tight">Horizon Homes Customer Care</h1>
+                <h1 className="text-md font-bold text-white tracking-tight">Your Company Customer Care</h1>
                 <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
                   We strive for absolute 5-star custom craftsmanship. Your direct feedback helps us resolve any construction bottlenecks immediately.
                 </p>

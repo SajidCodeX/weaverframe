@@ -5,16 +5,20 @@ import { getGlobalUsersData, toggleUserStatus, deleteUser } from "@/lib/admin";
 import { getSessionFn } from "@/lib/auth";
 
 export const Route = createFileRoute("/admin/users")({
-  beforeLoad: async () => {
-    const session = await getSessionFn();
+  beforeLoad: async ({ context }) => {
+    if (typeof window === 'undefined') return;
+    const session = context.session;
     if (!session || session.role !== 'admin') {
       throw redirect({ to: '/' })
     }
   },
-  loader: async () => await getGlobalUsersData(),
+  loader: async () => {
+    if (typeof window === 'undefined') return [];
+    return await getGlobalUsersData();
+  },
   head: () => ({
     meta: [
-      { title: "Global Users — LeadForge Admin" },
+      { title: "Global Users — Builder's Edge Admin" },
     ],
   }),
   component: GlobalUsersRoute,

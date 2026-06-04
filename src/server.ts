@@ -69,6 +69,19 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      const url = new URL(request.url);
+      if (url.pathname === '/api/auth-sink') {
+        return new Response(
+          `<!DOCTYPE html><html><head></head><body></body></html>`,
+          {
+            status: 200,
+            headers: {
+              'Content-Type': 'text/html',
+            },
+          }
+        );
+      }
+
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);

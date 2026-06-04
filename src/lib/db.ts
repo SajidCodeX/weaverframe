@@ -8,11 +8,28 @@ const globalForPrisma = globalThis as unknown as {
 export const getDb = async (): Promise<PrismaClient> => {
   if (globalForPrisma.prisma && (globalForPrisma.prisma as any).appointment) return globalForPrisma.prisma
 
-  const dbUrl =
+  const dbUrlRaw =
     (typeof process !== 'undefined' ? process.env.DATABASE_URL : undefined) ||
     (import.meta as any).env?.DATABASE_URL
 
-  if (!dbUrl) throw new Error('DATABASE_URL is not set')
+  if (!dbUrlRaw) throw new Error('DATABASE_URL is not set')
+  const dbUrl = String(dbUrlRaw).trim().replace(/^['"]|['"]$/g, '')
+
+  let parsed: URL
+  try {
+    parsed = new URL(dbUrl)
+  } catch {
+    throw new Error('DATABASE_URL is not a valid URL. Use: postgresql://user:password@host:5432/dbname?sslmode=require')
+  }
+  if (!['postgres:', 'postgresql:'].includes(parsed.protocol)) {
+    throw new Error('DATABASE_URL must start with postgres:// or postgresql://')
+  }
+  if (!parsed.hostname) {
+    throw new Error('DATABASE_URL host is missing. If your password has special characters like @ : / # ? &, URL-encode it.')
+  }
+  if (parsed.hostname !== 'localhost' && !/^[a-zA-Z0-9.-]+$/.test(parsed.hostname)) {
+    throw new Error('DATABASE_URL host is malformed. This usually means the password contains special characters and is not URL-encoded.')
+  }
 
   const { PrismaPg } = await import('@prisma/adapter-pg')
   const pg = await import('pg')
@@ -44,4 +61,3 @@ export const getDb = async (): Promise<PrismaClient> => {
   globalForPrisma.prisma = prisma
   return prisma
 }
-

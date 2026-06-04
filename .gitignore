@@ -34,6 +34,19 @@ dist-ssr
 *.ntvs*
 *.njsproj
 *.sln
-*.sw?
-
 /src/generated/prisma
+
+# Temporary scratch and test scripts
+scratch*
+scratch/
+test-*
+check-*
+check.ts
+check_admin.ts
+cleanup-activities.ts
+cleanup.sql
+distribute-leads.ts
+fix-assignments.ts
+sync-now.ts
+trigger-sync.ts
+dev_server*.log

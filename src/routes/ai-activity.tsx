@@ -4,10 +4,16 @@ import { Card, CardHeader, Badge } from "@/components/dashboard/primitives";
 import { Bot, Zap, Clock, MessageSquare, Send, Sparkles, User, BrainCircuit, ChevronDown, Trash2, Eye, X } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { getLeadsData, simulateAIChatReply, generateAIScriptUpdate } from "@/lib/dashboard";
+import { obscurePII } from "@/lib/utils";
+import { useRouteContext } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/ai-activity")({
-  loader: async () => {
-    return await getLeadsData();
+  loader: async ({ context }) => {
+    if (typeof window === 'undefined' && !context.session) {
+      return [];
+    }
+    const activeRole = typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? localStorage.getItem('active_role') ?? undefined) : undefined;
+    return await getLeadsData({ data: { activeRole } });
   },
   head: () => ({
     meta: [
@@ -85,6 +91,9 @@ export function getCleanLeadName(lead: { id: string; name: string } | null | und
 }
 
 function AIPage() {
+  const { session } = useRouteContext({ strict: false }) as any;
+  const isPrivacyMode = session?.role === 'admin' && !!session?.actingAsBuilderId;
+
   const loaderData = useLoaderData({ from: '/ai-activity' });
   const leads = (loaderData as any) || [];
 
@@ -94,7 +103,7 @@ function AIPage() {
   const [scripts, setScripts] = useState([
     {
       t: "Message 1 · Immediate (< 60s)",
-      body: "Hi [Name], I noticed your new residential building permit application filed in [County] County. I'm Mike Patterson's assistant from Horizon Homes. Since custom builds in Austin require early structural reviews, have you already hired a general builder?",
+      body: "Hi [Name], I noticed your new residential building permit application filed in [County] County. I'm Your Name's assistant from Your Company. Since custom builds in Austin require early structural reviews, have you already hired a general builder?",
       color: "#30D158",
     },
     {
@@ -147,7 +156,7 @@ function AIPage() {
     } else {
       const name = getCleanLeadName(leadObj);
       const defaultGreeting = [
-        { role: 'assistant' as const, content: `Hi, I noticed your new residential building permit application filed in ${leadObj.county || 'Travis County'}. I'm Alex, Mike Patterson's assistant from Horizon Homes. Since custom builds in Austin require early structural reviews, have you already hired a general builder?` }
+        { role: 'assistant' as const, content: `Hi, I noticed your new residential building permit application filed in ${leadObj.county || 'Travis County'}. I'm Alex, Your Name's assistant from Your Company. Since custom builds in Austin require early structural reviews, have you already hired a general builder?` }
       ];
       setChatHistory(defaultGreeting);
     }
@@ -394,7 +403,7 @@ function AIPage() {
                         >
                           <td className="px-5 py-3.5">
                             <div className="flex flex-col">
-                              <span className="text-foreground font-medium">{c.leadName}</span>
+                              <span className="text-foreground font-medium">{isPrivacyMode ? obscurePII(c.leadName, 'name') : c.leadName}</span>
                               <div className="mt-1">
                                 <span className={`inline-flex items-center px-1.5 py-0.5 text-[9px] font-semibold tracking-wider rounded uppercase ${
                                   c.scoreTier === "Hot" || c.scoreTier === "hot"
@@ -464,7 +473,7 @@ function AIPage() {
                 </div>
                 <div>
                   <h4 className="text-xs font-semibold text-foreground">Alex Concierge Simulator</h4>
-                  <span className="text-[10px] text-muted-foreground">Horizon Homes AI Agent</span>
+                  <span className="text-[10px] text-muted-foreground">Your Company AI Agent</span>
                 </div>
               </div>
               
@@ -487,7 +496,7 @@ function AIPage() {
                   className="w-full bg-black/50 border border-white/10 hover:border-[#00a884]/40 rounded px-2.5 py-1 text-xs text-foreground text-left flex items-center justify-between focus:outline-none transition-colors"
                 >
                   <span className="truncate">
-                    {getCleanLeadName(leads.find((l: any) => l.id === selectedLeadId)) || "Select Lead"} 
+                    {isPrivacyMode ? obscurePII(getCleanLeadName(leads.find((l: any) => l.id === selectedLeadId)), 'name') : (getCleanLeadName(leads.find((l: any) => l.id === selectedLeadId)) || "Select Lead")} 
                     <span className="ml-1.5 text-[10px] text-muted-foreground">
                       ({leads.find((l: any) => l.id === selectedLeadId)?.scoreTier || "Warm"})
                     </span>
@@ -519,7 +528,7 @@ function AIPage() {
                               : "text-foreground hover:text-white"
                           }`}
                         >
-                          <span className="truncate">{getCleanLeadName(l)}</span>
+                          <span className="truncate">{isPrivacyMode ? obscurePII(getCleanLeadName(l), 'name') : getCleanLeadName(l)}</span>
                           <span className={`text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded ${
                             l.scoreTier === "Hot" 
                               ? "bg-rose-500/10 text-rose-400 border border-rose-500/20" 
@@ -567,7 +576,7 @@ function AIPage() {
                             : 'bg-[#202c33] text-[#e9edef] border border-white/[0.03] rounded-tl-none'
                         }`}
                       >
-                        <p>{m.content}</p>
+                        <p className={isPrivacyMode ? "blur-[4px] select-none opacity-50" : ""}>{m.content}</p>
                       </div>
                     </div>
                     {isAgent && (
@@ -742,7 +751,7 @@ function AIPage() {
                 </div>
                 <div>
                   <h3 className="text-sm font-semibold text-foreground text-left">
-                    {conversations[activeModalLeadId]?.leadName || "AI Conversation Detail"}
+                    {isPrivacyMode ? obscurePII(conversations[activeModalLeadId]?.leadName, 'name') : (conversations[activeModalLeadId]?.leadName || "AI Conversation Detail")}
                   </h3>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-[11px] text-muted-foreground">
@@ -803,7 +812,7 @@ function AIPage() {
                             ? "bg-[#005c4b] text-[#e9edef] rounded-tr-none border border-white/[0.03]" 
                             : "bg-[#202c33] text-[#e9edef] rounded-tl-none border border-white/[0.03]"
                         }`}>
-                          {m.content}
+                          <div className={isPrivacyMode ? "blur-[4px] select-none opacity-50" : ""}>{m.content}</div>
                         </div>
                       </div>
                       {isAgent && (

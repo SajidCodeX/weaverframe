@@ -1,10 +1,11 @@
-import { createFileRoute, useLoaderData, useRouter } from "@tanstack/react-router";
+import { createFileRoute, useLoaderData, useRouter, useRouteContext } from "@tanstack/react-router";
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Search, Plus, Download, Phone, Calendar, Eye, MoreHorizontal, X, Mail, Check, AlertCircle, Edit } from "lucide-react";
+import { Search, Plus, Download, Phone, Calendar, Eye, MoreHorizontal, X, Mail, Check, AlertCircle, Edit, RefreshCw } from "lucide-react";
 import { Shell } from "@/components/dashboard/Shell";
 import { Card, ScoreBadge, StageBadge } from "@/components/dashboard/primitives";
 import { CustomSelect } from "@/components/dashboard/CustomSelect";
 import { getLeadsData, addManualLead, deleteLead, logActivity, updateLead, sendSmsOutreach, retriggerLeadFlow } from "@/lib/dashboard";
+import { obscurePII } from "@/lib/utils";
 
 type LeadsSearch = {
   stage?: string;
@@ -14,7 +15,14 @@ export const Route = createFileRoute("/leads")({
   validateSearch: (search: Record<string, unknown>): LeadsSearch => ({
     stage: (search.stage as string) || undefined,
   }),
-  loader: () => getLeadsData(),
+  loader: async ({ context }) => {
+    // SSR Blocking Loader: Fetches data on the server and blocks HTML streaming until ready.
+    const activeRole = typeof window !== 'undefined' 
+      ? (sessionStorage.getItem('active_role') ?? localStorage.getItem('active_role') ?? undefined) 
+      : undefined;
+      
+    return await getLeadsData({ data: { activeRole } });
+  },
   staleTime: 60 * 1000, // 1 minute cache
   head: () => ({ meta: [{ title: "Leads — Builder's Edge" }, { name: "description", content: "Manage all your leads." }] }),
   component: LeadsPage,
@@ -27,6 +35,9 @@ function AiStatus({ status }: { status: string }) {
 }
 
 function LeadsPage() {
+  const { session } = useRouteContext({ strict: false }) as any;
+  const isPrivacyMode = session?.role === 'admin' && !!session?.actingAsBuilderId;
+
   const rawLeads = useLoaderData({ from: '/leads' }) || [];
   const router = useRouter();
   const search = Route.useSearch();
@@ -85,6 +96,14 @@ function LeadsPage() {
   const [customStart, setCustomStart] = useState(initialDate.start);
   const [customEnd, setCustomEnd] = useState(initialDate.end);
   const [sortOption, setSortOption] = useState<string>("Newest");
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 20;
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [query, selectedStages, selectedScores, selectedSources, selectedDateRange, customStart, customEnd, sortOption]);
 
   // Custom simulator triggers
   const [activeEmailLead, setActiveEmailLead] = useState<any | null>(null);
@@ -278,9 +297,9 @@ function LeadsPage() {
   const exportToCSV = () => {
     const headers = ["Name", "Phone", "Email", "County", "Budget", "Score", "Stage", "Source", "Purchase Date", "Captured At"];
     const rows = filtered.map(l => [
-      `${l.firstName} ${l.lastName}`,
-      l.phone || "",
-      l.email || "",
+      isPrivacyMode ? obscurePII(`${l.firstName} ${l.lastName}`, 'name') : `${l.firstName} ${l.lastName}`,
+      isPrivacyMode ? obscurePII(l.phone, 'phone') : (l.phone || ""),
+      isPrivacyMode ? obscurePII(l.email, 'email') : (l.email || ""),
       l.city || "",
       l.budget || "",
       l.scoreTier || "",
@@ -544,6 +563,19 @@ function LeadsPage() {
 
           <div className="ml-auto flex gap-2">
             <button
+              onClick={() => {
+                const icon = document.getElementById('leads-refresh-icon');
+                if (icon) icon.classList.add('animate-spin');
+                router.invalidate().finally(() => {
+                  if (icon) icon.classList.remove('animate-spin');
+                });
+              }}
+              className="inline-flex items-center gap-1.5 text-sm border border-border rounded-md px-3 py-2 text-foreground hover:bg-secondary transition-colors"
+              title="Refresh Data"
+            >
+              <RefreshCw id="leads-refresh-icon" className="size-4" /> Refresh
+            </button>
+            <button
               onClick={exportToCSV}
               className="inline-flex items-center gap-1.5 text-sm border border-border rounded-md px-3 py-2 text-foreground hover:bg-secondary transition-colors"
             >
@@ -576,7 +608,8 @@ function LeadsPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((lead, i) => {
+              {filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((lead, i) => {
+                const globalIndex = (currentPage - 1) * itemsPerPage + i;
                 const revealed = revealedPhones.has(lead.id);
                 const safePhone = lead.phone || "No phone";
                 const displayPhone = revealed ? safePhone : safePhone.length > 4 ? safePhone.replace(/\d{4}$/, "****") : safePhone;
@@ -586,16 +619,24 @@ function LeadsPage() {
                     onClick={() => setSelected(lead)}
                     className={`border-t border-border cursor-pointer transition-all duration-150 hover:bg-white/[0.03] hover:border-l-2 hover:border-l-white/20 ${i % 2 ? "bg-card" : "bg-card/60"}`}
                   >
-                    <td className="px-4 py-3 font-mono text-muted-foreground text-xs text-center">{String(i + 1).padStart(2, "0")}</td>
+                    <td className="px-4 py-3 font-mono text-muted-foreground text-xs text-center">{String(globalIndex + 1).padStart(2, "0")}</td>
                     <td className="px-4 py-3 font-medium text-foreground text-center">
-                      {lead.lastName ? `${lead.firstName} ${lead.lastName.split(/\s+/).map(p => p.replace(/[^a-zA-Z]/g, '').charAt(0).toUpperCase()).filter(Boolean).join('. ')}.` : lead.firstName}
+                      {isPrivacyMode 
+                        ? obscurePII(`${lead.firstName} ${lead.lastName || ''}`, 'name')
+                        : lead.lastName ? `${lead.firstName} ${lead.lastName.split(/\s+/).map((p: string) => p.replace(/[^a-zA-Z]/g, '').charAt(0).toUpperCase()).filter(Boolean).join('. ')}.` : lead.firstName
+                      }
                     </td>
                     <td className="px-4 py-3 font-mono text-xs text-center">
                       <button
-                        onClick={(e) => { e.stopPropagation(); setRevealedPhones((s) => { const n = new Set(s); n.add(lead.id); return n; }); }}
-                        className="text-foreground hover:text-white/80 transition-colors"
+                        onClick={(e) => { 
+                          e.stopPropagation(); 
+                          if (!isPrivacyMode) {
+                            setRevealedPhones((s) => { const n = new Set(s); n.add(lead.id); return n; }); 
+                          }
+                        }}
+                        className={`text-foreground transition-colors ${!isPrivacyMode ? 'hover:text-white/80' : 'cursor-default'}`}
                       >
-                        {displayPhone}
+                        {isPrivacyMode ? obscurePII(safePhone, 'phone') : displayPhone}
                       </button>
                     </td>
                     <td className="px-4 py-3 font-mono text-xs text-foreground text-center">{lead.budget}</td>
@@ -711,7 +752,7 @@ function LeadsPage() {
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setActiveMoreLead(null);
-                                  const defaultMsg = `Hi ${lead.firstName}, this is Horizon Homes. We noticed your recent permit application in ${lead.county}. Have you selected a builder yet? Reply YES or NO.`;
+                                  const defaultMsg = `Hi ${lead.firstName}, this is Your Company. We noticed your recent permit application in ${lead.county}. Have you selected a builder yet? Reply YES or NO.`;
                                   const msg = prompt(`SMS message to ${lead.firstName}:`, defaultMsg);
                                   if (!msg) return;
                                   setSmsSending(lead.id);
@@ -763,6 +804,33 @@ function LeadsPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Controls */}
+        {filtered.length > 0 && (
+          <div className="flex items-center justify-between border-t border-border bg-secondary/30 px-4 py-3">
+            <div className="text-xs text-muted-foreground">
+              Showing <span className="font-medium text-foreground">{(currentPage - 1) * itemsPerPage + 1}</span> to{" "}
+              <span className="font-medium text-foreground">{Math.min(currentPage * itemsPerPage, filtered.length)}</span> of{" "}
+              <span className="font-medium text-foreground">{filtered.length}</span> leads
+            </div>
+            <div className="flex gap-1.5">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="inline-flex items-center justify-center rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Previous
+              </button>
+              <button
+                onClick={() => setCurrentPage(p => Math.min(Math.ceil(filtered.length / itemsPerPage), p + 1))}
+                disabled={currentPage >= Math.ceil(filtered.length / itemsPerPage)}
+                className="inline-flex items-center justify-center rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </Card>
 
       {selected && <LeadDetailPanel lead={selected} onClose={() => setSelected(null)} />}
@@ -1214,6 +1282,9 @@ function ScheduleAppointmentModal({ lead, onClose, onSchedule }: { lead: any; on
 
 // Premium Individual Lead Detail Drawer (No Dummy Data)
 function LeadDetailPanel({ lead, onClose }: { lead: any; onClose: () => void }) {
+  const { session } = useRouteContext({ strict: false }) as any;
+  const isPrivacyMode = session?.role === 'admin' && !!session?.actingAsBuilderId;
+
   const budgetConfirmed = lead.estimatedBudget >= 200000;
   const isEngaged = lead.stage !== "New";
   const scoreTierPts = lead.scoreTier === "Hot" ? 20 : lead.scoreTier === "Warm" ? 10 : 0;
@@ -1233,13 +1304,19 @@ function LeadDetailPanel({ lead, onClose }: { lead: any; onClose: () => void }) 
         <div className="sticky top-0 bg-card border-b border-border px-5 py-4 flex items-start justify-between z-10">
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="font-display text-lg font-semibold text-foreground">{lead.firstName} {lead.lastName}</h2>
+              <h2 className="font-display text-lg font-semibold text-foreground">
+                {isPrivacyMode ? obscurePII(`${lead.firstName} ${lead.lastName || ''}`, 'name') : `${lead.firstName} ${lead.lastName || ''}`}
+              </h2>
               <ScoreBadge score={lead.score} />
               <StageBadge stage={lead.stage} />
             </div>
             <div className="mt-2 flex flex-col gap-1 text-xs text-muted-foreground text-left">
-              <a href={`tel:${lead.phone || ""}`} className="hover:text-foreground inline-flex items-center gap-1.5 transition-colors"><Phone className="size-3" />{lead.phone || "No phone"}</a>
-              <a href={`mailto:${lead.email || ""}`} className="hover:text-foreground inline-flex items-center gap-1.5 transition-colors"><Mail className="size-3" />{lead.email || "No email"}</a>
+              <a href={isPrivacyMode ? '#' : `tel:${lead.phone || ""}`} className={`inline-flex items-center gap-1.5 transition-colors ${!isPrivacyMode ? 'hover:text-foreground' : 'cursor-default'}`}>
+                <Phone className="size-3" />{isPrivacyMode ? obscurePII(lead.phone, 'phone') : (lead.phone || "No phone")}
+              </a>
+              <a href={isPrivacyMode ? '#' : `mailto:${lead.email || ""}`} className={`inline-flex items-center gap-1.5 transition-colors ${!isPrivacyMode ? 'hover:text-foreground' : 'cursor-default'}`}>
+                <Mail className="size-3" />{isPrivacyMode ? obscurePII(lead.email, 'email') : (lead.email || "No email")}
+              </a>
               <span>{lead.source} · received {new Date(lead.purchaseDate).toLocaleDateString()}</span>
             </div>
           </div>

@@ -3,9 +3,12 @@ import { createServerFn } from '@tanstack/react-start'
 export type AuthSession = {
   userId: string
   builderId: string | null
+  actingAsBuilderId?: string | null
   role: string
   builderRole?: string
   permissions?: string[]
+  displayName?: string
+  companyName?: string
 }
 
 export const logoutFn = createServerFn({ method: 'POST' })
@@ -22,11 +25,28 @@ export const loginFn = createServerFn({ method: 'POST' })
     return handleLogin(data)
   })
 
-export const getSessionFn = createServerFn({ method: 'GET' })
-  .handler(async () => {
+export const getSessionFn = createServerFn({ method: 'POST' })
+  .inputValidator((data: { activeRole?: string | null } | undefined) => data)
+  .handler(async ({ data }) => {
     try {
       const { requireAuth } = await import('./server-utils.server')
-      const session = await requireAuth()
+      const { getDb } = await import('./db')
+      const session = await requireAuth(data?.activeRole ?? undefined)
+      
+      const db = await getDb()
+      const user = await db.user.findUnique({
+        where: { id: session.userId },
+        include: { builder: true }
+      })
+      
+      if (user) {
+        return {
+          ...session,
+          displayName: user.displayName || session.displayName,
+          companyName: user.builder?.companyName || session.companyName,
+          permissions: user.permissions || session.permissions,
+        }
+      }
       return session
     } catch {
       return null

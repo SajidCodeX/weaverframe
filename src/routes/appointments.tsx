@@ -1,5 +1,6 @@
-import { createFileRoute, useLoaderData, useRouter } from "@tanstack/react-router";
+import { createFileRoute, useLoaderData, useRouter, useRouteContext } from "@tanstack/react-router";
 import { useState, useEffect, useRef, useMemo } from "react";
+import { obscurePII } from "@/lib/utils";
 import { Shell } from "@/components/dashboard/Shell";
 import { Card, CardHeader, Badge } from "@/components/dashboard/primitives";
 import { 
@@ -94,10 +95,14 @@ const getUSHoliday = (date: Date) => {
 };
 
 export const Route = createFileRoute("/appointments")({
-  loader: async () => {
+  loader: async ({ context }) => {
+    if (typeof window === 'undefined' && !context.session) {
+      return { appts: [], leads: [] };
+    }
+    const activeRole = typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? localStorage.getItem('active_role') ?? undefined) : undefined;
     const [appts, leads] = await Promise.all([
-      getAppointmentsData(),
-      getLeadsData()
+      getAppointmentsData({ data: { activeRole } }),
+      getLeadsData({ data: { activeRole } })
     ]);
     return { appts, leads };
   },
@@ -111,6 +116,9 @@ export const Route = createFileRoute("/appointments")({
 });
 
 function ApptPage() {
+  const { session } = useRouteContext({ strict: false }) as any;
+  const isPrivacyMode = session?.role === 'admin' && !!session?.actingAsBuilderId;
+
   const router = useRouter();
   const { appts: initialAppts, leads } = useLoaderData({ from: "/appointments" }) as { appts: any[]; leads: any[] };
 
@@ -399,16 +407,15 @@ function ApptPage() {
     };
   }, []);
 
-  // Filter leads based on search query
   const filteredLeads = leads.filter(l => {
-    const name = getCleanLeadName(l).toLowerCase();
+    const name = (isPrivacyMode ? obscurePII(getCleanLeadName(l), 'name') : getCleanLeadName(l)).toLowerCase();
     const query = searchQuery.toLowerCase();
     return name.includes(query) || (l.county && l.county.toLowerCase().includes(query));
   });
 
   const handleSelectLead = (lead: any) => {
     setSelectedLeadId(lead.id);
-    setSearchQuery(getCleanLeadName(lead));
+    setSearchQuery(isPrivacyMode ? obscurePII(getCleanLeadName(lead), 'name') : getCleanLeadName(lead));
     setIsDropdownOpen(false);
   };
 
@@ -863,10 +870,10 @@ function ApptPage() {
                                   setSelectedApptDetails(appt);
                                 }}
                                 className={`w-full text-left text-[9px] px-1.5 py-0.5 rounded truncate font-semibold transition-all select-none focus:outline-none focus-visible:ring-1 focus-visible:ring-white/20 focus-visible:border-white/30 ${style}`}
-                                title={`${getCleanLeadName(appt.lead)} (${timeStr})`}
+                                title={`${isPrivacyMode ? obscurePII(getCleanLeadName(appt.lead), 'name') : getCleanLeadName(appt.lead)} (${timeStr})`}
                               >
                                 <span className="font-mono opacity-80 mr-1">{timeStr.split(" ")[0]}</span>
-                                {getCleanLeadName(appt.lead)}
+                                {isPrivacyMode ? obscurePII(getCleanLeadName(appt.lead), 'name') : getCleanLeadName(appt.lead)}
                               </button>
                             );
                           })}
@@ -917,7 +924,7 @@ function ApptPage() {
                         return (
                           <tr key={a.id} className="hover:bg-white/[0.02] transition-colors">
                             <td className="px-4 py-3 font-semibold text-foreground text-xs">
-                              {getCleanLeadName(a.lead)}
+                              {isPrivacyMode ? obscurePII(getCleanLeadName(a.lead), 'name') : getCleanLeadName(a.lead)}
                             </td>
                             <td className="px-4 py-3">
                               <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-semibold rounded-md ${
@@ -1040,7 +1047,7 @@ function ApptPage() {
                             }`}
                           >
                             <div className="flex flex-col">
-                              <span className="text-xs font-semibold text-white">{getCleanLeadName(l)}</span>
+                              <span className="text-xs font-semibold text-white">{isPrivacyMode ? obscurePII(getCleanLeadName(l), 'name') : getCleanLeadName(l)}</span>
                               <span className="text-[9px] text-muted-foreground">{l.county || "Travis County"}, {l.state || "TX"}</span>
                             </div>
                             <span className={`text-[8px] px-1.5 py-0.5 rounded font-bold uppercase ${
@@ -1261,7 +1268,7 @@ function ApptPage() {
                 <div className="space-y-3.5">
                   <div className="text-center pb-1">
                     <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Rescheduling Appointment for</p>
-                    <h4 className="text-base font-bold text-white mt-0.5">{getCleanLeadName(selectedApptDetails.lead)}</h4>
+                    <h4 className="text-base font-bold text-white mt-0.5">{isPrivacyMode ? obscurePII(getCleanLeadName(selectedApptDetails.lead), 'name') : getCleanLeadName(selectedApptDetails.lead)}</h4>
                   </div>
                   
                   <div>
@@ -1304,7 +1311,7 @@ function ApptPage() {
                     <div className="flex items-center justify-between border-b border-white/5 pb-2">
                       <div className="flex items-center gap-2 text-white">
                         <User className="size-3.5 text-[#00a884]" />
-                        <span className="font-semibold text-xs">{getCleanLeadName(selectedApptDetails.lead)}</span>
+                        <span className="font-semibold text-xs">{isPrivacyMode ? obscurePII(getCleanLeadName(selectedApptDetails.lead), 'name') : getCleanLeadName(selectedApptDetails.lead)}</span>
                       </div>
                       <Badge tone={selectedApptDetails.status === "Confirmed" ? "success" : "warm"}>
                         {selectedApptDetails.status}

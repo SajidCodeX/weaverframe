@@ -10,8 +10,11 @@ export const getRouter = () => {
     context: { queryClient },
     scrollRestoration: true,
     defaultPreload: 'intent',
-    defaultStaleTime: 5 * 60 * 1000,       // 5 minute cache — instant re-navigation
-    defaultPreloadStaleTime: 5 * 60 * 1000,
+    // FIX-1: staleTime MUST be 0. With any positive value, router.invalidate()
+    // is silently ignored (data is considered "fresh"), causing the SSR placeholder
+    // to never clear and the skeleton to loop forever.
+    defaultStaleTime: 0,
+    defaultPreloadStaleTime: 0,
   });
 
   return router;

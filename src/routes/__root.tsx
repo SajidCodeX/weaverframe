@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
@@ -102,9 +103,23 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   errorComponent: ErrorComponent,
   beforeLoad: async ({ location }) => {
     if (location.pathname === '/login' || location.pathname.startsWith('/api') || location.pathname.startsWith('/invite')) {
-      return;
+      return { session: null };  // Always return consistent shape — bare `return` (undefined) crashes RootComponent
     }
-    const session = await getSessionFn();
+
+    // SSR: We no longer bypass session resolution. If the user has a single cookie, 
+    // it will be correctly resolved on the server, avoiding the empty UI flash.
+    let activeRole = undefined;
+    if (typeof window !== 'undefined') {
+      activeRole =
+        // FIX-4: sessionStorage is wiped on tab close. Fall back to localStorage
+        // so returning users (e.g. after 1 week) still send the correct role hint
+        // to the server and avoid the multi-cookie UNAUTHORIZED redirect.
+        sessionStorage.getItem('active_role') ??
+        localStorage.getItem('active_role') ??
+        undefined;
+    }
+
+    const session = await getSessionFn({ data: { activeRole } });
     if (!session) {
       throw redirect({
         to: '/login',
@@ -113,6 +128,27 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         },
       });
     }
+
+    // Synchronously lock and self-heal tab identity on successful client-side validation
+    if (typeof window !== 'undefined' && session?.role) {
+      if (!sessionStorage.getItem('active_role')) {
+        sessionStorage.setItem('active_role', session.role);
+      }
+      // FIX-4: also keep localStorage in sync so next cold visit has the role
+      if (!localStorage.getItem('active_role')) {
+        localStorage.setItem('active_role', session.role);
+      }
+      const tabId = sessionStorage.getItem('tab_id');
+      if (tabId && !localStorage.getItem(`role_${tabId}`)) {
+        localStorage.setItem(`role_${tabId}`, session.role);
+      }
+    }
+    
+    // Admin users are restricted to /admin unless they are actively previewing a builder workspace
+    if (session.role === 'admin' && !session.actingAsBuilderId && !location.pathname.startsWith('/admin')) {
+      throw redirect({ to: '/admin' });
+    }
+
     // Return session so it is available via useRouteContext({ strict: false }) in Sidebar and all child routes
     return { session };
   },
@@ -137,7 +173,7 @@ function RootShell({ children }: { children: React.ReactNode }) {
 import { Toaster } from "sonner";
 
 function RootComponent() {
-  const { queryClient } = Route.useRouteContext();
+  const { queryClient } = Route.useRouteContext() as any;
 
   return (
     <QueryClientProvider client={queryClient}>

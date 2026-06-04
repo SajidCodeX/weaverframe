@@ -3,14 +3,25 @@ import { useState, useEffect } from 'react'
 import { Shell } from '@/components/dashboard/Shell'
 import { Card } from '@/components/dashboard/primitives'
 import { CustomSelect } from '@/components/dashboard/CustomSelect'
-import { getTeamData, createTeamInvite, removeTeamMember } from '@/lib/dashboard'
-import { X, Trash2, Mail, Clock, Shield } from 'lucide-react'
+import { getTeamData, createTeamInvite, removeTeamMember, generatePasswordResetLink } from '@/lib/dashboard'
+import { X, Trash2, Mail, Clock, Shield, KeyRound } from 'lucide-react'
 
 export const Route = createFileRoute('/team')({
   head: () => ({
     meta: [{ title: 'Manage Team — Builder\'s Edge' }]
   }),
-  loader: async () => await getTeamData(),
+  beforeLoad: async ({ context }) => {
+    // FIX-5: Restrict team management to owner-role users only.
+    // Sales agents and members can view the team list but cannot manage it.
+    // We redirect non-owners to the overview to prevent unauthorized mutations.
+    if (typeof window === 'undefined') return
+    const session = (context as any).session
+    if (session && session.role === 'builder' && session.builderRole !== 'owner') {
+      const { redirect } = await import('@tanstack/react-router')
+      throw redirect({ to: '/' })
+    }
+  },
+  loader: async () => await getTeamData({ data: { activeRole: typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? localStorage.getItem('active_role') ?? undefined) : undefined } }),
   component: TeamRoute,
 })
 
@@ -64,6 +75,21 @@ function TeamRoute() {
       } catch (err) {
         alert("Failed to remove team member")
       }
+    }
+  }
+
+  const handleResetPassword = async (id: string) => {
+    try {
+      const res = await generatePasswordResetLink({ data: id })
+      if (res.success && res.inviteLink) {
+        const link = window.location.origin + res.inviteLink
+        setInviteLink(link)
+        // Auto copy to clipboard
+        navigator.clipboard.writeText(link)
+        alert(`Reset link generated and copied to clipboard!\n\n${link}`)
+      }
+    } catch (err: any) {
+      alert(`Failed to generate reset link: ${err?.message}`)
     }
   }
 
@@ -230,7 +256,13 @@ function TeamRoute() {
                 <p className="text-xs text-muted-foreground uppercase tracking-widest font-mono mb-1"><Clock className="size-3 inline mr-1" />Last Login</p>
                 <p className="text-sm text-foreground">{selectedMember.lastLoginAt ? new Date(selectedMember.lastLoginAt).toLocaleString() : 'Never logged in'}</p>
               </div>
-              <div className="pt-6 border-t border-border">
+              <div className="pt-6 border-t border-border flex flex-col gap-3">
+                <button 
+                  onClick={() => handleResetPassword(selectedMember.id)}
+                  className="w-full py-2 bg-primary/10 hover:bg-primary/20 text-primary text-sm font-semibold rounded-md border border-primary/20 transition-colors flex items-center justify-center gap-2"
+                >
+                  <KeyRound className="size-4" /> Reset Password Link
+                </button>
                 <button 
                   onClick={() => handleRemove(selectedMember.id)}
                   className="w-full py-2 bg-danger/10 hover:bg-danger/20 text-danger text-sm font-semibold rounded-md border border-danger/20 transition-colors flex items-center justify-center gap-2"

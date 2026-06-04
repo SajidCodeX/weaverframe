@@ -7,6 +7,7 @@ export const getBuildersData = createServerFn({ method: 'GET' }).handler(async (
   const db = await getDb()
 
   const builders = await db.builder.findMany({
+    where: { deletedAt: null },
     orderBy: { createdAt: 'desc' },
     include: {
       users: {
@@ -39,11 +40,11 @@ export const getAdminStats = createServerFn({ method: 'GET' }).handler(async () 
     recentLeadsCount,
     previousLeadsCount
   ] = await Promise.all([
-    db.builder.count({ where: { isActive: true } }),
+    db.builder.count({ where: { isActive: true, deletedAt: null } }),
     db.lead.count(),
-    db.builder.findMany({ select: { plan: true, createdAt: true } }),
-    db.builder.count({ where: { createdAt: { gte: thirtyDaysAgo } } }),
-    db.builder.count({ where: { createdAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo } } }),
+    db.builder.findMany({ where: { deletedAt: null }, select: { plan: true, createdAt: true } }),
+    db.builder.count({ where: { createdAt: { gte: thirtyDaysAgo }, deletedAt: null } }),
+    db.builder.count({ where: { createdAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo }, deletedAt: null } }),
     db.lead.count({ where: { createdAt: { gte: thirtyDaysAgo } } }),
     db.lead.count({ where: { createdAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo } } })
   ])
@@ -138,6 +139,7 @@ export const getGlobalUsersData = createServerFn({ method: 'GET' }).handler(asyn
   const db = await getDb()
 
   const users = await db.user.findMany({
+    where: { deletedAt: null },
     orderBy: { createdAt: 'desc' },
     include: { builder: { select: { companyName: true } } }
   })
@@ -168,8 +170,12 @@ export const toggleUserStatus = createServerFn({ method: 'POST' })
   .inputValidator((userId: string) => userId)
   .handler(async ({ data: userId }) => {
     const { requireAdmin } = await import('./server-utils.server');
-    await requireAdmin()
+    const session = await requireAdmin()
     const db = await getDb()
+
+    if (session.userId === userId) {
+      throw new Error("Cannot modify your own admin account")
+    }
 
     const user = await db.user.findUnique({ where: { id: userId } })
     if (!user) throw new Error('User not found')
@@ -230,7 +236,10 @@ export const deleteBuilder = createServerFn({ method: 'POST' })
     await requireAdmin()
     const db = await getDb()
 
-    await db.builder.delete({ where: { id: builderId } })
+    await db.builder.update({ 
+      where: { id: builderId },
+      data: { deletedAt: new Date() }
+    })
     return { success: true }
   })
 
@@ -238,10 +247,17 @@ export const deleteUser = createServerFn({ method: 'POST' })
   .inputValidator((userId: string) => userId)
   .handler(async ({ data: userId }) => {
     const { requireAdmin } = await import('./server-utils.server');
-    await requireAdmin()
+    const session = await requireAdmin()
     const db = await getDb()
 
-    await db.user.delete({ where: { id: userId } })
+    if (session.userId === userId) {
+      throw new Error("Cannot delete your own admin account")
+    }
+
+    await db.user.update({ 
+      where: { id: userId },
+      data: { deletedAt: new Date() }
+    })
     return { success: true }
   })
 
@@ -252,9 +268,69 @@ export const getBlockedUsers = createServerFn({ method: 'GET' })
     const db = await getDb()
 
     const users = await db.user.findMany({
-      where: { isActive: false },
+      where: { 
+        OR: [
+          { isActive: false },
+          { builder: { isActive: false } }
+        ],
+        deletedAt: null
+      },
       orderBy: { createdAt: 'desc' },
       include: { builder: { select: { companyName: true } } }
     })
     return users
+  })
+
+export const startBuilderPreview = createServerFn({ method: 'POST' })
+  .inputValidator((builderId: string) => builderId)
+  .handler(async ({ data: builderId }) => {
+    const { requireAdmin, setAuthCookie } = await import('./server-utils.server');
+    const session = await requireAdmin()
+    const db = await getDb()
+
+    const builder = await db.builder.findFirst({
+      where: { id: builderId, deletedAt: null },
+      select: { 
+        id: true, 
+        companyName: true,
+        users: {
+          where: { builderRole: 'owner' },
+          select: { displayName: true },
+          take: 1
+        }
+      }
+    })
+    if (!builder) throw new Error('Builder not found')
+    
+    const ownerName = builder.users[0]?.displayName || 'Builder Owner';
+
+    const { exp, iat, ...sessionWithoutExp } = session as any;
+    await setAuthCookie({
+      ...sessionWithoutExp,
+      actingAsBuilderId: builder.id,
+      companyName: builder.companyName,
+      displayName: ownerName,
+    } as any)
+    return { success: true }
+  })
+
+export const stopBuilderPreview = createServerFn({ method: 'POST' })
+  .handler(async () => {
+    const { requireAdmin, setAuthCookie } = await import('./server-utils.server');
+    const session = await requireAdmin()
+    const db = await getDb()
+
+    const adminUser = await db.user.findUnique({
+      where: { id: session.userId },
+      select: { displayName: true, builder: { select: { companyName: true } } }
+    })
+
+    const { exp, iat, ...sessionWithoutExp } = session as any;
+    await setAuthCookie({
+      ...sessionWithoutExp,
+      actingAsBuilderId: null,
+      displayName: adminUser?.displayName || 'SajidAli Ansari',
+      companyName: adminUser?.builder?.companyName || null,
+    } as any)
+    return { success: true }
   })

@@ -24,10 +24,14 @@ import {
 import { getReviewsData, sendReviewRequest, submitClientReview, getLeadsData, getPublicReviews, replyToReview } from "@/lib/dashboard";
 
 export const Route = createFileRoute("/reviews")({
-  loader: async () => {
-    const reviews = await getReviewsData();
+  loader: async ({ context }) => {
+    if (typeof window === 'undefined' && !context.session) {
+      return { platforms: [], requests: [], leads: [], publicReviews: [] };
+    }
+    const activeRole = typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? localStorage.getItem('active_role') ?? undefined) : undefined;
+    const reviews = await getReviewsData({ data: { activeRole } });
     // Also load leads so builder can select a completed project to ask reviews for
-    const leads = await getLeadsData();
+    const leads = await getLeadsData({ data: { activeRole } });
     const publicReviews = await getPublicReviews();
     return { ...reviews, leads, publicReviews };
   },

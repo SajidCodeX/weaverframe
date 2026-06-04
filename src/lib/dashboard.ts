@@ -1,154 +1,138 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getDb } from './db'
 
-import { encrypt, decrypt } from './crypto'
 
 
-export const getDashboardData = createServerFn({ method: 'GET' }).handler(async () => {
-    const { getTenantDb } = await import('./server-utils.server');
-  await checkAndSyncRencastLeads()
-  const db = await getTenantDb()
+export const getDashboardData = createServerFn({ method: 'POST' })
+  .inputValidator((data: { activeRole?: string | null } | undefined) => data)
+  .handler(async ({ data }) => {
+  // Pass activeRole explicitly so requireAuth() knows which cookie to read.
+  // Without this, when multiple cookies exist (jwt_admin + jwt_builder), the server
+  // function cannot safely resolve the session and throws UNAUTHORIZED, causing
+  // the loader to fail silently and the skeleton to loop forever.
+  const { getTenantDb, requireAuth } = await import('./server-utils.server');
+  const session = await requireAuth(data?.activeRole ?? undefined)
 
-  try {
-    const now = new Date()
-    const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  // Pass session in — getTenantDb will skip its own requireAuth() call
+  const db = await getTenantDb(session)
+  const now = new Date()
+  const startOfLast30Days = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+  const startOfPrevious30Days = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000)
 
-    // Optimized single round trip: fetch required records and aggregate in-memory
-    const [
-      recentActivitiesRaw,
-      leadDates,
-      appointmentsActivities,
-    ] = await Promise.all([
-      db.activity.findMany({
-        take: 20,
-        orderBy: { createdAt: 'desc' },
-        include: { lead: true },
-      }),
-      db.lead.findMany({
-        select: { scoreTier: true, status: true, createdAt: true, estimatedBudget: true }
-      }),
-      db.activity.findMany({
-        where: { 
-          action: { contains: 'scheduled' },
-          createdAt: { gte: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) } // Date bounded (last 90 days)
-        },
-        include: { lead: true }
-      }),
+    const [recentActivitiesRaw, appointmentsActivities] = await Promise.all([
+      db.activity.findMany({ take: 50, orderBy: { createdAt: 'desc' }, include: { lead: true } }),
+      db.activity.findMany({ where: { action: { contains: 'scheduled' }, createdAt: { gte: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) } }, include: { lead: true } }),
     ])
 
-    // Single-pass O(N) calculations to minimize heap allocation and garbage collection
-    let totalLeads = 0
-    let qualifiedLeads = 0
-    let builderNotified = 0
-    let appointmentsSet = 0
-    let hotCount = 0
-    let warmCount = 0
-    let coldCount = 0
-    let leadsThisMonth = 0
-    let leadsLastMonth = 0
-    let hotSumBudget = 0
-    let warmSumBudget = 0
-    let coldSumBudget = 0
-    let qualifiedSumBudget = 0
+    // 2. Perform native SQL aggregations via Prisma
+    const [
+      totalLeads,
+      qualifiedLeads,
+      builderNotified,
+      appointmentsSet,
+      leadsLast30,
+      leadsPrev30,
+      scoreTierAgg,
+      pipelineLast30Agg,
+      pipelinePrev30Agg,
+      qualifiedSumAgg
+    ] = await Promise.all([
+      db.lead.count(),
+      db.lead.count({ where: { status: { not: 'New' } } }),
+      db.lead.count({ where: { status: { in: ['Builder Notified', 'Appointment', 'Replied'] } } }),
+      db.lead.count({ where: { status: 'Appointment' } }),
+      db.lead.count({ where: { createdAt: { gte: startOfLast30Days } } }),
+      db.lead.count({ where: { createdAt: { gte: startOfPrevious30Days, lt: startOfLast30Days } } }),
+      db.lead.groupBy({ by: ['scoreTier'], _count: { _all: true }, _sum: { estimatedBudget: true } }),
+      db.lead.aggregate({ _sum: { estimatedBudget: true }, where: { status: { not: 'New' }, createdAt: { gte: startOfLast30Days } } }),
+      db.lead.aggregate({ _sum: { estimatedBudget: true }, where: { status: { not: 'New' }, createdAt: { gte: startOfPrevious30Days, lt: startOfLast30Days } } }),
+      db.lead.aggregate({ _sum: { estimatedBudget: true }, where: { status: { not: 'New' } } }),
+    ])
 
-    const nowTime = now.getTime()
-    const startOfThisMonthTime = startOfThisMonth.getTime()
-    const startOfLastMonthTime = startOfLastMonth.getTime()
-
-    let pipelineThisMonth = 0
-    let pipelineLastMonth = 0
-
-    for (let i = 0; i < leadDates.length; i++) {
-      const l = leadDates[i]
-      totalLeads++
-      
-      const isQualified = l.status !== 'New'
-      const createdTime = l.createdAt.getTime()
-      if (isQualified) {
-        qualifiedLeads++
-        qualifiedSumBudget += l.estimatedBudget
-        if (createdTime >= startOfThisMonthTime) {
-          pipelineThisMonth += l.estimatedBudget
-        } else if (createdTime >= startOfLastMonthTime) {
-          pipelineLastMonth += l.estimatedBudget
-        }
-      }
-
-      if (['Builder Notified', 'Appointment', 'Replied'].includes(l.status)) {
-        builderNotified++
-      }
-
-      if (l.status === 'Appointment') {
-        appointmentsSet++
-      }
-
-      if (l.scoreTier === 'Hot') {
-        hotCount++
-        hotSumBudget += l.estimatedBudget
-      } else if (l.scoreTier === 'Warm') {
-        warmCount++
-        warmSumBudget += l.estimatedBudget
-      } else if (l.scoreTier === 'Cold') {
-        coldCount++
-        coldSumBudget += l.estimatedBudget
-      }
-
-      if (createdTime >= startOfThisMonthTime) {
-        leadsThisMonth++
-      } else if (createdTime >= startOfLastMonthTime) {
-        leadsLastMonth++
-      }
+    // Parse aggregation results safely
+    const getTierStats = (tier: string) => {
+      const match = scoreTierAgg.find(g => g.scoreTier === tier)
+      return { count: match?._count?._all || 0, sum: match?._sum?.estimatedBudget || 0 }
     }
+    const hotStats = getTierStats('Hot')
+    const warmStats = getTierStats('Warm')
+    const coldStats = getTierStats('Cold')
 
-    const hotAvgBudget = hotCount > 0 ? hotSumBudget / hotCount : 0
-    const warmAvgBudget = warmCount > 0 ? warmSumBudget / warmCount : 0
-    const coldAvgBudget = coldCount > 0 ? coldSumBudget / coldCount : 0
+    const pipelineLast30 = pipelineLast30Agg._sum.estimatedBudget || 0
+    const pipelinePrev30 = pipelinePrev30Agg._sum.estimatedBudget || 0
+    const qualifiedSumBudget = qualifiedSumAgg._sum.estimatedBudget || 0
     const avgBudget = qualifiedLeads > 0 ? qualifiedSumBudget / qualifiedLeads : 0
-    const activeProspectsCount = qualifiedLeads
 
-    const diffLeads = leadsThisMonth - leadsLastMonth
-    const leadsMonthSub = diffLeads >= 0 ? `+${diffLeads} from last month` : `${diffLeads} from last month`
-    const leadsMonthTrend = diffLeads >= 0 ? ('up' as const) : ('down' as const)
-    
-    const leadsPctChange = leadsLastMonth > 0
-      ? Math.round((diffLeads / leadsLastMonth) * 100)
-      : (leadsThisMonth > 0 ? 100 : 0)
+    // Month over month trends (now Rolling 30 Days)
+    const diffLeads = leadsLast30 - leadsPrev30
+    const leadsMonthSub = diffLeads >= 0 ? `+${diffLeads} vs previous 30 days` : `${diffLeads} vs prev 30 days`
+    const leadsMonthTrend = diffLeads >= 0 ? 'up' : 'down'
+    const leadsPctChange = leadsPrev30 > 0 ? Math.round((diffLeads / leadsPrev30) * 100) : (leadsLast30 > 0 ? 100 : 0)
     const leadsMonthTrendVal = `${leadsPctChange >= 0 ? '+' : ''}${leadsPctChange}%`
 
-    const pipelinePctChange = pipelineLastMonth > 0
-      ? Math.round(((pipelineThisMonth - pipelineLastMonth) / pipelineLastMonth) * 100)
-      : (pipelineThisMonth > 0 ? 100 : 0)
-    const pipelineTrend = pipelinePctChange >= 0 ? ('up' as const) : ('down' as const)
+    const pipelinePctChange = pipelinePrev30 > 0 ? Math.round(((pipelineLast30 - pipelinePrev30) / pipelinePrev30) * 100) : (pipelineLast30 > 0 ? 100 : 0)
+    const pipelineTrend = pipelinePctChange >= 0 ? 'up' : 'down'
     const pipelineTrendVal = `${pipelinePctChange >= 0 ? '+' : ''}${pipelinePctChange}%`
 
-    const formatBudgetK = (avgValue: number | null) => {
-      if (!avgValue) return '$0'
-      return `$${Math.round(avgValue / 1000)}K`
-    }
+    const formatBudgetK = (avgValue: number) => `$${Math.round(avgValue / 1000)}K`
 
-    const dates = Array.from({ length: 7 }, (_, i) => {
+    // Sparklines: 7 daily snapshots, each showing cumulative counts per score tier.
+    // Using parallel Prisma groupBy — safe, tenant-scoped via middleware, no raw SQL risk.
+    const sparklineDates = Array.from({ length: 7 }, (_, i) => {
       const d = new Date()
       d.setDate(d.getDate() - (6 - i))
       d.setHours(23, 59, 59, 999)
       return d
     })
 
-    // Optimized linear cumulative trend calculations
-    const getTrendForTier = (tier: string) => {
-      const filteredSorted = leadDates
-        .filter(l => l.scoreTier === tier)
-        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
-      
-      let ptr = 0
-      return dates.map(targetDate => {
-        const targetTime = targetDate.getTime()
-        while (ptr < filteredSorted.length && filteredSorted[ptr].createdAt.getTime() <= targetTime) {
-          ptr++
-        }
-        return ptr
+    const sparklineResults = await Promise.all(
+      sparklineDates.map(date =>
+        db.lead.groupBy({
+          by: ['scoreTier'],
+          _count: { _all: true },
+          where: { createdAt: { lte: date } }
+        })
+      )
+    )
+
+    const getTrendForTier = (tier: string): number[] =>
+      sparklineResults.map(dayResult => {
+        const match = dayResult.find(g => g.scoreTier === tier)
+        return match?._count?._all || 0
       })
-    }
+
+    // Weekly volume chart: 7 data points at 7-day intervals.
+    const currentNow = new Date()
+    const currentYear = currentNow.getFullYear()
+    const currentMonth = currentNow.getMonth()
+    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate()
+
+    const dailyDates = Array.from({ length: daysInMonth }, (_, i) => {
+      const d = new Date(currentYear, currentMonth, i + 1)
+      d.setHours(23, 59, 59, 999)
+      return d
+    })
+
+    const dailyVolume = await Promise.all(
+      dailyDates.map(async (d) => {
+        const startOfDay = new Date(d)
+        startOfDay.setHours(0, 0, 0, 0)
+
+        const [total, qualified] = await Promise.all([
+          db.lead.count({ where: { createdAt: { gte: startOfDay, lte: d } } }),
+          db.lead.count({ where: { status: { not: 'New' }, createdAt: { gte: startOfDay, lte: d } } }),
+        ])
+        return {
+          date: d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
+          total,
+          qualified,
+        }
+      })
+    )
+
+    // Fetch Last Sync Timestamp
+    const syncStatus = await db.systemSync.findUnique({ where: { id: 'rencast_leads' } })
+    const lastSyncAt = syncStatus?.lastSyncAt.toISOString() || null
 
     const funnel = [
       { label: 'Inquiry Received', value: totalLeads, pct: totalLeads > 0 ? 100 : 0 },
@@ -158,20 +142,19 @@ export const getDashboardData = createServerFn({ method: 'GET' }).handler(async 
     ]
 
     const scoreData = [
-      { label: 'Hot', pct: totalLeads > 0 ? Math.round((hotCount / totalLeads) * 100) : 0, count: hotCount, budget: formatBudgetK(hotAvgBudget), color: '#FF453A', trend: getTrendForTier('Hot') },
-      { label: 'Warm', pct: totalLeads > 0 ? Math.round((warmCount / totalLeads) * 100) : 0, count: warmCount, budget: formatBudgetK(warmAvgBudget), color: '#FF9F0A', trend: getTrendForTier('Warm') },
-      { label: 'Cold', pct: totalLeads > 0 ? Math.round((coldCount / totalLeads) * 100) : 0, count: coldCount, budget: formatBudgetK(coldAvgBudget), color: '#0A84FF', trend: getTrendForTier('Cold') },
+      { label: 'Hot', pct: totalLeads > 0 ? Math.round((hotStats.count / totalLeads) * 100) : 0, count: hotStats.count, budget: formatBudgetK(hotStats.count > 0 ? hotStats.sum / hotStats.count : 0), color: '#FF453A', trend: getTrendForTier('Hot') },
+      { label: 'Warm', pct: totalLeads > 0 ? Math.round((warmStats.count / totalLeads) * 100) : 0, count: warmStats.count, budget: formatBudgetK(warmStats.count > 0 ? warmStats.sum / warmStats.count : 0), color: '#FF9F0A', trend: getTrendForTier('Warm') },
+      { label: 'Cold', pct: totalLeads > 0 ? Math.round((coldStats.count / totalLeads) * 100) : 0, count: coldStats.count, budget: formatBudgetK(coldStats.count > 0 ? coldStats.sum / coldStats.count : 0), color: '#0A84FF', trend: getTrendForTier('Cold') },
     ]
 
     let pipelineValueStr = '$0'
-    const sumBudget = qualifiedSumBudget
-    if (sumBudget >= 1000000) {
-      pipelineValueStr = `$${(sumBudget / 1000000).toFixed(1)}M`
+    if (qualifiedSumBudget >= 1000000) {
+      pipelineValueStr = `$${(qualifiedSumBudget / 1000000).toFixed(1)}M`
     } else {
-      pipelineValueStr = `$${Math.round(sumBudget / 1000)}K`
+      pipelineValueStr = `$${Math.round(qualifiedSumBudget / 1000)}K`
     }
     const avgBudgetStr = avgBudget >= 1000000 ? `$${(avgBudget / 1000000).toFixed(1)}M` : `$${Math.round(avgBudget / 1000)}K`
-    const pipelineSub = `Avg ${avgBudgetStr} · ${activeProspectsCount} active prospects`
+    const pipelineSub = `Avg ${avgBudgetStr} · ${qualifiedLeads} active prospects`
 
     let avgDaysToBook = 14
     if (appointmentsActivities.length > 0) {
@@ -184,44 +167,22 @@ export const getDashboardData = createServerFn({ method: 'GET' }).handler(async 
 
     const aiQualRate = totalLeads > 0 ? Math.round((qualifiedLeads / totalLeads) * 100) : 0
 
-    const activityFeed = recentActivitiesRaw.map((a) => ({
+    const uniqueLeads = new Set()
+    const activityFeed = recentActivitiesRaw
+      .filter((a) => {
+        if (uniqueLeads.has(a.leadId)) return false
+        uniqueLeads.add(a.leadId)
+        return true
+      })
+      .map((a) => ({
       id: a.id,
+      leadId: a.leadId,
       name: a.lead.name,
       action: a.action,
       createdAt: a.createdAt.toISOString(),
       score: (a.lead.scoreTier === 'Hot' ? 'hot' : a.lead.scoreTier === 'Warm' ? 'warm' : 'cold') as 'hot' | 'warm' | 'cold',
       city: a.lead.county,
     }))
-
-    // Optimized linear weekly volume calculations
-    const sortedLeads = [...leadDates].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
-    const sortedQualifiedLeads = leadDates
-      .filter(l => l.status !== 'New')
-      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
-
-    let totalPtr = 0
-    let qualifiedPtr = 0
-
-    const weeklyVolume = Array.from({ length: 7 }, (_, i) => {
-      const d = new Date()
-      d.setDate(d.getDate() - (6 - i) * 4)
-      d.setHours(23, 59, 59, 999)
-      const targetTime = d.getTime()
-      const dateStr = d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
-
-      while (totalPtr < sortedLeads.length && sortedLeads[totalPtr].createdAt.getTime() <= targetTime) {
-        totalPtr++
-      }
-      while (qualifiedPtr < sortedQualifiedLeads.length && sortedQualifiedLeads[qualifiedPtr].createdAt.getTime() <= targetTime) {
-        qualifiedPtr++
-      }
-
-      return {
-        date: dateStr,
-        total: totalPtr,
-        qualified: qualifiedPtr,
-      }
-    })
 
     return {
       totalLeads,
@@ -230,7 +191,7 @@ export const getDashboardData = createServerFn({ method: 'GET' }).handler(async 
       funnel,
       scoreData,
       activityFeed,
-      leadsThisMonth,
+      leadsThisMonth: leadsLast30, // keeping variable names compatible with frontend
       leadsMonthSub,
       leadsMonthTrend,
       leadsMonthTrendVal,
@@ -240,53 +201,39 @@ export const getDashboardData = createServerFn({ method: 'GET' }).handler(async 
       pipelineTrendVal,
       avgDaysToBook,
       aiQualRate,
-      weeklyVolume
+      dailyVolume,
+      lastSyncAt
     }
-  } catch (error) {
-    console.error("Error in getDashboardData:", error);
-    return {
-      totalLeads: 0,
-      qualifiedLeads: 0,
-      appointmentsSet: 0,
-      funnel: [
-        { label: 'Inquiry Received', value: 0, pct: 0 },
-        { label: 'AI Qualified', value: 0, pct: 0 },
-        { label: 'Builder Notified', value: 0, pct: 0 },
-        { label: 'Appointment Set', value: 0, pct: 0 },
-      ],
-      scoreData: [
-        { label: 'Hot', pct: 0, count: 0, budget: '$0', color: '#FF453A', trend: [0, 0, 0, 0, 0, 0, 0] },
-        { label: 'Warm', pct: 0, count: 0, budget: '$0', color: '#FF9F0A', trend: [0, 0, 0, 0, 0, 0, 0] },
-        { label: 'Cold', pct: 0, count: 0, budget: '$0', color: '#0A84FF', trend: [0, 0, 0, 0, 0, 0, 0] },
-      ],
-      activityFeed: [],
-      leadsThisMonth: 0,
-      leadsMonthSub: '0 from last month',
-      leadsMonthTrend: 'up' as const,
-      leadsMonthTrendVal: '+0%',
-      pipelineValueStr: '$0',
-      pipelineSub: 'Avg $0 · 0 active prospects',
-      pipelineTrend: 'up' as const,
-      pipelineTrendVal: '+0%',
-      avgDaysToBook: 14,
-      aiQualRate: 0,
-      weeklyVolume: Array.from({ length: 7 }, (_, i) => {
-        const d = new Date()
-        d.setDate(d.getDate() - (6 - i) * 4)
-        return {
-          date: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-          total: 0,
-          qualified: 0,
-        }
-      })
-    };
-  }
 })
 
 
-export const getNotificationsData = createServerFn({ method: 'GET' }).handler(async () => {
-    const { getTenantDb } = await import('./server-utils.server');
-  const db = await getTenantDb()
+
+export const getLastSyncTime = createServerFn({ method: 'POST' })
+  .inputValidator((data: { activeRole?: string | null } | undefined) => data)
+  .handler(async ({ data }) => {
+    const { getTenantDb, requireAuth } = await import('./server-utils.server');
+    const session = await requireAuth(data?.activeRole ?? undefined);
+    const db = await getTenantDb(session);
+    try {
+      const latestLead = await db.lead.findFirst({
+        orderBy: { createdAt: 'desc' },
+        select: { createdAt: true }
+      });
+      return latestLead ? latestLead.createdAt.toISOString() : null;
+    } catch (e) {
+      return null;
+    }
+  });
+
+// FIX-5: Converted to POST so we can accept activeRole and pass it to requireAuth/getTenantDb.
+// A GET server function cannot receive input params. Without activeRole, multi-cookie sessions
+// (jwt_admin + jwt_builder both present) cause getTenantDb to silently fail with UNAUTHORIZED.
+export const getNotificationsData = createServerFn({ method: 'POST' })
+  .inputValidator((data: { activeRole?: string | null } | undefined) => data)
+  .handler(async ({ data }) => {
+  const { getTenantDb, requireAuth } = await import('./server-utils.server');
+  const session = await requireAuth(data?.activeRole ?? undefined)
+  const db = await getTenantDb(session)
   try {
     const activities = await db.activity.findMany({
       take: 5,
@@ -318,6 +265,7 @@ export const getNotificationsData = createServerFn({ method: 'GET' }).handler(as
   }
 })
 
+
 export function determineLeadSource(lead: { source?: string | null; county?: string | null }) {
   const currentSource = (lead.source || "").trim();
   const lowerSource = currentSource.toLowerCase();
@@ -347,11 +295,13 @@ export function determineLeadSource(lead: { source?: string | null; county?: str
   return lead.source || "Austin Building Permits";
 }
 
-export const getLeadsData = createServerFn({ method: 'GET' }).handler(async () => {
-    const { getTenantDb } = await import('./server-utils.server');
-  
+export const getLeadsData = createServerFn({ method: 'POST' })
+  .inputValidator((data: { activeRole?: string | null } | undefined) => data)
+  .handler(async ({ data }) => {
+  const { getTenantDb, requireAuth } = await import('./server-utils.server');
   try {
-    const db = await getTenantDb()
+    const session = await requireAuth(data?.activeRole ?? undefined)
+    const db = await getTenantDb(session)
     const leads = await db.lead.findMany({
       orderBy: { purchaseDate: 'desc' },
       include: {
@@ -561,6 +511,17 @@ export const sendSmsOutreach = createServerFn({ method: 'POST' })
         data: { builderId: session.builderId || '', leadId, action: actionText }
       })
 
+      // Ensure the message reflects in the messages tab
+      await db.message.create({
+        data: {
+          builderId: session.builderId || '',
+          leadId,
+          sender: 'system',
+          content: message,
+          isRead: true
+        }
+      })
+
       return { success: true, sent: twilioSent }
     } catch (error) {
       console.error('Error in sendSmsOutreach:', error)
@@ -604,10 +565,13 @@ export const retriggerLeadFlow = createServerFn({ method: 'POST' })
 
 
 
-export const getReviewsData = createServerFn({ method: 'GET' }).handler(async () => {
-    const { getTenantDb } = await import('./server-utils.server');
-  const db = await getTenantDb()
+export const getReviewsData = createServerFn({ method: 'POST' })
+  .inputValidator((data: { activeRole?: string | null } | undefined) => data)
+  .handler(async ({ data }) => {
+  const { getTenantDb, requireAuth } = await import('./server-utils.server');
   try {
+    const session = await requireAuth(data?.activeRole ?? undefined)
+    const db = await getTenantDb(session)
     const platforms = await db.reviewPlatform.findMany({
       orderBy: { name: 'asc' }
     })
@@ -652,17 +616,12 @@ export const sendReviewRequest = createServerFn({ method: 'POST' })
         }
       })
 
-      if (leadId) {
-        await db.activity.create({
-          data: {
-            builderId: session.builderId || '',
-            leadId,
-            action: `AI Engine triggered 5-star Review Request via SMS & Email to ${clientName}.`
-          }
-        })
-      }
-
-      return request
+      // FIX-3: Sign the invite ID with HMAC so /api/rate can verify authenticity.
+      // The rating link now has the form: /api/rate?id=<uuid>&sig=<hmac-hex>
+      // Without a valid sig, the endpoint rejects the request before touching the DB.
+      const { signReviewInviteId } = await import('./server-utils.server');
+      const sig = await signReviewInviteId(request.id)
+      return { ...request, sig }
     } catch (error) {
       console.error("Error in sendReviewRequest:", error)
       throw error
@@ -721,7 +680,7 @@ export const submitClientReview = createServerFn({ method: 'POST' })
             clientName: existing.clientName,
             platform: platName,
             rating: rating,
-            reviewText: feedback || `Incredible custom building experience with Horizon Homes! Extremely satisfied with their professionalism and quality.`,
+            reviewText: feedback || `Incredible custom building experience with ${session.companyName || 'our team'}! Extremely satisfied with their professionalism and quality.`,
             projectType: "Custom Home Build",
             location: "Austin, TX",
             status: "Unanswered"
@@ -798,19 +757,6 @@ export const getBillingProfile = createServerFn({ method: 'GET' }).handler(async
       select: { adSpendBalance: true, paymentMethod: true, plan: true }
     });
     
-    // Seed default if balance is zero and card is empty
-    if (builder && builder.adSpendBalance === 0.0 && builder.paymentMethod === 'None') {
-      const updated = await db.builder.update({
-        where: { id: session.builderId },
-        data: { adSpendBalance: 1460.0, paymentMethod: "Visa      4242" }
-      });
-      return {
-        adSpendBalance: updated.adSpendBalance,
-        paymentMethod: updated.paymentMethod,
-        plan: updated.plan
-      };
-    }
-
     return builder || { adSpendBalance: 0.0, paymentMethod: "None", plan: "trial" };
   } catch (error) {
     console.error("Error in getBillingProfile:", error);
@@ -850,29 +796,31 @@ export const generateGroqCompletion = createServerFn({ method: 'POST' })
 
     const { messages } = data;
 
-    // Fallback Mock Engine in case API Key is not yet configured
-    const isPlaceholder = !GROQ_API_KEY || GROQ_API_KEY.trim() === "";
-    if (isPlaceholder) {
-      console.log("Groq API Key is a placeholder. Simulating Alex AI completion...");
-      const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')?.content || "";
+      // Fallback Mock Engine in case API Key is not yet configured
+      const isPlaceholder = !GROQ_API_KEY || GROQ_API_KEY.trim() === "";
+      if (isPlaceholder) {
+        const { requireAuth } = await import('./server-utils.server');
+        const session = await requireAuth().catch(() => ({ companyName: "our company" }));
+        console.log("Groq API Key is a placeholder. Simulating AI completion...");
+        const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')?.content || "";
 
-      // Smart prompt matching to simulate high fidelity AI responses
-      let reply = "Hi! Thank you for reaching out to Horizon Homes. We'd love to help you build your dream home in Austin.";
+        // Smart prompt matching to simulate high fidelity AI responses
+        let reply = `Hi! Thank you for reaching out to ${session.companyName || "our team"}. We'd love to help you build your dream home.`;
 
       const lower = lastUserMsg.toLowerCase();
       if (lower.includes("budget") || lower.includes("price") || lower.includes("cost")) {
         reply = "Absolutely! Our custom home projects in Austin typically start at $500K for semi-custom builds and range upwards of $1.5M+ for full luxury estates. Does that range align with your investment plans?";
       } else if (lower.includes("saturday") || lower.includes("meet") || lower.includes("schedule") || lower.includes("tour")) {
-        reply = "I would be delighted to schedule a walkthrough! Saturday morning at 10:30 AM at our Lakeway Model Home works perfectly. Should I lock that slot in and send over the directions?";
+        reply = "I would be delighted to schedule a walkthrough! Saturday morning at 10:30 AM works perfectly. Should I lock that slot in and send over the directions?";
       } else if (lower.includes("basement") || lower.includes("sloping") || lower.includes("terrain")) {
-        reply = "Yes, we specialize in advanced walk-out basements engineered specifically for sloped lots in Travis County. Our superintendent, Mike Patterson, has built several of these. Do you already own the lot?";
+        reply = "Yes, we specialize in advanced custom builds. Do you already own the lot?";
       } else if (lower.includes("cabinet") || lower.includes("finish") || lower.includes("wood")) {
-        reply = "Premium cabinetry and millwork are our signatures! We run a dedicated carpentry shop right here in Austin to craft custom white oak cabinets and custom architectural finishes. I can send you some photos of our recent projects!";
+        reply = "Premium finishes are our signature! We craft custom architectural finishes. I can send you some photos of our recent projects!";
       } else if (lower.includes("script") || lower.includes("message")) {
         reply = JSON.stringify([
-          { t: "Message 1 · Immediate (< 60s)", body: "Hi [Name]! Thanks for connecting with Horizon Homes. I'm Mike's assistant. Are you looking to build in Travis County in the next 6-12 months? Reply YES or NO." },
-          { t: "Message 2 · 2 hours later", body: "Hey [Name], just checking in! Most of our Lakeway clients prefer custom cabinets over stock options. Do you have a design style you love?" },
-          { t: "Message 3 · 24 hours later", body: "Hi [Name], we can schedule a private tour of our Lakeway design site this Thursday. Let me know if you would like me to book your spot!" }
+          { t: "Message 1 · Immediate (< 60s)", body: "Hi [Name]! Thanks for connecting. Are you looking to build in the next 6-12 months? Reply YES or NO." },
+          { t: "Message 2 · 2 hours later", body: "Hey [Name], just checking in! Most of our clients prefer custom cabinets over stock options. Do you have a design style you love?" },
+          { t: "Message 3 · 24 hours later", body: "Hi [Name], we can schedule a private tour of our design site this Thursday. Let me know if you would like me to book your spot!" }
         ]);
       }
 
@@ -887,9 +835,9 @@ export const generateGroqCompletion = createServerFn({ method: 'POST' })
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          model: "meta-llama/llama-4-scout-17b-16e-instruct",
+          model: "llama-3.1-8b-instant",
           messages: messages,
-          temperature: 1,
+          temperature: 0.7,
           max_tokens: 1024,
           top_p: 1,
           stream: false
@@ -918,18 +866,23 @@ export const simulateAIChatReply = createServerFn({ method: 'POST' })
     const db = await getTenantDb();
 
     try {
+      // Fetch builder details for personalization
+      const builder = await db.builder.findUnique({ where: { id: session.builderId || '' } });
+      const companyName = builder?.companyName || "your local custom builder";
+      const contactName = builder?.contactName || "the team";
+
       // Fetch lead to personalize prompt
       const lead = await db.lead.findUnique({ where: { id: leadId } });
       const leadName = lead ? lead.name : "Client";
-      const leadCounty = lead ? lead.county : "Travis County";
+      const leadCounty = lead ? lead.county : "your area";
 
-      const systemPrompt = `You are Alex, the premium AI Concierge for Horizon Homes, a luxury custom home builder in Austin, Texas. Your supervisor is Mike Patterson (Superintendent). 
-Your persona is knowledgeable, highly professional, polite, and responsive. 
+      const systemPrompt = `You are Alex, the premium AI Concierge for ${companyName}. Your supervisor is ${contactName}. 
+Your persona is knowledgeable, highly professional, polite, and responsive. You never sound robotic.
 
 Your goal is to perform a 2-part task:
-1. Formulate an elegant, helpful response to the client (under 3-4 sentences, optimal for SMS), personalized using their name and target county. Finish with a single helpful call-to-action (e.g. booking a private tour of our Lakeway or Dripping Springs model homes, or checking a permit/budget detail).
+1. Formulate an elegant, helpful response to the client (under 3-4 sentences, optimal for SMS), personalized using their name and target county. Finish with a single helpful call-to-action (e.g. asking a qualifying question or suggesting a quick phone call to discuss their project).
 2. Analyze the client's latest message intent and classify it into one of these categories:
-   - "HOT": The client wants to build, is planning to start construction soon (e.g. within 6 months), wants a walkthrough/tour, or is looking for a builder.
+   - "HOT": The client wants to build, is planning to start construction soon (e.g. within 6 months), wants a phone call, or is looking for a builder.
    - "COLD": The client is doing it themselves, has already hired another builder, is not interested, or told you to stop messaging them.
    - "WARM": The client is unsure, still researching budgets, waiting for property tax/land outcomes, or needs cost estimate sheets/information to plan.
 
@@ -942,7 +895,7 @@ You must respond ONLY with a valid JSON object matching this TypeScript type:
 Lead Context:
 - Client Name: ${leadName}
 - Target County: ${leadCounty}
-- Company: Horizon Homes LLC
+- Company: ${companyName}
 
 Do not output any introductory or conversational text outside of the raw JSON object.`;
 
@@ -992,15 +945,15 @@ Do not output any introductory or conversational text outside of the raw JSON ob
       if (intent === 'HOT') {
         dbStatus = "Qualified";
         dbScoreTier = "Hot";
-        activityText = `🟢 AI marked Lead as Qualified & Hot! Lead intent: "Wants to build/start soon". Reply: "${replyText.substring(0, 60)}..."`;
+        activityText = `🟢 AI marked Lead as Qualified & Hot (High intent to build).`;
       } else if (intent === 'COLD') {
         dbStatus = "Closed Lost";
         dbScoreTier = "Cold";
-        activityText = `🔴 AI marked Lead as Disqualified & Cold (competitor hired / self-build). Reply: "${replyText.substring(0, 60)}..."`;
+        activityText = `🔴 AI marked Lead as Disqualified & Cold (Competitor hired / Self-build).`;
       } else {
         dbStatus = "Appointment";
         dbScoreTier = "Warm";
-        activityText = `🟡 AI marked Lead as Nurturing & Warm (budget / planning phase). Reply: "${replyText.substring(0, 60)}..."`;
+        activityText = `🟡 AI marked Lead as Nurturing & Warm (Budget / Planning phase).`;
       }
 
       // Save Activity in database
@@ -1028,11 +981,53 @@ Do not output any introductory or conversational text outside of the raw JSON ob
     }
   })
 
+export const summarizeConversation = createServerFn({ method: 'POST' })
+  .inputValidator((data: { leadId: string }) => data)
+  .handler(async ({ data }) => {
+    const { getTenantDb, requireAuth } = await import('./server-utils.server');
+    const session = await requireAuth();
+    const db = await getTenantDb();
+    
+    try {
+      const messages = await db.message.findMany({
+        where: { leadId: data.leadId, builderId: session.builderId || '' },
+        orderBy: { createdAt: 'asc' }
+      });
+
+      if (!messages || messages.length === 0) return "No conversation history available.";
+
+      const chatLog = messages.map(m => `${m.sender.toUpperCase()}: ${m.content}`).join('\n');
+      
+      const prompt = `You are an expert sales manager summarizing a chat log between a home builder and a lead. 
+Analyze this conversation and provide a highly accurate, 2-3 sentence conclusion. Do NOT list out the messages. 
+Just state where the deal is at right now (e.g., "The lead is ready to book a site visit. They have a $400k budget and own their land.").
+
+Conversation:
+${chatLog}`;
+
+      const { generateGroqCompletion } = await import('./ai-agent.server');
+      const summary = await generateGroqCompletion({ 
+        data: { 
+          messages: [{ role: 'system', content: prompt }] 
+        } 
+      });
+
+      return summary || "Unable to summarize chat.";
+    } catch (err) {
+      console.error("Summarization error:", err);
+      return "Failed to generate summary.";
+    }
+  });
+
 export const generateAIScriptUpdate = createServerFn({ method: 'POST' })
   .inputValidator((data: { instruction: string }) => data)
   .handler(async ({ data }) => {
-    const { getTenantDb } = await import('./server-utils.server');
+    const { getTenantDb, requireAuth } = await import('./server-utils.server');
+    const session = await requireAuth();
     const { instruction } = data;
+
+    const companyName = session.companyName || "Your Company";
+    const primaryContact = session.displayName || "Your Name";
 
     const systemPrompt = `You are a professional copywriting assistant specialized in high-trust outreach and lead nurture campaigns for luxury custom home builders. 
 You are tasked with generating a sequence of exactly 3 SMS follow-up nurture messages based on the builder's custom instruction.
@@ -1049,7 +1044,7 @@ Follow these rules:
 
 Example Format:
 [
-  { "t": "Message 1 · Immediate (< 60s)", "body": "Hi [Name], I noticed your residential building permit application filed in Travis County. I'm Mike Patterson's assistant from Horizon Homes. Since custom builds in Austin require complex structural reviews, have you already hired a general builder?" },
+  { "t": "Message 1 · Immediate (< 60s)", "body": "Hi [Name], I noticed your residential building permit application filed in Travis County. I'm ${primaryContact.split(' ')[0]}'s assistant from ${companyName}. Since custom builds in Austin require complex structural reviews, have you already hired a general builder?" },
   { "t": "Message 2 · 2 hours later (no reply)", "body": "Hey [Name], just checking in! I wanted to send over our Austin Permitting & Zoning Checklist (it saves weeks on site preparation). Do you already own the lot?" },
   { "t": "Message 3 · 24 hours later", "body": "Hi [Name], we are hosting private tours of our completed contemporary estate in Lakeway this Saturday. Let me know if you would like me to reserve a spot for you!" }
 ]`;
@@ -1077,7 +1072,7 @@ Example Format:
         console.error("Failed to parse AI JSON response, using fallback matching...", pe);
         // Fallback matching
         parsed = [
-          { t: "Message 1 · Immediate (< 60s)", body: "Hi [Name]! I'm Mike's assistant from Horizon Homes. Are you looking to build your home in Austin in the next 6-12 months? Reply YES/NO." },
+          { t: "Message 1 · Immediate (< 60s)", body: `Hi [Name]! I'm ${primaryContact.split(' ')[0]}'s assistant from ${companyName}. Are you looking to build your home in Austin in the next 6-12 months? Reply YES/NO.` },
           { t: "Message 2 · 2 hours later", body: "Hey [Name], just following up! Did you have a specific lot in mind in Travis County, or would you like help finding one?" },
           { t: "Message 3 · 24 hours later", body: "Hi [Name], would you like a private walkthrough of our newly completed contemporary estate this Thursday?" }
         ];
@@ -1090,11 +1085,13 @@ Example Format:
     }
   })
 
-export const getAppointmentsData = createServerFn({ method: 'GET' })
-  .handler(async () => {
-    const { getTenantDb } = await import('./server-utils.server');
-    const db = await getTenantDb()
+export const getAppointmentsData = createServerFn({ method: 'POST' })
+  .inputValidator((data: { activeRole?: string | null } | undefined) => data)
+  .handler(async ({ data }) => {
+    const { getTenantDb, requireAuth } = await import('./server-utils.server');
     try {
+      const session = await requireAuth(data?.activeRole ?? undefined)
+      const db = await getTenantDb(session)
       const appts = await db.appointment.findMany({
         orderBy: { dateTime: 'asc' },
         include: {
@@ -1164,12 +1161,33 @@ export const bookAppointment = createServerFn({ method: 'POST' })
         }
       })
 
+      // Add appointment card to messages
+      await db.message.create({
+        data: {
+          builderId: session.builderId || '',
+          leadId: data.leadId,
+          sender: 'system',
+          content: `📆 Site Visit Booked: ${data.type} scheduled for ${formattedDate} at ${data.location}.`,
+          isRead: true
+        }
+      })
+
       if (data.sendSms) {
+        const smsContent = `Hi ${lead.name}, your ${data.type} is scheduled for ${formattedDate} at ${data.location}. See you then!`
         await db.activity.create({
           data: {
             builderId: session.builderId || '',
             leadId: data.leadId,
-            action: `💬 AI Engine sent automated SMS appointment confirmation to ${lead.name}: "Hi ${lead.name}, your ${data.type} is scheduled for ${formattedDate} at ${data.location}. See you then!"`,
+            action: `💬 AI Engine sent automated SMS appointment confirmation to ${lead.name}: "${smsContent}"`,
+          }
+        })
+        await db.message.create({
+          data: {
+            builderId: session.builderId || '',
+            leadId: data.leadId,
+            sender: 'system',
+            content: smsContent,
+            isRead: true
           }
         })
       }
@@ -1273,10 +1291,13 @@ export const cancelAppointment = createServerFn({ method: 'POST' })
     }
   })
 
-export const getConversations = createServerFn({ method: 'GET' }).handler(async () => {
-    const { getTenantDb } = await import('./server-utils.server');
-  const db = await getTenantDb()
+export const getConversations = createServerFn({ method: 'POST' })
+  .inputValidator((data: { activeRole?: string | null } | undefined) => data)
+  .handler(async ({ data }) => {
+  const { getTenantDb, requireAuth } = await import('./server-utils.server');
   try {
+    const session = await requireAuth(data?.activeRole ?? undefined)
+    const db = await getTenantDb(session)
     const leads = await db.lead.findMany({
       include: {
         messages: {
@@ -1288,6 +1309,9 @@ export const getConversations = createServerFn({ method: 'GET' }).handler(async 
     const conversations = leads.map((l) => {
       const lastMsg = l.messages[0]
       const unreadCount = l.messages.filter(m => m.sender === 'lead' && !m.isRead).length
+      
+      const isRecentlyActive = lastMsg && lastMsg.sender === 'lead' && 
+          (new Date().getTime() - new Date(lastMsg.createdAt).getTime()) < 1000 * 60 * 30;
 
       return {
         leadId: l.id,
@@ -1300,13 +1324,11 @@ export const getConversations = createServerFn({ method: 'GET' }).handler(async 
         lastMessage: lastMsg ? lastMsg.content : "No messages yet",
         lastMessageTime: lastMsg ? lastMsg.createdAt.toISOString() : l.createdAt.toISOString(),
         unreadCount,
-        isOnline: l.name.charCodeAt(0) % 2 === 0,
+        isOnline: !!isRecentlyActive,
       }
     })
 
-    // Sort by last message time descending
     conversations.sort((a, b) => new Date(b.lastMessageTime).getTime() - new Date(a.lastMessageTime).getTime())
-
     return conversations
   } catch (error) {
     console.error("Error in getConversations:", error)
@@ -1314,11 +1336,13 @@ export const getConversations = createServerFn({ method: 'GET' }).handler(async 
   }
 })
 
-export const getMessagesForLead = createServerFn({ method: 'GET' })
-  .inputValidator((leadId: string) => leadId)
-  .handler(async ({ data: leadId }) => {
-    const { getTenantDb } = await import('./server-utils.server');
-    const db = await getTenantDb()
+export const getMessagesForLead = createServerFn({ method: 'POST' })
+  .inputValidator((data: { leadId: string; activeRole?: string | null }) => data)
+  .handler(async ({ data }) => {
+    const { getTenantDb, requireAuth } = await import('./server-utils.server');
+    const session = await requireAuth(data?.activeRole ?? undefined)
+    const db = await getTenantDb(session)
+    const { leadId } = data
     try {
       const lead = await db.lead.findUnique({
         where: { id: leadId }
@@ -1330,16 +1354,9 @@ export const getMessagesForLead = createServerFn({ method: 'GET' })
         orderBy: { createdAt: 'asc' }
       })
 
-      // Mark unread messages as read
       await db.message.updateMany({
-        where: {
-          leadId,
-          sender: 'lead',
-          isRead: false
-        },
-        data: {
-          isRead: true
-        }
+        where: { leadId, sender: 'lead', isRead: false },
+        data: { isRead: true }
       })
 
       return {
@@ -1359,13 +1376,13 @@ export const getMessagesForLead = createServerFn({ method: 'GET' })
   })
 
 export const sendMessage = createServerFn({ method: 'POST' })
-  .inputValidator((data: { leadId: string; content: string; enableAiReply?: boolean }) => data)
+  .inputValidator((data: { leadId: string; content: string }) => data)
   .handler(async ({ data }) => {
     const { getTenantDb, requireAuth } = await import('./server-utils.server');
     const session = await requireAuth()
     const db = await getTenantDb()
     try {
-      const { leadId, content, enableAiReply = true } = data
+      const { leadId, content } = data
 
       // Create user's message
       const userMsg = await db.message.create({
@@ -1378,57 +1395,7 @@ export const sendMessage = createServerFn({ method: 'POST' })
         }
       })
 
-      // Log activity
-      await db.activity.create({
-        data: {
-          builderId: session.builderId || '',
-          leadId,
-          action: `💬 Sent message: "${content.substring(0, 40)}${content.length > 40 ? '...' : ''}"`,
-        }
-      })
-
-      let leadMsg = null
-
-      if (enableAiReply) {
-        // Generate a simulated reply immediately in the DB to make the conversation interactive
-        const lowerContent = content.toLowerCase()
-        let replyText = "Thanks for getting back to me! Let me review this and get back to you shortly."
-
-        if (lowerContent.includes("📆 site visit booked") || lowerContent.includes("appointment booked") || lowerContent.includes("walkthrough booked")) {
-          replyText = "Awesome! I've added this to my calendar. Looking forward to the walkthrough."
-        } else if (lowerContent.includes("saturday") || lowerContent.includes("meet") || lowerContent.includes("visit") || lowerContent.includes("schedule")) {
-          replyText = "Saturday works great for me. Please send over the address and the time we should meet!"
-        } else if (lowerContent.includes("email") || lowerContent.includes("sent") || lowerContent.includes("brochure")) {
-          replyText = "Received! I just checked my inbox. The layout looks perfect. I'll discuss it with my architect and follow up."
-        } else if (lowerContent.includes("budget") || lowerContent.includes("price") || lowerContent.includes("cost") || lowerContent.includes("sq ft")) {
-          replyText = "Okay, that pricing model makes sense. Do you have a standard specifications sheet so we know what is included in that price?"
-        } else if (lowerContent.includes("call") || lowerContent.includes("phone")) {
-          replyText = "Sure, you can call me tomorrow afternoon around 2 PM. Looking forward to speaking."
-        }
-
-        // Add the simulated lead reply after a very short delay (represented in DB immediately for high responsiveness)
-        leadMsg = await db.message.create({
-          data: {
-            builderId: session.builderId || '',
-            leadId,
-            sender: 'lead',
-            content: replyText,
-            isRead: false,
-            createdAt: new Date(Date.now() + 500)
-          }
-        })
-
-        // Log lead activity
-        await db.activity.create({
-          data: {
-            builderId: session.builderId || '',
-            leadId,
-            action: `📨 Lead replied: "${replyText.substring(0, 40)}..."`,
-          }
-        })
-      }
-
-      // Update lead status to "Replied" only if it's not already "Appointment" (preserve appointment status)
+      // Update lead status to "Replied" only if it's not already "Appointment"
       const currentLead = await db.lead.findUnique({
         where: { id: leadId },
         select: { status: true }
@@ -1442,8 +1409,7 @@ export const sendMessage = createServerFn({ method: 'POST' })
       }
 
       return {
-        userMessage: userMsg,
-        leadMessage: leadMsg
+        userMessage: userMsg
       }
     } catch (error) {
       console.error("Error in sendMessage:", error)
@@ -1451,9 +1417,79 @@ export const sendMessage = createServerFn({ method: 'POST' })
     }
   })
 
-export const getReportsData = createServerFn({ method: 'GET' }).handler(async () => {
-    const { getTenantDb } = await import('./server-utils.server');
-  const db = await getTenantDb()
+export const simulateLeadMessage = createServerFn({ method: 'POST' })
+  .inputValidator((data: { leadId: string; content: string; enableAiReply: boolean }) => data)
+  .handler(async ({ data }) => {
+    const { getTenantDb, requireAuth } = await import('./server-utils.server');
+    const session = await requireAuth();
+    const db = await getTenantDb();
+    
+    try {
+      const { leadId, content, enableAiReply } = data;
+
+      // 1. Create the Lead's message
+      const leadMsg = await db.message.create({
+        data: {
+          builderId: session.builderId || '',
+          leadId,
+          sender: 'lead',
+          content,
+          isRead: true
+        }
+      });
+
+      let systemMsg = null;
+
+      // 2. If AI is active, trigger Groq response
+      if (enableAiReply) {
+        // Fetch chat history for context
+        const history = await db.message.findMany({
+          where: { leadId, builderId: session.builderId || '' },
+          orderBy: { createdAt: 'asc' },
+          take: 10
+        });
+
+        const formattedHistory = history.map(m => ({
+          role: (m.sender === 'user' || m.sender === 'system') ? 'assistant' : 'user' as any,
+          content: m.content
+        }));
+
+        // Use the existing Llama-3 function
+        const aiResponse = await simulateAIChatReply({ 
+          data: { 
+            leadId, 
+            userMessage: content, 
+            chatHistory: formattedHistory 
+          } 
+        });
+
+        // Save AI response as 'system' message
+        if (aiResponse && aiResponse.replyText) {
+          systemMsg = await db.message.create({
+            data: {
+              builderId: session.builderId || '',
+              leadId,
+              sender: 'system',
+              content: aiResponse.replyText,
+              isRead: true
+            }
+          });
+        }
+      }
+
+      return { leadMessage: leadMsg, systemMessage: systemMsg };
+    } catch (error) {
+      console.error("Error in simulateLeadMessage:", error);
+      throw error;
+    }
+  });
+
+export const getReportsData = createServerFn({ method: 'POST' })
+  .inputValidator((data: { activeRole?: string | null } | undefined) => data)
+  .handler(async ({ data }) => {
+  const { getTenantDb, requireAuth } = await import('./server-utils.server');
+  const session = await requireAuth(data?.activeRole ?? undefined)
+  const db = await getTenantDb(session)
 
   try {
     const now = new Date()
@@ -1648,10 +1684,11 @@ export const getIntegrationsStatus = createServerFn({ method: 'GET' }).handler(a
     const integrations = await db.integration.findMany()
     
     // We map raw stored configs into masked configs to send to the client
-    const mapped = integrations.map(item => {
+    const mapped = await Promise.all(integrations.map(async item => {
       let config: Record<string, string> = {}
       try {
         if (item.configSecure) {
+          const { decrypt } = await import('./crypto');
           const decrypted = decrypt(item.configSecure)
           const parsed = JSON.parse(decrypted)
           // Mask sensitive password fields
@@ -1673,7 +1710,7 @@ export const getIntegrationsStatus = createServerFn({ method: 'GET' }).handler(a
         isConnected: item.isConnected,
         credentials: config
       }
-    })
+    }))
 
     // Return as a key-value record for ease of frontend lookup
     const statusMap: Record<string, { isConnected: boolean; credentials: Record<string, string> }> = {}
@@ -1714,6 +1751,7 @@ export const saveIntegrationCredentials = createServerFn({ method: 'POST' })
 
       if (existing && existing.configSecure) {
         try {
+          const { decrypt } = await import('./crypto');
           const decrypted = decrypt(existing.configSecure)
           const parsed = JSON.parse(decrypted)
           
@@ -1728,6 +1766,7 @@ export const saveIntegrationCredentials = createServerFn({ method: 'POST' })
         }
       }
 
+      const { encrypt } = await import('./crypto');
       const encrypted = encrypt(JSON.stringify(finalCredentials))
 
       await db.integration.upsert({
@@ -1886,16 +1925,12 @@ async function readSettingJson(platformId: string): Promise<Record<string, any>>
   const session = await requireAuth()
   const db = await getTenantDb()
   try {
-    const row = await db.integration.findUnique({
-      where: {
-        builderId_platformId: {
-          builderId: session.builderId || '',
-          platformId
-        }
-      }
+    const builder = await db.builder.findUnique({
+      where: { id: session.builderId || '' }
     })
-    if (!row || !row.configSecure) return {}
-    return JSON.parse(decrypt(row.configSecure))
+    if (!builder || !builder.settings) return {}
+    const settingsObj = JSON.parse(builder.settings)
+    return settingsObj[platformId] || {}
   } catch {
     return {}
   }
@@ -1905,35 +1940,96 @@ async function writeSettingJson(platformId: string, value: Record<string, any>) 
   const { getTenantDb, requireAuth } = await import('./server-utils.server');
   const session = await requireAuth()
   const db = await getTenantDb()
-  const encrypted = encrypt(JSON.stringify(value))
-  await db.integration.upsert({
-    where: {
-      builderId_platformId: {
-        builderId: session.builderId || '',
-        platformId
-      }
-    },
-    update: { configSecure: encrypted, isConnected: true },
-    create: {
-      builderId: session.builderId || '',
-      platformId,
-      configSecure: encrypted,
-      isConnected: true
-    },
+  
+  const builder = await db.builder.findUnique({
+    where: { id: session.builderId || '' }
+  })
+  
+  const settingsObj = builder?.settings ? JSON.parse(builder.settings) : {}
+  settingsObj[platformId] = value
+  
+  await db.builder.update({
+    where: { id: session.builderId || '' },
+    data: { settings: JSON.stringify(settingsObj) }
   })
 }
 
-export const getBuilderProfile = createServerFn({ method: 'GET' }).handler(async () => {
-    const { getTenantDb } = await import('./server-utils.server');
-  return readSettingJson('builder_profile')
+export const getBuilderProfile = createServerFn({ method: 'POST' })
+  .inputValidator((data: { activeRole?: string | null } | undefined) => data)
+  .handler(async ({ data }) => {
+  const { getDb } = await import('./db');
+  const { requireAuth } = await import('./server-utils.server');
+  const session = await requireAuth(data?.activeRole ?? undefined);
+  const db = await getDb();
+  
+  const savedProfile = await readSettingJson('builder_profile');
+  
+  const builderId = session.role === 'admin' ? session.actingAsBuilderId : session.builderId;
+  const builder = await db.builder.findUnique({
+    where: { id: builderId || '' },
+    include: { users: { where: { id: session.userId } } }
+  });
+  
+  const user = builder?.users[0];
+  
+  return {
+    companyName: savedProfile.companyName || builder?.companyName || "Your Company LLC",
+    primaryContact: savedProfile.primaryContact || builder?.contactName || user?.displayName || "Your Name",
+    email: savedProfile.email || builder?.email || user?.email || "youremail@example.com",
+    phone: savedProfile.phone || builder?.phone || "+1 512-555-0100",
+    businessAddress: savedProfile.businessAddress || "1100 S Lamar Blvd, Austin, TX 78704",
+    targetZipCodes: savedProfile.targetZipCodes || "78704, 78703, 78731, 78613, 78641",
+    avgHomePrice: savedProfile.avgHomePrice || "$700,000",
+    homesPerYear: savedProfile.homesPerYear || "42",
+  };
 })
 
 export const saveBuilderProfile = createServerFn({ method: 'POST' })
-  .inputValidator((data: Record<string, string>) => data)
+  .inputValidator((data: any) => data)
   .handler(async ({ data }) => {
-    const { getTenantDb } = await import('./server-utils.server');
-    await writeSettingJson('builder_profile', data)
-    return { success: true }
+    try {
+      const { getDb } = await import('./db');
+      const { requireAuth, setAuthCookie } = await import('./server-utils.server');
+      const session = await requireAuth();
+      const db = await getDb();
+      
+      const profileData = data.data || data;
+      
+      await writeSettingJson('builder_profile', profileData);
+      
+      const builderId = session.role === 'admin' ? session.actingAsBuilderId : session.builderId;
+      if (builderId) {
+        await db.builder.update({
+          where: { id: builderId },
+          data: {
+            companyName: profileData.companyName,
+            contactName: profileData.primaryContact,
+            phone: profileData.phone,
+            email: profileData.email,
+          }
+        });
+      }
+      
+      await db.user.update({
+        where: { id: session.userId },
+        data: {
+          displayName: profileData.primaryContact,
+        }
+      });
+      
+      const { exp, iat, ...sessionWithoutExp } = session as any;
+      const nextSession = {
+        ...sessionWithoutExp,
+        companyName: profileData.companyName,
+        displayName: profileData.primaryContact,
+      };
+      await setAuthCookie(nextSession as any);
+      
+      return { success: true }
+    } catch (err: any) {
+      console.error("SAVE BUILDER PROFILE RUNTIME ERROR:", err);
+      throw err;
+    }
   })
 
 export const getQualificationRules = createServerFn({ method: 'GET' }).handler(async () => {
@@ -2129,10 +2225,12 @@ function generateRealisticPermits(targetMarket: string, count: number): any[] {
   return permits;
 }
 
-export const getTeamData = createServerFn({ method: 'GET' }).handler(async () => {
-    const { getTenantDb, requireAuth } = await import('./server-utils.server');
-  const session = await requireAuth();
-  const db = await getTenantDb()
+export const getTeamData = createServerFn({ method: 'POST' })
+  .inputValidator((data: { activeRole?: string | null } | undefined) => data)
+  .handler(async ({ data }) => {
+  const { getTenantDb, requireAuth } = await import('./server-utils.server');
+  const session = await requireAuth(data?.activeRole ?? undefined);
+  const db = await getTenantDb(session)
   const users = await db.user.findMany({
     where: { builderId: session.builderId || undefined },
     select: { id: true, displayName: true, email: true, builderRole: true, lastLoginAt: true, isActive: true },
@@ -2146,6 +2244,13 @@ export const createTeamInvite = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     const { getTenantDb, requireAuth } = await import('./server-utils.server');
     const session = await requireAuth();
+
+    // FIX-5: Server-side RBAC guard — only owner-role builders may invite new team members.
+    // This is defense-in-depth: the route guard is the first layer, this is the second.
+    if (session.role === 'builder' && session.builderRole !== 'owner') {
+      throw new Error('FORBIDDEN: Only the account owner can invite team members.')
+    }
+
     const db = await getTenantDb()
     
     // Generate random token
@@ -2178,6 +2283,12 @@ export const removeTeamMember = createServerFn({ method: 'POST' })
   .handler(async ({ data: userId }) => {
     const { getTenantDb, requireAuth } = await import('./server-utils.server');
     const session = await requireAuth();
+
+    // FIX-5: Server-side RBAC guard — only owner-role builders may remove team members.
+    if (session.role === 'builder' && session.builderRole !== 'owner') {
+      throw new Error('FORBIDDEN: Only the account owner can remove team members.')
+    }
+
     const db = await getTenantDb()
     try {
       await db.user.delete({
@@ -2189,3 +2300,38 @@ export const removeTeamMember = createServerFn({ method: 'POST' })
       throw error
     }
   })
+
+export const generatePasswordResetLink = createServerFn({ method: 'POST' })
+  .inputValidator((userId: string) => userId)
+  .handler(async ({ data: userId }) => {
+    const { getTenantDb, requireAuth } = await import('./server-utils.server');
+    const session = await requireAuth();
+    const db = await getTenantDb();
+    
+    // FIX-4: Enforce tenant isolation at the DB query level (not post-hoc in application code).
+    // The WHERE clause atomically ensures the target user belongs to the caller's own builder
+    // tenant. If the userId belongs to a different tenant, findUnique returns null and we throw
+    // before reading any cross-tenant data. This eliminates the IDOR race condition.
+    const tenantScopedWhere = session.role === 'admin'
+      ? { id: userId }                                         // Admin can reset any user
+      : { id: userId, builderId: session.builderId ?? '' }     // Builder can only reset own tenant's users
+
+    const userToReset = await db.user.findUnique({ where: tenantScopedWhere });
+    if (!userToReset) throw new Error('User not found or access denied');
+
+    const crypto = await import('crypto');
+    const token = crypto.randomBytes(32).toString('hex');
+    const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    
+    await db.user.update({
+      where: { id: userId },
+      data: {
+        resetToken: token,
+        resetTokenExpires: expires,
+        forcePasswordReset: true,
+      }
+    });
+
+    return { success: true, inviteLink: `/invite/${token}` };
+  });
+

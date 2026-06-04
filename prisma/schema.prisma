@@ -17,8 +17,11 @@ model Builder {
   isActive    Boolean  @default(true)
   adSpendBalance Float   @default(0.0)
   paymentMethod  String? @default("None")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  settings       String?  // Storing settings as stringified JSON since sqlite doesn't support Json type in Prisma
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+  targetZipCodes String[] @default([]) // Strict 1-to-1 lead allocation rules
 
   users           User[]
   leads           Lead[]
@@ -52,6 +55,7 @@ model User {
   
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
 
   builder   Builder?  @relation(fields: [builderId], references: [id], onDelete: Cascade)
 }
@@ -80,6 +84,10 @@ model Lead {
   messages        Message[]
   
   createdAt       DateTime   @default(now())
+
+  @@index([builderId])
+  @@index([createdAt])
+  @@index([builderId, createdAt])
 }
 
 // ─── REVIEW PLATFORMS ────────────────────────────────────────────────────────
@@ -127,6 +135,11 @@ model Activity {
   createdAt DateTime @default(now())
   
   lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([builderId])
+  @@index([leadId])
+  @@index([createdAt])
+  @@index([builderId, createdAt])
 }
 
 // ─── APPOINTMENTS ────────────────────────────────────────────────────────────
@@ -144,6 +157,11 @@ model Appointment {
   createdAt DateTime @default(now())
   
   lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([builderId])
+  @@index([leadId])
+  @@index([createdAt])
+  @@index([builderId, createdAt])
 }
 
 // ─── MESSAGES ────────────────────────────────────────────────────────────────
@@ -201,4 +219,13 @@ model PlatformSettings {
   defaultTrialDays Int      @default(14)
   maintenanceMode  Boolean  @default(false)
   updatedAt        DateTime @updatedAt
+}
+
+// ─── SYSTEM SYNC (BACKGROUND JOBS) ───────────────────────────────────────────
+model SystemSync {
+  id               String   @id @default("rencast_leads")
+  lastSyncAt       DateTime @default(now())
+  recordsFetched   Int      @default(0)
+  status           String   @default("Success") // "Success" | "Failed"
+  errorMessage     String?
 }

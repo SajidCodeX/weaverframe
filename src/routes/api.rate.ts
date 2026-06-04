@@ -1,23 +1,32 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { getDb } from '@/lib/db';
+
 import { z } from 'zod';
 
 const searchSchema = z.object({
   inviteId: z.string().optional(),
   id: z.string().optional(),
   rating: z.coerce.number().optional(),
+  sig: z.string().optional(),
 });
 
-export const Route = createFileRoute('/api/rate')({
-  validateSearch: (search) => searchSchema.parse(search),
-  loaderDeps: ({ search }) => search,
-  loader: async ({ deps }) => {
-    const inviteId = deps.inviteId || deps.id;
-    const rating = deps.rating;
+import { createServerFn } from '@tanstack/react-start';
 
-    if (!inviteId || rating === undefined || isNaN(rating)) {
-      return new Response(
-        `<html>
+const handleRateLogic = createServerFn({ method: 'GET' })
+  .inputValidator((data: { inviteId?: string; rating?: number; sig?: string }) => data)
+  .handler(async ({ data }) => {
+    const { inviteId, rating, sig } = data;
+    
+    let isValidSignature = false;
+    if (inviteId && sig) {
+      const { verifyReviewInviteSignature } = await import('@/lib/server-utils.server');
+      isValidSignature = await verifyReviewInviteSignature(inviteId, sig);
+    }
+
+    if (!isValidSignature) {
+      return { 
+        isResponse: true, 
+        status: 403, 
+        html: `<html>
           <head>
             <title>Invalid Request — Builder's Edge</title>
             <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -31,17 +40,43 @@ export const Route = createFileRoute('/api/rate')({
           <body>
             <div class="card">
               <h1>Invalid Invite Link</h1>
-              <p>The link you clicked is incomplete or has expired. Please check your invitation message and try again.</p>
+              <p>This link is invalid, expired, or has been tampered with. Please contact your builder for a new invite link.</p>
             </div>
           </body>
-        </html>`,
-        { headers: { 'Content-Type': 'text/html' } }
-      );
+        </html>`
+      };
+    }
+
+    if (rating === undefined || isNaN(rating)) {
+      return { 
+        isResponse: true, 
+        status: 400, 
+        html: `<html>
+          <head>
+            <title>Invalid Request — Builder's Edge</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+              body { background: #000; color: #fff; font-family: monospace; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }
+              .card { border: 1px solid #333; padding: 2rem; border-radius: 8px; background: #0a0a0a; max-width: 400px; }
+              h1 { color: #ff453a; font-size: 1.25rem; }
+              p { color: #888; font-size: 0.85rem; line-height: 1.5; }
+            </style>
+          </head>
+          <body>
+            <div class="card">
+              <h1>Missing Star Rating</h1>
+              <p>Please click a valid star rating from your invitation email.</p>
+            </div>
+          </body>
+        </html>`
+      };
     }
 
     if (rating < 1 || rating > 5) {
-      return new Response(
-        `<html>
+      return { 
+        isResponse: true, 
+        status: 400, 
+        html: `<html>
           <head>
             <title>Invalid Rating — Builder's Edge</title>
             <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -57,17 +92,19 @@ export const Route = createFileRoute('/api/rate')({
               <p>Please click a valid star rating from 1 to 5 inside your invitation email.</p>
             </div>
           </body>
-        </html>`,
-        { headers: { 'Content-Type': 'text/html' } }
-      );
+        </html>`
+      };
     }
 
+    const { getDb } = await import('@/lib/db');
     const db = await getDb();
     try {
       const invite = await db.reviewRequest.findUnique({ where: { id: inviteId } });
       if (!invite) {
-        return new Response(
-          `<html>
+        return { 
+          isResponse: true, 
+          status: 404, 
+          html: `<html>
             <head>
               <title>Not Found — Builder's Edge</title>
               <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -83,9 +120,8 @@ export const Route = createFileRoute('/api/rate')({
                 <p>We could not find this review invitation in our database. It may have been cleaned or replaced.</p>
               </div>
             </body>
-          </html>`,
-          { headers: { 'Content-Type': 'text/html' } }
-        );
+          </html>`
+        };
       }
 
       // Update state in database
@@ -141,7 +177,6 @@ export const Route = createFileRoute('/api/rate')({
           where: { name: { contains: defaultPlatform, mode: 'insensitive' } }
         });
 
-        // Security: only allow redirects to trusted review platform domains
         const ALLOWED_REDIRECT_DOMAINS = [
           'google.com', 'houzz.com', 'facebook.com', 'yelp.com',
           'guildquality.com', 'houzz.pro', 'g.page',
@@ -159,24 +194,41 @@ export const Route = createFileRoute('/api/rate')({
           safeRedirectUrl = 'https://google.com';
         }
 
-        return new Response(null, {
-          status: 302,
-          headers: { Location: safeRedirectUrl },
-        });
+        return { isRedirect: true, location: safeRedirectUrl };
 
       } else {
         // Critical: redirect to the internal private feedback page to collect their complaints
         const fallbackFeedbackUrl = `/feedback?inviteId=${inviteId}&rating=${rating}`;
-        return new Response(null, {
-          status: 302,
-          headers: {
-            Location: fallbackFeedbackUrl,
-          },
-        });
+        return { isRedirect: true, location: fallbackFeedbackUrl };
       }
     } catch (error) {
       console.error('Error handling rating click:', error);
-      return new Response('Internal Server Error', { status: 500 });
+      return { isResponse: true, status: 500, html: 'Internal Server Error' };
+    }
+  });
+
+export const Route = createFileRoute('/api/rate')({
+  validateSearch: (search) => searchSchema.parse(search),
+  loaderDeps: ({ search }) => search,
+  loader: async ({ deps }) => {
+    const inviteId = deps.inviteId || deps.id;
+    const rating = deps.rating;
+    const sig = deps.sig;
+
+    const result = await handleRateLogic({ data: { inviteId, rating, sig } });
+
+    if (result.isResponse) {
+      return new Response(result.html, {
+        status: result.status,
+        headers: { 'Content-Type': 'text/html' }
+      });
+    }
+
+    if (result.isRedirect) {
+      return new Response(null, {
+        status: 302,
+        headers: { Location: result.location! },
+      });
     }
   }
 });
