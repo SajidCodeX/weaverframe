@@ -1,6 +1,6 @@
 import { createFileRoute, useLoaderData, useRouter, useRouteContext } from "@tanstack/react-router";
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Search, Plus, Download, Phone, Calendar, Eye, MoreHorizontal, X, Mail, Check, AlertCircle, Edit, RefreshCw } from "lucide-react";
+import { Search, Plus, Download, Phone, Calendar, Eye, MoreHorizontal, X, Mail, Check, AlertCircle, Edit, RefreshCw, LayoutGrid, List, MessageSquare, Zap, Star } from "lucide-react";
 import { Shell } from "@/components/dashboard/Shell";
 import { Card, ScoreBadge, StageBadge } from "@/components/dashboard/primitives";
 import { CustomSelect } from "@/components/dashboard/CustomSelect";
@@ -41,6 +41,7 @@ function LeadsPage() {
   const rawLeads = useLoaderData({ from: '/leads' }) || [];
   const router = useRouter();
   const search = Route.useSearch();
+  const [viewMode, setViewMode] = useState<'table' | 'pipeline'>('pipeline');
   const [selected, setSelected] = useState<any | null>(null);
   const [revealedPhones, setRevealedPhones] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
@@ -447,8 +448,8 @@ function LeadsPage() {
       )}
       <Card className="flex flex-col h-[calc(100vh-108px)]">
         {/* Filter bar container */}
-        <div ref={filterBarRef} className="flex items-center gap-3 p-4 border-b border-border flex-wrap relative z-20 shrink-0">
-          <div className="relative flex-1 min-w-[260px]">
+        <div ref={filterBarRef} className="flex items-center gap-2 px-4 py-3 border-b border-border relative z-20 shrink-0">
+          <div className="relative w-44">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
             <input
               value={query}
@@ -561,7 +562,35 @@ function LeadsPage() {
             )}
           </div>
 
-          <div className="ml-auto flex gap-2">
+          <div className="ml-auto flex gap-1.5 items-center">
+            {/* View Toggle */}
+            <div className="flex items-center border border-border rounded-md overflow-hidden">
+              <button
+                onClick={() => setViewMode('pipeline')}
+                title="Pipeline View"
+                className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-xs transition-colors ${
+                  viewMode === 'pipeline'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+                }`}
+              >
+                <LayoutGrid className="size-3.5" />
+                <span className="hidden sm:inline">Pipeline</span>
+              </button>
+              <button
+                onClick={() => setViewMode('table')}
+                title="Table View"
+                className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-xs transition-colors border-l border-border ${
+                  viewMode === 'table'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+                }`}
+              >
+                <List className="size-3.5" />
+                <span className="hidden sm:inline">Table</span>
+              </button>
+            </div>
+
             <button
               onClick={() => {
                 const icon = document.getElementById('leads-refresh-icon');
@@ -570,266 +599,331 @@ function LeadsPage() {
                   if (icon) icon.classList.remove('animate-spin');
                 });
               }}
-              className="inline-flex items-center gap-1.5 text-sm border border-border rounded-md px-3 py-2 text-foreground hover:bg-secondary transition-colors"
+              className="inline-flex items-center gap-1 text-xs border border-border rounded-md px-2.5 py-1.5 text-foreground hover:bg-secondary transition-colors"
               title="Refresh Data"
             >
-              <RefreshCw id="leads-refresh-icon" className="size-4" /> Refresh
+              <RefreshCw id="leads-refresh-icon" className="size-3.5" /> Refresh
             </button>
             <button
               onClick={exportToCSV}
-              className="inline-flex items-center gap-1.5 text-sm border border-border rounded-md px-3 py-2 text-foreground hover:bg-secondary transition-colors"
+              className="inline-flex items-center gap-1 text-xs border border-border rounded-md px-2.5 py-1.5 text-foreground hover:bg-secondary transition-colors whitespace-nowrap"
             >
-              <Download className="size-4" /> Export CSV
+              <Download className="size-3.5" /> Export CSV
             </button>
             <button
               onClick={() => setIsAddModalOpen(true)}
-              className="inline-flex items-center gap-1.5 text-sm bg-primary text-primary-foreground rounded-md px-3 py-2 font-medium hover:bg-primary/90 focus:ring-0 focus:outline-none transition-colors duration-75"
+              className="inline-flex items-center gap-1 text-xs bg-primary text-primary-foreground rounded-md px-2.5 py-1.5 font-medium hover:bg-primary/90 focus:ring-0 focus:outline-none transition-colors duration-75 whitespace-nowrap"
             >
-              <Plus className="size-4" /> Add Manual Lead
+              <Plus className="size-3.5" /> Add Lead
             </button>
           </div>
         </div>
 
-        {/* Leads Table - Only table body scrolls */}
-        <div className="overflow-x-auto overflow-y-auto flex-1 min-h-0 border-t border-border custom-scrollbar">
-          <table className="w-full text-sm">
-            <thead className="bg-secondary/50">
-              <tr className="text-center text-xs text-muted-foreground uppercase tracking-wider">
-                <th className="px-4 py-3 font-medium text-center">#</th>
-                <th className="px-4 py-3 font-medium text-center">Name</th>
-                <th className="px-4 py-3 font-medium text-center">Phone</th>
-                <th className="px-4 py-3 font-medium text-center">Budget</th>
-                <th className="px-4 py-3 font-medium text-center">Score</th>
-                <th className="px-4 py-3 font-medium text-center">Stage</th>
-                <th className="px-4 py-3 font-medium text-center">Source</th>
-                <th className="px-4 py-3 font-medium text-center">Captured</th>
-                <th className="px-4 py-3 font-medium text-center">AI Status</th>
-                <th className="px-4 py-3 font-medium text-center">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((lead, i) => {
-                const globalIndex = (currentPage - 1) * itemsPerPage + i;
-                const revealed = revealedPhones.has(lead.id);
-                const safePhone = lead.phone || "No phone";
-                const displayPhone = revealed ? safePhone : safePhone.length > 4 ? safePhone.replace(/\d{4}$/, "****") : safePhone;
-                return (
-                  <tr
-                    key={lead.id}
-                    onClick={() => setSelected(lead)}
-                    className={`border-t border-border cursor-pointer transition-all duration-150 hover:bg-white/[0.03] hover:border-l-2 hover:border-l-white/20 ${i % 2 ? "bg-card" : "bg-card/60"}`}
-                  >
-                    <td className="px-4 py-3 font-mono text-muted-foreground text-xs text-center">{String(globalIndex + 1).padStart(2, "0")}</td>
-                    <td className="px-4 py-3 font-medium text-foreground text-center">
-                      {isPrivacyMode 
-                        ? obscurePII(`${lead.firstName} ${lead.lastName || ''}`, 'name')
-                        : lead.lastName ? `${lead.firstName} ${lead.lastName.split(/\s+/).map((p: string) => p.replace(/[^a-zA-Z]/g, '').charAt(0).toUpperCase()).filter(Boolean).join('. ')}.` : lead.firstName
-                      }
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs text-center">
-                      <button
-                        onClick={(e) => { 
-                          e.stopPropagation(); 
-                          if (!isPrivacyMode) {
-                            setRevealedPhones((s) => { const n = new Set(s); n.add(lead.id); return n; }); 
-                          }
-                        }}
-                        className={`text-foreground transition-colors ${!isPrivacyMode ? 'hover:text-white/80' : 'cursor-default'}`}
-                      >
-                        {isPrivacyMode ? obscurePII(safePhone, 'phone') : displayPhone}
-                      </button>
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs text-foreground text-center">{lead.budget}</td>
-                    <td className="px-4 py-3 text-center">
-                      <div className="flex justify-center">
-                        <ScoreBadge score={lead.score} />
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <div className="flex justify-center">
-                        <StageBadge stage={lead.stage} />
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <span className="text-xs text-muted-foreground">{lead.source}</span>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <div className="flex flex-col items-center justify-center">
-                        <span className="text-xs text-foreground font-medium">
-                          {new Date(lead.createdAt).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric"
-                          })}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground font-mono mt-0.5">
-                          {new Date(lead.createdAt).toLocaleTimeString("en-US", {
-                            hour: "numeric",
-                            minute: "2-digit",
-                            hour12: true
-                          })}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <div className="flex justify-center">
-                        <AiStatus status={lead.aiStatus} />
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center justify-center gap-1">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setActiveEmailLead(lead); }}
-                          title="Compose Outreach Email"
-                          className="size-7 rounded hover:bg-secondary text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors"
-                        >
-                          <Mail className="size-3.5" />
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setActiveScheduleLead(lead); }}
-                          className="size-7 rounded hover:bg-secondary text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors"
-                        >
-                          <Calendar className="size-3.5" />
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setSelected(lead); }}
-                          className="size-7 rounded hover:bg-secondary text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors"
-                        >
-                          <Eye className="size-3.5" />
-                        </button>
-
-                        <div className="relative">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setActiveMoreLead(activeMoreLead === lead.id ? null : lead.id); }}
-                            className="size-7 rounded hover:bg-secondary text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors"
-                          >
-                            <MoreHorizontal className="size-3.5" />
-                          </button>
-
-                          {activeMoreLead === lead.id && (
-                            <div className="absolute right-0 mt-1 w-36 rounded-lg bg-card/95 backdrop-blur-xl border border-border p-1 shadow-none z-30 animate-in fade-in duration-100">
-                              <button
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  setActiveMoreLead(null);
-                                  setEditForm({
-                                    name: lead.name,
-                                    phone: lead.phone || "",
-                                    email: lead.email || "",
-                                    county: lead.county,
-                                    state: lead.state,
-                                    landPrice: String(lead.landPrice),
-                                    estimatedBudget: String(lead.estimatedBudget || ""),
-                                    status: lead.status,
-                                    scoreTier: lead.scoreTier,
-                                    source: lead.source,
-                                  });
-                                  setEditError("");
-                                  setEditLead(lead);
-                                }}
-                                className="w-full text-left text-xs px-2.5 py-1.5 rounded hover:bg-white/[0.04] text-foreground transition-colors flex items-center gap-1.5"
-                              >
-                                <Edit className="size-3" /> Edit Lead
-                              </button>
-                              <button
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  setActiveMoreLead(null);
-                                  if (confirm(`Are you sure you want to delete ${lead.firstName}?`)) {
-                                    try {
-                                      await deleteLead({ data: lead.id });
-                                      await router.invalidate();
-                                    } catch (err) {
-                                      console.error("Failed to delete lead", err);
-                                    }
-                                  }
-                                }}
-                                className="w-full text-left text-xs px-2.5 py-1.5 rounded hover:bg-danger/10 text-danger font-medium transition-colors"
-                              >
-                                Delete Lead
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveMoreLead(null);
-                                  const defaultMsg = `Hi ${lead.firstName}, this is Your Company. We noticed your recent permit application in ${lead.county}. Have you selected a builder yet? Reply YES or NO.`;
-                                  const msg = prompt(`SMS message to ${lead.firstName}:`, defaultMsg);
-                                  if (!msg) return;
-                                  setSmsSending(lead.id);
-                                  setSmsResult(null);
-                                  sendSmsOutreach({ data: { leadId: lead.id, message: msg } })
-                                    .then(r => { setSmsResult({ leadId: lead.id, ok: r.sent }); setTimeout(() => setSmsResult(null), 4000); })
-                                    .catch(() => { setSmsResult({ leadId: lead.id, ok: false }); setTimeout(() => setSmsResult(null), 4000); })
-                                    .finally(() => setSmsSending(null));
-                                }}
-                                className="w-full text-left text-xs px-2.5 py-1.5 rounded hover:bg-white/[0.04] text-foreground transition-colors"
-                              >
-                                Send SMS
-                              </button>
-                              <button
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  setActiveMoreLead(null);
-                                  if (!confirm(`Re-trigger AI intake flow for ${lead.firstName}? This will reset their status to New.`)) return;
-                                  try {
-                                    await retriggerLeadFlow({ data: lead.id });
-                                    setRetriggerResult(true);
-                                    setTimeout(() => setRetriggerResult(null), 3500);
-                                    await router.invalidate();
-                                  } catch (err) {
-                                    console.error(err);
-                                    setRetriggerResult(false);
-                                    setTimeout(() => setRetriggerResult(null), 3500);
-                                  }
-                                }}
-                                className="w-full text-left text-xs px-2.5 py-1.5 rounded hover:bg-white/[0.04] text-foreground transition-colors"
-                              >
-                                Re-trigger Flow
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-              {filtered.length === 0 && (
-                <tr>
-                  <td colSpan={10} className="text-center py-12 text-sm text-muted-foreground font-mono">
-                    No leads match the active filters.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination Controls */}
-        {filtered.length > 0 && (
-          <div className="flex items-center justify-between border-t border-border bg-secondary/30 px-4 py-3">
-            <div className="text-xs text-muted-foreground">
-              Showing <span className="font-medium text-foreground">{(currentPage - 1) * itemsPerPage + 1}</span> to{" "}
-              <span className="font-medium text-foreground">{Math.min(currentPage * itemsPerPage, filtered.length)}</span> of{" "}
-              <span className="font-medium text-foreground">{filtered.length}</span> leads
-            </div>
-            <div className="flex gap-1.5">
-              <button
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="inline-flex items-center justify-center rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Previous
-              </button>
-              <button
-                onClick={() => setCurrentPage(p => Math.min(Math.ceil(filtered.length / itemsPerPage), p + 1))}
-                disabled={currentPage >= Math.ceil(filtered.length / itemsPerPage)}
-                className="inline-flex items-center justify-center rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Next
-              </button>
-            </div>
+        {viewMode === 'pipeline' ? (
+          /* ──────── PIPELINE / KANBAN VIEW ──────── */
+          <div className="flex-1 overflow-x-auto overflow-y-hidden min-h-0">
+            <KanbanBoard
+              leads={filtered}
+              isPrivacyMode={isPrivacyMode}
+              onSelectLead={setSelected}
+              onEmailLead={setActiveEmailLead}
+              onScheduleLead={setActiveScheduleLead}
+              onEditLead={(lead) => {
+                setEditForm({
+                  name: lead.name,
+                  phone: lead.phone || "",
+                  email: lead.email || "",
+                  county: lead.county,
+                  state: lead.state,
+                  landPrice: String(lead.landPrice),
+                  estimatedBudget: String(lead.estimatedBudget || ""),
+                  status: lead.status,
+                  scoreTier: lead.scoreTier,
+                  source: lead.source,
+                });
+                setEditError("");
+                setEditLead(lead);
+              }}
+              onDeleteLead={async (lead) => {
+                if (confirm(`Are you sure you want to delete ${lead.firstName}?`)) {
+                  try {
+                    await deleteLead({ data: lead.id });
+                    await router.invalidate();
+                  } catch (err) {
+                    console.error("Failed to delete lead", err);
+                  }
+                }
+              }}
+              onSendSms={(lead) => {
+                const defaultMsg = `Hi ${lead.firstName}, this is Your Company. We noticed your recent permit application in ${lead.county}. Have you selected a builder yet? Reply YES or NO.`;
+                const msg = prompt(`SMS message to ${lead.firstName}:`, defaultMsg);
+                if (!msg) return;
+                setSmsSending(lead.id);
+                setSmsResult(null);
+                sendSmsOutreach({ data: { leadId: lead.id, message: msg } })
+                  .then(r => { setSmsResult({ leadId: lead.id, ok: r.sent }); setTimeout(() => setSmsResult(null), 4000); })
+                  .catch(() => { setSmsResult({ leadId: lead.id, ok: false }); setTimeout(() => setSmsResult(null), 4000); })
+                  .finally(() => setSmsSending(null));
+              }}
+              onRetrigger={async (lead) => {
+                if (!confirm(`Re-trigger AI intake flow for ${lead.firstName}? This will reset their status to New.`)) return;
+                try {
+                  await retriggerLeadFlow({ data: lead.id });
+                  setRetriggerResult(true);
+                  setTimeout(() => setRetriggerResult(null), 3500);
+                  await router.invalidate();
+                } catch (err) {
+                  console.error(err);
+                  setRetriggerResult(false);
+                  setTimeout(() => setRetriggerResult(null), 3500);
+                }
+              }}
+            />
           </div>
+        ) : (
+          /* ──────── TABLE VIEW ──────── */
+          <>
+            <div className="overflow-x-auto overflow-y-auto flex-1 min-h-0 border-t border-border custom-scrollbar">
+              <table className="w-full text-sm">
+                <thead className="bg-secondary/50">
+                  <tr className="text-center text-xs text-muted-foreground uppercase tracking-wider">
+                    <th className="px-4 py-3 font-medium text-center">#</th>
+                    <th className="px-4 py-3 font-medium text-center">Name</th>
+                    <th className="px-4 py-3 font-medium text-center">Phone</th>
+                    <th className="px-4 py-3 font-medium text-center">Budget</th>
+                    <th className="px-4 py-3 font-medium text-center">Score</th>
+                    <th className="px-4 py-3 font-medium text-center">Stage</th>
+                    <th className="px-4 py-3 font-medium text-center">Source</th>
+                    <th className="px-4 py-3 font-medium text-center">Captured</th>
+                    <th className="px-4 py-3 font-medium text-center">AI Status</th>
+                    <th className="px-4 py-3 font-medium text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((lead, i) => {
+                    const globalIndex = (currentPage - 1) * itemsPerPage + i;
+                    const revealed = revealedPhones.has(lead.id);
+                    const safePhone = lead.phone || "No phone";
+                    const displayPhone = revealed ? safePhone : safePhone.length > 4 ? safePhone.replace(/\d{4}$/, "****") : safePhone;
+                    return (
+                      <tr
+                        key={lead.id}
+                        onClick={() => setSelected(lead)}
+                        className={`border-t border-border cursor-pointer transition-all duration-150 hover:bg-white/[0.03] hover:border-l-2 hover:border-l-white/20 ${i % 2 ? "bg-card" : "bg-card/60"}`}
+                      >
+                        <td className="px-4 py-3 font-mono text-muted-foreground text-xs text-center">{String(globalIndex + 1).padStart(2, "0")}</td>
+                        <td className="px-4 py-3 font-medium text-foreground text-center">
+                          {isPrivacyMode 
+                            ? obscurePII(`${lead.firstName} ${lead.lastName || ''}`, 'name')
+                            : lead.lastName ? `${lead.firstName} ${lead.lastName.split(/\s+/).map((p: string) => p.replace(/[^a-zA-Z]/g, '').charAt(0).toUpperCase()).filter(Boolean).join('. ')}.` : lead.firstName
+                          }
+                        </td>
+                        <td className="px-4 py-3 font-mono text-xs text-center">
+                          <button
+                            onClick={(e) => { 
+                              e.stopPropagation(); 
+                              if (!isPrivacyMode) {
+                                setRevealedPhones((s) => { const n = new Set(s); n.add(lead.id); return n; }); 
+                              }
+                            }}
+                            className={`text-foreground transition-colors ${!isPrivacyMode ? 'hover:text-white/80' : 'cursor-default'}`}
+                          >
+                            {isPrivacyMode ? obscurePII(safePhone, 'phone') : displayPhone}
+                          </button>
+                        </td>
+                        <td className="px-4 py-3 font-mono text-xs text-foreground text-center">{lead.budget}</td>
+                        <td className="px-4 py-3 text-center">
+                          <div className="flex justify-center">
+                            <ScoreBadge score={lead.score} />
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <div className="flex justify-center">
+                            <StageBadge stage={lead.stage} />
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className="text-xs text-muted-foreground">{lead.source}</span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <div className="flex flex-col items-center justify-center">
+                            <span className="text-xs text-foreground font-medium">
+                              {new Date(lead.createdAt).toLocaleDateString("en-US", {
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric"
+                              })}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                              {new Date(lead.createdAt).toLocaleTimeString("en-US", {
+                                hour: "numeric",
+                                minute: "2-digit",
+                                hour12: true
+                              })}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <div className="flex justify-center">
+                            <AiStatus status={lead.aiStatus} />
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setActiveEmailLead(lead); }}
+                              title="Compose Outreach Email"
+                              className="size-7 rounded hover:bg-secondary text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors"
+                            >
+                              <Mail className="size-3.5" />
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setActiveScheduleLead(lead); }}
+                              className="size-7 rounded hover:bg-secondary text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors"
+                            >
+                              <Calendar className="size-3.5" />
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setSelected(lead); }}
+                              className="size-7 rounded hover:bg-secondary text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors"
+                            >
+                              <Eye className="size-3.5" />
+                            </button>
+
+                            <div className="relative">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setActiveMoreLead(activeMoreLead === lead.id ? null : lead.id); }}
+                                className="size-7 rounded hover:bg-secondary text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors"
+                              >
+                                <MoreHorizontal className="size-3.5" />
+                              </button>
+
+                              {activeMoreLead === lead.id && (
+                                <div className="absolute right-0 mt-1 w-36 rounded-lg bg-card/95 backdrop-blur-xl border border-border p-1 shadow-none z-30 animate-in fade-in duration-100">
+                                  <button
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      setActiveMoreLead(null);
+                                      setEditForm({
+                                        name: lead.name,
+                                        phone: lead.phone || "",
+                                        email: lead.email || "",
+                                        county: lead.county,
+                                        state: lead.state,
+                                        landPrice: String(lead.landPrice),
+                                        estimatedBudget: String(lead.estimatedBudget || ""),
+                                        status: lead.status,
+                                        scoreTier: lead.scoreTier,
+                                        source: lead.source,
+                                      });
+                                      setEditError("");
+                                      setEditLead(lead);
+                                    }}
+                                    className="w-full text-left text-xs px-2.5 py-1.5 rounded hover:bg-white/[0.04] text-foreground transition-colors flex items-center gap-1.5"
+                                  >
+                                    <Edit className="size-3" /> Edit Lead
+                                  </button>
+                                  <button
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      setActiveMoreLead(null);
+                                      if (confirm(`Are you sure you want to delete ${lead.firstName}?`)) {
+                                        try {
+                                          await deleteLead({ data: lead.id });
+                                          await router.invalidate();
+                                        } catch (err) {
+                                          console.error("Failed to delete lead", err);
+                                        }
+                                      }
+                                    }}
+                                    className="w-full text-left text-xs px-2.5 py-1.5 rounded hover:bg-danger/10 text-danger font-medium transition-colors"
+                                  >
+                                    Delete Lead
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setActiveMoreLead(null);
+                                      const defaultMsg = `Hi ${lead.firstName}, this is Your Company. We noticed your recent permit application in ${lead.county}. Have you selected a builder yet? Reply YES or NO.`;
+                                      const msg = prompt(`SMS message to ${lead.firstName}:`, defaultMsg);
+                                      if (!msg) return;
+                                      setSmsSending(lead.id);
+                                      setSmsResult(null);
+                                      sendSmsOutreach({ data: { leadId: lead.id, message: msg } })
+                                        .then(r => { setSmsResult({ leadId: lead.id, ok: r.sent }); setTimeout(() => setSmsResult(null), 4000); })
+                                        .catch(() => { setSmsResult({ leadId: lead.id, ok: false }); setTimeout(() => setSmsResult(null), 4000); })
+                                        .finally(() => setSmsSending(null));
+                                    }}
+                                    className="w-full text-left text-xs px-2.5 py-1.5 rounded hover:bg-white/[0.04] text-foreground transition-colors"
+                                  >
+                                    Send SMS
+                                  </button>
+                                  <button
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      setActiveMoreLead(null);
+                                      if (!confirm(`Re-trigger AI intake flow for ${lead.firstName}? This will reset their status to New.`)) return;
+                                      try {
+                                        await retriggerLeadFlow({ data: lead.id });
+                                        setRetriggerResult(true);
+                                        setTimeout(() => setRetriggerResult(null), 3500);
+                                        await router.invalidate();
+                                      } catch (err) {
+                                        console.error(err);
+                                        setRetriggerResult(false);
+                                        setTimeout(() => setRetriggerResult(null), 3500);
+                                      }
+                                    }}
+                                    className="w-full text-left text-xs px-2.5 py-1.5 rounded hover:bg-white/[0.04] text-foreground transition-colors"
+                                  >
+                                    Re-trigger Flow
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {filtered.length === 0 && (
+                    <tr>
+                      <td colSpan={10} className="text-center py-12 text-sm text-muted-foreground font-mono">
+                        No leads match the active filters.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination Controls */}
+            {filtered.length > 0 && (
+              <div className="flex items-center justify-between border-t border-border bg-secondary/30 px-4 py-3">
+                <div className="text-xs text-muted-foreground">
+                  Showing <span className="font-medium text-foreground">{(currentPage - 1) * itemsPerPage + 1}</span> to{" "}
+                  <span className="font-medium text-foreground">{Math.min(currentPage * itemsPerPage, filtered.length)}</span> of{" "}
+                  <span className="font-medium text-foreground">{filtered.length}</span> leads
+                </div>
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="inline-flex items-center justify-center rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(p => Math.min(Math.ceil(filtered.length / itemsPerPage), p + 1))}
+                    disabled={currentPage >= Math.ceil(filtered.length / itemsPerPage)}
+                    className="inline-flex items-center justify-center rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </Card>
 
@@ -1400,6 +1494,294 @@ function Bubble({ side, time, text }: { side: "left" | "right"; time: string; te
       <div className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${side === "right" ? "bg-white/[0.08] text-foreground border border-white/15" : "bg-secondary text-foreground border border-border"}`}>
         <p>{text}</p>
         <p className="text-[10px] text-muted-foreground mt-1 font-mono">{time}</p>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KANBAN / PIPELINE BOARD COMPONENTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+type KanbanBoardProps = {
+  leads: any[];
+  isPrivacyMode: boolean;
+  onSelectLead: (lead: any) => void;
+  onEmailLead: (lead: any) => void;
+  onScheduleLead: (lead: any) => void;
+  onEditLead: (lead: any) => void;
+  onDeleteLead: (lead: any) => void;
+  onSendSms: (lead: any) => void;
+  onRetrigger: (lead: any) => void;
+};
+
+const KANBAN_COLUMNS = [
+  {
+    id: 'new',
+    label: 'New Leads',
+    stages: ['New'],
+    icon: '📥',
+    accent: 'border-t-slate-500',
+    headerBg: 'bg-slate-500/10',
+    headerText: 'text-slate-300',
+    countBg: 'bg-slate-500/20 text-slate-300',
+    dotColor: 'bg-slate-400',
+  },
+  {
+    id: 'outreach',
+    label: 'Outreach Sent',
+    stages: ['Emailed'],
+    icon: '📧',
+    accent: 'border-t-blue-500',
+    headerBg: 'bg-blue-500/10',
+    headerText: 'text-blue-300',
+    countBg: 'bg-blue-500/20 text-blue-300',
+    dotColor: 'bg-blue-400',
+  },
+  {
+    id: 'engaged',
+    label: 'Engaged',
+    stages: ['Opened', 'Replied'],
+    icon: '💬',
+    accent: 'border-t-amber-500',
+    headerBg: 'bg-amber-500/10',
+    headerText: 'text-amber-300',
+    countBg: 'bg-amber-500/20 text-amber-300',
+    dotColor: 'bg-amber-400',
+  },
+  {
+    id: 'qualified',
+    label: 'Qualified (Hot)',
+    stages: [],
+    filterFn: (lead: any) => lead.scoreTier === 'Hot',
+    icon: '⭐',
+    accent: 'border-t-green-500',
+    headerBg: 'bg-green-500/10',
+    headerText: 'text-green-300',
+    countBg: 'bg-green-500/20 text-green-300',
+    dotColor: 'bg-green-400',
+  },
+];
+
+function KanbanBoard(props: KanbanBoardProps) {
+  const { leads, ...rest } = props;
+
+  return (
+    <div className="flex gap-3 h-full px-4 py-4">
+      {KANBAN_COLUMNS.map(col => {
+        const colLeads = col.filterFn
+          ? leads.filter(col.filterFn)
+          : leads.filter(l => col.stages.includes(l.stage));
+        return (
+          <KanbanColumn
+            key={col.id}
+            column={col}
+            leads={colLeads}
+            {...rest}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+type KanbanColumnProps = {
+  column: typeof KANBAN_COLUMNS[0];
+  leads: any[];
+  isPrivacyMode: boolean;
+  onSelectLead: (lead: any) => void;
+  onEmailLead: (lead: any) => void;
+  onScheduleLead: (lead: any) => void;
+  onEditLead: (lead: any) => void;
+  onDeleteLead: (lead: any) => void;
+  onSendSms: (lead: any) => void;
+  onRetrigger: (lead: any) => void;
+};
+
+function KanbanColumn({ column, leads, ...cardProps }: KanbanColumnProps) {
+  return (
+    <div className={`flex flex-col flex-1 min-w-0 rounded-xl border-t-2 ${column.accent} bg-card/60 border border-border overflow-hidden`}>
+      {/* Column Header */}
+      <div className={`px-3 py-2.5 ${column.headerBg} border-b border-border flex items-center justify-between`}>
+        <div className="flex items-center gap-2">
+          <span className="text-base leading-none">{column.icon}</span>
+          <span className={`text-xs font-semibold uppercase tracking-wider ${column.headerText}`}>
+            {column.label}
+          </span>
+        </div>
+        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${column.countBg}`}>
+          {leads.length}
+        </span>
+      </div>
+
+      {/* Cards */}
+      <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar">
+        {leads.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10 text-center">
+            <div className={`size-2 rounded-full ${column.dotColor} mb-2 opacity-40`} />
+            <p className="text-[11px] text-muted-foreground/60 font-mono">No leads here</p>
+          </div>
+        ) : (
+          leads.map(lead => (
+            <LeadKanbanCard
+              key={lead.id}
+              lead={lead}
+              column={column}
+              {...cardProps}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+type LeadKanbanCardProps = {
+  lead: any;
+  column: typeof KANBAN_COLUMNS[0];
+  isPrivacyMode: boolean;
+  onSelectLead: (lead: any) => void;
+  onEmailLead: (lead: any) => void;
+  onScheduleLead: (lead: any) => void;
+  onEditLead: (lead: any) => void;
+  onDeleteLead: (lead: any) => void;
+  onSendSms: (lead: any) => void;
+  onRetrigger: (lead: any) => void;
+};
+
+function LeadKanbanCard({ lead, column, isPrivacyMode, onSelectLead, onEmailLead, onScheduleLead, onEditLead, onDeleteLead, onSendSms, onRetrigger }: LeadKanbanCardProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    if (menuOpen) document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, [menuOpen]);
+
+  const displayName = isPrivacyMode
+    ? obscurePII(`${lead.firstName} ${lead.lastName || ''}`, 'name')
+    : lead.lastName
+      ? `${lead.firstName} ${lead.lastName.split(/\s+/).map((p: string) => p.replace(/[^a-zA-Z]/g, '').charAt(0).toUpperCase()).filter(Boolean).join('. ')}.`
+      : lead.firstName;
+
+  const daysAgo = Math.floor((Date.now() - new Date(lead.createdAt).getTime()) / (1000 * 60 * 60 * 24));
+  const daysLabel = daysAgo === 0 ? 'Today' : daysAgo === 1 ? '1d ago' : `${daysAgo}d ago`;
+
+  const scoreColors: Record<string, string> = {
+    hot: 'text-orange-400 bg-orange-400/10 border-orange-400/20',
+    warm: 'text-yellow-400 bg-yellow-400/10 border-yellow-400/20',
+    cold: 'text-sky-400 bg-sky-400/10 border-sky-400/20',
+  };
+  const scoreColor = scoreColors[lead.score] || scoreColors.cold;
+
+  const aiDot = lead.aiStatus === 'Replied'
+    ? 'bg-green-400'
+    : lead.aiStatus === 'Awaiting'
+    ? 'bg-yellow-400'
+    : 'bg-red-400';
+
+  return (
+    <div
+      onClick={() => onSelectLead(lead)}
+      className="group relative bg-card border border-border rounded-lg p-3 cursor-pointer hover:border-white/20 hover:bg-card/80 transition-all duration-150 animate-in fade-in duration-200"
+    >
+      {/* Top row: name + score badge */}
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-foreground truncate leading-tight">{displayName}</p>
+          <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{lead.city}, {lead.state || 'TX'}</p>
+        </div>
+        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wide shrink-0 ${scoreColor}`}>
+          {lead.scoreTier === 'Hot' ? '🔥' : lead.scoreTier === 'Warm' ? '🌡' : '❄️'} {lead.scoreTier}
+        </span>
+      </div>
+
+      {/* Budget row */}
+      <div className="flex items-center justify-between mb-2.5">
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs font-mono font-bold text-foreground">{lead.budget}</span>
+          <span className="text-[10px] text-muted-foreground">budget</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <span className={`size-1.5 rounded-full ${aiDot}`} />
+          <span className="text-[10px] text-muted-foreground">{lead.aiStatus}</span>
+        </div>
+      </div>
+
+      {/* Divider */}
+      <div className="border-t border-border/50 mb-2" />
+
+      {/* Footer: days ago + action buttons */}
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] text-muted-foreground font-mono">{daysLabel}</span>
+        <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
+          <button
+            onClick={() => onEmailLead(lead)}
+            title="Send Email"
+            className="size-6 rounded hover:bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Mail className="size-3" />
+          </button>
+          <button
+            onClick={() => onScheduleLead(lead)}
+            title="Schedule Appointment"
+            className="size-6 rounded hover:bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Calendar className="size-3" />
+          </button>
+          <button
+            onClick={() => onSelectLead(lead)}
+            title="View Lead Detail"
+            className="size-6 rounded hover:bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Eye className="size-3" />
+          </button>
+
+          {/* More actions menu */}
+          <div className="relative" ref={menuRef}>
+            <button
+              onClick={() => setMenuOpen(p => !p)}
+              title="More Actions"
+              className="size-6 rounded hover:bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <MoreHorizontal className="size-3" />
+            </button>
+            {menuOpen && (
+              <div className="absolute right-0 bottom-7 w-36 rounded-lg bg-card/95 backdrop-blur-xl border border-border p-1 shadow-xl z-50 animate-in fade-in slide-in-from-bottom-2 duration-100">
+                <button
+                  onClick={() => { setMenuOpen(false); onEditLead(lead); }}
+                  className="w-full text-left text-xs px-2.5 py-1.5 rounded hover:bg-white/[0.04] text-foreground transition-colors flex items-center gap-1.5"
+                >
+                  <Edit className="size-3" /> Edit Lead
+                </button>
+                <button
+                  onClick={() => { setMenuOpen(false); onSendSms(lead); }}
+                  className="w-full text-left text-xs px-2.5 py-1.5 rounded hover:bg-white/[0.04] text-foreground transition-colors flex items-center gap-1.5"
+                >
+                  <MessageSquare className="size-3" /> Send SMS
+                </button>
+                <button
+                  onClick={() => { setMenuOpen(false); onRetrigger(lead); }}
+                  className="w-full text-left text-xs px-2.5 py-1.5 rounded hover:bg-white/[0.04] text-foreground transition-colors flex items-center gap-1.5"
+                >
+                  <Zap className="size-3" /> Re-trigger AI
+                </button>
+                <div className="border-t border-border/40 my-1" />
+                <button
+                  onClick={() => { setMenuOpen(false); onDeleteLead(lead); }}
+                  className="w-full text-left text-xs px-2.5 py-1.5 rounded hover:bg-danger/10 text-danger font-medium transition-colors"
+                >
+                  Delete Lead
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

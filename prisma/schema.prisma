@@ -77,6 +77,13 @@ model Lead {
   status          String     // "New", "Emailed", "Opened", "Replied", "Appointment"
   scoreTier       String     // "Hot", "Warm", "Cold"
   source          String     @default("Organic / Local SEO")
+
+  // ─── Hybrid SMS / Portal Fields ─────────────────────────────────────────────
+  portalToken     String?   @unique  // 32-char hex magic link token
+  portalVisitedAt DateTime?           // First time lead opened portal
+  smsUsed         Int       @default(0)   // SMS sent so far
+  smsQuota        Int       @default(20)  // Max SMS allowed (default: 20)
+  lastSmsAt       DateTime?              // When last SMS was sent (for drip scheduling)
   
   activities      Activity[]
   reviewRequests  ReviewRequest[]
@@ -88,6 +95,7 @@ model Lead {
   @@index([builderId])
   @@index([createdAt])
   @@index([builderId, createdAt])
+  @@index([portalToken])
 }
 
 // ─── REVIEW PLATFORMS ────────────────────────────────────────────────────────
@@ -173,6 +181,7 @@ model Message {
   leadId    String
   sender    String   // "lead" | "user" | "system"
   content   String
+  channel   String   @default("portal")  // "portal" | "sms"
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
   
