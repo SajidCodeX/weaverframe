@@ -50,3 +50,18 @@ fix-assignments.ts
 sync-now.ts
 trigger-sync.ts
 dev_server*.log
+
+# Scratch and Testing files
+scratch-*
+test-*
+check-*
+cleanup-*
+*.log
+git_history*.txt
+*.csv
+*.cjs
+sync-now.ts
+trigger-sync.ts
+distribute-leads.ts
+reset-dummy-status.ts
+clear-reviews.ts
