@@ -9,6 +9,10 @@ import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
 // @cloudflare/vite-plugin builds from this — wrangler.jsonc main alone is insufficient.
 export default defineConfig({
+  // Disable the Cloudflare Workers plugin — this app deploys to Vercel (Node.js serverless),
+  // not Cloudflare Workers. Without this, Nitro builds to dist/server/ (Cloudflare format)
+  // instead of .vercel/output/ (Vercel format), causing 404s on all routes.
+  cloudflare: false,
   tanstackStart: {
     server: { 
       preset: process.env.VERCEL ? "vercel" : undefined,
