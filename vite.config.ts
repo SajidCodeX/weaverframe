@@ -10,7 +10,10 @@ import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 // @cloudflare/vite-plugin builds from this — wrangler.jsonc main alone is insufficient.
 export default defineConfig({
   tanstackStart: {
-    server: { entry: "server" },
+    server: { 
+      preset: process.env.VERCEL ? "vercel" : undefined,
+      entry: "server" 
+    },
     serverFns: { disableCsrfMiddlewareWarning: true }
   },
   vite: {
