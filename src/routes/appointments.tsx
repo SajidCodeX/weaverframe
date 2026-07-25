@@ -99,7 +99,7 @@ export const Route = createFileRoute("/appointments")({
     if (typeof window === 'undefined' && !context.session) {
       return { appts: [], leads: [] };
     }
-    const activeRole = typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? localStorage.getItem('active_role') ?? undefined) : undefined;
+    const activeRole = typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? undefined) : undefined;
     const [appts, leads] = await Promise.all([
       getAppointmentsData({ data: { activeRole } }),
       getLeadsData({ data: { activeRole } })
@@ -108,7 +108,7 @@ export const Route = createFileRoute("/appointments")({
   },
   head: () => ({ 
     meta: [
-      { title: "Appointments — Builder's Edge" }, 
+      { title: "Appointments — WeaverFrame" }, 
       { name: "description", content: "Calendar and management of lead appointments." }
     ] 
   }),
@@ -124,7 +124,7 @@ function ApptPage() {
 
   const [view, setView] = useState<"calendar" | "list">("calendar");
   const [appointmentsList, setAppointmentsList] = useState<any[]>(initialAppts);
-  const [currentDate, setCurrentDate] = useState(new Date("2026-05-20")); // Anchor to today's date May 20, 2026 for SSR
+  const [currentDate, setCurrentDate] = useState(() => new Date()); // Defaults to today
   const [todayDate, setTodayDate] = useState<Date | null>(null);
 
   useEffect(() => {
@@ -135,7 +135,7 @@ function ApptPage() {
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [slideDirection, setSlideDirection] = useState<"left" | "right" | "up" | "down" | "">("");
   const [animateKey, setAnimateKey] = useState(0);
-  const [yearPageAnchor, setYearPageAnchor] = useState(2026);
+  const [yearPageAnchor, setYearPageAnchor] = useState(() => new Date().getFullYear());
   const [isTypeDropdownOpen, setIsTypeDropdownOpen] = useState(false);
   
   // Arrow navigation indices

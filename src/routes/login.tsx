@@ -48,8 +48,7 @@ function LoginRoute() {
           Math.random().toString(36).substring(2) + Date.now().toString(36)
         sessionStorage.setItem('tab_id', tabId)
         sessionStorage.setItem('active_role', result.role)
-        localStorage.setItem('active_role', result.role)       // FIX-3: persist across sessions
-        localStorage.setItem(`role_${tabId}`, result.role)
+        localStorage.setItem(`role_${tabId}`, result.role)     // tab-specific cross-session persistence
 
         // Hard navigate so the full SSR cycle restarts cleanly with the new cookie
         if (result.forcePasswordReset) {
@@ -86,7 +85,7 @@ function LoginRoute() {
               <path d="M2 12L12 17L22 12" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </div>
-          <span className="text-xl font-bold tracking-tight text-white">Builder's Edge</span>
+          <span className="text-xl font-bold tracking-tight text-white">WeaverFrame</span>
         </div>
         <h2 className="mt-6 text-center text-3xl font-bold tracking-tight text-white">
           Sign in to your account

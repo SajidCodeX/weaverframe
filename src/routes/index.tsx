@@ -20,7 +20,7 @@ import { obscurePII } from "@/lib/utils";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Overview — Builder's Edge" },
+      { title: "Overview — WeaverFrame" },
       { name: "description", content: "Platform overview." },
     ],
   }),
@@ -33,7 +33,7 @@ export const Route = createFileRoute("/")({
     }
     // Pass activeRole so the server function knows which cookie to use
     const activeRole = typeof window !== 'undefined' 
-      ? (sessionStorage.getItem('active_role') ?? localStorage.getItem('active_role') ?? undefined)
+      ? (sessionStorage.getItem('active_role') ?? undefined)
       : undefined;
       
     return await getDashboardData({ data: { activeRole } });
@@ -229,9 +229,9 @@ function Overview() {
             title="Lead Activity"
             subtitle="Latest events across your pipeline"
             action={
-              <a className="text-xs text-muted-foreground hover:text-foreground transition-colors" href="/leads">
+              <Link className="text-xs text-muted-foreground hover:text-foreground transition-colors" to="/leads">
                 View all →
-              </a>
+              </Link>
             }
           />
           <div

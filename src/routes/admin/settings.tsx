@@ -22,7 +22,7 @@ export const Route = createFileRoute("/admin/settings")({
   },
   head: () => ({
     meta: [
-      { title: "Platform Settings — Builder's Edge Admin" },
+      { title: "Platform Settings — WeaverFrame Admin" },
     ],
   }),
   component: AdminSettingsRoute,

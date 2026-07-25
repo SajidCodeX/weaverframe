@@ -4,10 +4,18 @@ import { FileText, FileSpreadsheet, Mail } from "lucide-react";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Shell } from "@/components/dashboard/Shell";
 import { Card, CardHeader } from "@/components/dashboard/primitives";
-import { getReportsData, exportLeadsToCsv } from "@/lib/dashboard";
+import { getReportsData, exportLeadsToCsv, getBuilderProfile } from "@/lib/dashboard";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/reports")({
+  beforeLoad: async ({ context }) => {
+    if (typeof window === 'undefined') return
+    const session = (context as any).session
+    if (session && session.role === 'builder' && session.builderRole === 'sales') {
+      const { redirect } = await import('@tanstack/react-router')
+      throw redirect({ to: '/' })
+    }
+  },
   loader: async ({ context }) => {
     if (typeof window === 'undefined' && !context.session) {
       return {
@@ -21,10 +29,10 @@ export const Route = createFileRoute("/reports")({
         allActivities: []
       };
     }
-    const activeRole = typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? localStorage.getItem('active_role') ?? undefined) : undefined;
+    const activeRole = typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? undefined) : undefined;
     return await getReportsData({ data: { activeRole } });
   },
-  head: () => ({ meta: [{ title: "Reports — Builder's Edge" }, { name: "description", content: "Monthly ROI and performance reports." }] }),
+  head: () => ({ meta: [{ title: "Reports — WeaverFrame" }, { name: "description", content: "Monthly ROI and performance reports." }] }),
   component: ReportsPage,
 });
 
@@ -109,6 +117,14 @@ function ReportsPage() {
   const [customRange, setCustomRange] = useState<{ start: Date; end: Date; label: string } | null>(initialState.customRange);
   const [isExporting, setIsExporting] = useState(false);
   const [isEmailing, setIsEmailing] = useState(false);
+  const [companyName, setCompanyName] = useState("Your Company");
+
+  useEffect(() => {
+    const activeRole = typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? undefined) : undefined;
+    getBuilderProfile({ data: { activeRole } }).then(p => {
+      if (p?.companyName) setCompanyName(p.companyName);
+    }).catch(() => {});
+  }, []);
 
   // Listen to Global Date Range picker changes from TopBar
   useEffect(() => {
@@ -262,7 +278,7 @@ function ReportsPage() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.setAttribute("href", url);
-      link.setAttribute("download", `horizon_homes_leads_${new Date().toISOString().split('T')[0]}.csv`);
+      link.setAttribute("download", `${companyName.toLowerCase().replace(/\s+/g, '_')}_leads_${new Date().toISOString().split('T')[0]}.csv`);
       link.style.visibility = 'hidden';
       document.body.appendChild(link);
       link.click();
@@ -386,7 +402,7 @@ function ReportsPage() {
       <div className="hidden print:block mb-6 border-b border-gray-200 pb-4">
         <div className="flex justify-between items-end">
           <div>
-            <h1 className="text-2xl font-bold text-black font-sans tracking-tight">Your Company</h1>
+            <h1 className="text-2xl font-bold text-black font-sans tracking-tight">{companyName}</h1>
             <p className="text-xs text-gray-500 font-sans mt-0.5">B2B Reputation & Lead Quality Performance Report</p>
           </div>
           <div className="text-right">
@@ -498,7 +514,7 @@ function ReportsPage() {
         <ExportButton 
           icon={<FileText className="size-4" />} 
           label="Download PDF Report" 
-          sub="Branded for Your Company" 
+          sub={`Branded for ${companyName}`} 
           onClick={() => window.print()}
         />
         <ExportButton 

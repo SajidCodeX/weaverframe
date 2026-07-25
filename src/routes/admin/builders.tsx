@@ -8,7 +8,7 @@ import { MoreHorizontal } from 'lucide-react'
 
 export const Route = createFileRoute('/admin/builders')({
   head: () => ({
-    meta: [{ title: "Manage Builders — Builder's Edge Admin" }]
+    meta: [{ title: "Manage Builders — WeaverFrame Admin" }]
   }),
   beforeLoad: async ({ context }) => {
     if (typeof window === 'undefined') return;

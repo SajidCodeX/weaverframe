@@ -22,7 +22,22 @@ export const loginFn = createServerFn({ method: 'POST' })
   .inputValidator((data: { email: string; password: string }) => data)
   .handler(async ({ data }) => {
     const { handleLogin } = await import('./server-utils.server')
-    return handleLogin(data)
+
+    // Extract client IP from request headers for rate limiting.
+    // TanStack Start exposes getRequestHeader() in server fn context.
+    let ip = 'unknown'
+    try {
+      const { getRequestHeader } = await import('@tanstack/react-start/server')
+      ip =
+        getRequestHeader('cf-connecting-ip') ??        // Cloudflare
+        getRequestHeader('x-forwarded-for')?.split(',')[0].trim() ?? // Reverse proxy
+        getRequestHeader('x-real-ip') ??               // Nginx
+        'unknown'
+    } catch {
+      // Outside request context — use fallback
+    }
+
+    return handleLogin({ ...data, ip })
   })
 
 export const getSessionFn = createServerFn({ method: 'POST' })

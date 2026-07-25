@@ -18,7 +18,7 @@ export const Route = createFileRoute("/admin/users")({
   },
   head: () => ({
     meta: [
-      { title: "Global Users — Builder's Edge Admin" },
+      { title: "Global Users — WeaverFrame Admin" },
     ],
   }),
   component: GlobalUsersRoute,

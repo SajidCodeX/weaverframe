@@ -1,6 +1,115 @@
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
 import { getDb } from './db'
+
+// ─── Login Rate Limiter (In-Memory) ──────────────────────────────────────────
+// Tracks failed login attempts per key (email + IP).
+// After 10 failures, the key is locked for 15 minutes.
+// NOTE: This resets on server restart. For production at scale, replace with
+// a persistent store (e.g. Upstash Redis). For single-instance deployments
+// this provides solid brute-force protection.
+
+const LOGIN_MAX_ATTEMPTS = 10
+const LOGIN_LOCKOUT_MS = 15 * 60 * 1000 // 15 minutes
+
+interface LoginAttemptRecord {
+  count: number
+  firstAttemptAt: number
+  lockedUntil?: number
+}
+
+// Key format: "email:ip" — dual-keyed to prevent both email enumeration & IP attacks
+const loginAttemptStore = new Map<string, LoginAttemptRecord>()
+
+// Periodic cleanup every 30 minutes — prevents unbounded memory growth
+setInterval(() => {
+  const now = Date.now()
+  for (const [key, record] of loginAttemptStore.entries()) {
+    // Remove entries that are past their lockout window or have expired
+    const expiry = record.lockedUntil ?? (record.firstAttemptAt + LOGIN_LOCKOUT_MS)
+    if (now > expiry) {
+      loginAttemptStore.delete(key)
+    }
+  }
+}, 30 * 60 * 1000)
+
+function getRateLimitKey(email: string, ip: string): string {
+  return `${email.toLowerCase().trim()}:${ip}`
+}
+
+function checkLoginRateLimit(email: string, ip: string): void {
+  const key = getRateLimitKey(email, ip)
+  const now = Date.now()
+  const record = loginAttemptStore.get(key)
+
+  if (!record) return // No previous failures — allow
+
+  // If locked, check if lockout window has expired
+  if (record.lockedUntil) {
+    if (now < record.lockedUntil) {
+      const remainingMs = record.lockedUntil - now
+      const remainingMins = Math.ceil(remainingMs / 60000)
+      throw new Error(
+        `Too many failed login attempts. Your account access has been temporarily locked. ` +
+        `Please try again in ${remainingMins} minute${remainingMins !== 1 ? 's' : ''}.`
+      )
+    } else {
+      // Lockout expired — reset and allow
+      loginAttemptStore.delete(key)
+      return
+    }
+  }
+
+  // Not locked yet — check if window has expired naturally
+  if (now - record.firstAttemptAt > LOGIN_LOCKOUT_MS) {
+    loginAttemptStore.delete(key)
+    return // Window expired — treat as fresh start
+  }
+}
+
+function recordFailedLogin(email: string, ip: string): void {
+  const key = getRateLimitKey(email, ip)
+  const now = Date.now()
+  const record = loginAttemptStore.get(key)
+
+  if (!record) {
+    loginAttemptStore.set(key, { count: 1, firstAttemptAt: now })
+    return
+  }
+
+  // Reset if window has naturally expired
+  if (now - record.firstAttemptAt > LOGIN_LOCKOUT_MS) {
+    loginAttemptStore.set(key, { count: 1, firstAttemptAt: now })
+    return
+  }
+
+  record.count++
+
+  if (record.count >= LOGIN_MAX_ATTEMPTS) {
+    record.lockedUntil = now + LOGIN_LOCKOUT_MS
+    loginAttemptStore.set(key, record)
+    throw new Error(
+      `Too many failed login attempts (${LOGIN_MAX_ATTEMPTS} attempts). ` +
+      `Your account access has been locked for 15 minutes for security. ` +
+      `If this wasn't you, please contact support.`
+    )
+  }
+
+  const remaining = LOGIN_MAX_ATTEMPTS - record.count
+  loginAttemptStore.set(key, record)
+
+  // Surface warning when getting close to lockout
+  if (remaining <= 3) {
+    throw new Error(
+      `Invalid email or password. Warning: ${remaining} attempt${remaining !== 1 ? 's' : ''} remaining before your access is temporarily locked.`
+    )
+  }
+}
+
+function clearLoginAttempts(email: string, ip: string): void {
+  loginAttemptStore.delete(getRateLimitKey(email, ip))
+}
+
 // ─── HMAC Invite Link Signing ────────────────────────────────────────
 // Every public review invite link is signed with HMAC-SHA256 using the
 // JWT_SECRET so the /api/rate endpoint can cryptographically verify the
@@ -82,8 +191,34 @@ export const getSessionFromCookie = async (
   }
   
   if (!resolvedRole) {
-    // If still not resolved, check the active_role cookie (available during SSR)
-    resolvedRole = getCookie('active_role')
+    // If still not resolved, use the request URL path to determine role.
+    // active_role cookie is intentionally NOT used here — it is shared across
+    // all browser tabs, so using it would cause cross-tab role contamination
+    // on hard refresh (Tab 1: admin, Tab 2: builder — one overwrites the other).
+    // URL path is a reliable, per-request signal:
+    //   /admin/* → admin role
+    //   everything else → builder role
+    try {
+      const clientPath = getRequestHeader('x-client-path') ?? undefined
+      if (clientPath) {
+        resolvedRole = clientPath.startsWith('/admin') ? 'admin' : 'builder'
+      }
+    } catch {
+      // x-client-path not available (hard refresh — browser navigation, not fetch)
+    }
+  }
+
+  if (!resolvedRole) {
+    // Last resort for hard refresh: read the request URL from the server context
+    try {
+      const { getRequestUrl } = await import('@tanstack/react-start/server')
+      const url = getRequestUrl()
+      if (url) {
+        resolvedRole = new URL(url).pathname.startsWith('/admin') ? 'admin' : 'builder'
+      }
+    } catch {
+      // Not in a request context
+    }
   }
 
   // Role-specific cookie read: if activeRole/resolvedRole is resolved, strictly read that cookie
@@ -142,12 +277,50 @@ export const requireAuth = async (activeRole?: string): Promise<AuthSession> => 
   if (session.role !== 'admin' && (await isMaintenanceModeEnabled())) {
     throw new Error('MAINTENANCE_MODE')
   }
+
+  // Instant Session Invalidation: Validate user exists in DB & is active
+  if (session.role === 'builder' && session.userId) {
+    const db = await getDb()
+    const user = await db.user.findUnique({
+      where: { id: session.userId },
+      select: { id: true, isActive: true, builderRole: true }
+    })
+    if (!user || user.isActive === false) {
+      throw new Error('UNAUTHORIZED')
+    }
+    session.builderRole = (user.builderRole || 'sales') as any
+  }
+
   return session
 }
 
 export const requireAdmin = async (): Promise<AuthSession> => {
   const session = await requireAuth()
   if (session.role !== 'admin') throw new Error('FORBIDDEN')
+  return session
+}
+
+export const requireOwner = async (activeRole?: string): Promise<AuthSession> => {
+  const session = await requireAuth(activeRole)
+  if (session.role === 'builder' && session.builderRole !== 'owner') {
+    throw new Error('FORBIDDEN')
+  }
+  return session
+}
+
+export const requireAdminOrOwner = async (activeRole?: string): Promise<AuthSession> => {
+  const session = await requireAuth(activeRole)
+  if (session.role === 'builder' && session.builderRole !== 'owner' && session.builderRole !== 'admin') {
+    throw new Error('FORBIDDEN')
+  }
+  return session
+}
+
+export const requireManagerOrAbove = async (activeRole?: string): Promise<AuthSession> => {
+  const session = await requireAuth(activeRole)
+  if (session.role === 'builder' && session.builderRole === 'sales') {
+    throw new Error('FORBIDDEN')
+  }
   return session
 }
 
@@ -170,14 +343,11 @@ export const setAuthCookie = async (payload: AuthSession): Promise<void> => {
     path: '/',
   })
 
-  // Set a non-httpOnly cookie for active_role so the server knows the primary context during SSR
-  setCookie('active_role', payload.role, {
-    httpOnly: false,
-    secure: isProduction,
-    sameSite: 'lax',
-    maxAge: 604800,
-    path: '/',
-  })
+  // NOTE: We intentionally do NOT set an active_role cookie.
+  // Using a shared active_role cookie caused cross-tab role contamination:
+  // admin (Tab 1) + builder (Tab 2) login would overwrite each other's cookie,
+  // and the wrong role would load on hard refresh.
+  // Role is now determined server-side from the request URL path instead.
 }
 
 export const clearAuthCookie = async (): Promise<void> => {
@@ -255,23 +425,44 @@ export const getTenantDb = async (preResolvedSession?: AuthSession) => {
 
 // ─── Login / Invite Handlers ─────────────────────────────────────────────────
 
-export const handleLogin = async (data: { email: string; password: string }) => {
+export const handleLogin = async (data: { email: string; password: string; ip?: string }) => {
   const db = await getDb()
+  const ip = data.ip ?? 'unknown'
+
+  // ── Rate Limit Check ─────────────────────────────────────────────────────────
+  // Throws if email:ip is currently locked out. Must run BEFORE any DB lookup
+  // to prevent timing-based user enumeration via DB query timing differences.
+  checkLoginRateLimit(data.email, ip)
 
   const user = await db.user.findUnique({ 
     where: { email: data.email },
     include: { builder: true }
   })
-  if (!user || user.deletedAt) throw new Error('Invalid email or password')
+
+  // Treat missing user same as wrong password (no user enumeration)
+  if (!user || user.deletedAt) {
+    recordFailedLogin(data.email, ip)
+    throw new Error('Invalid email or password')
+  }
+
   if (!user.isActive) throw new Error('Your account has been blocked by the admin.')
   if (user.builder && (!user.builder.isActive || user.builder.deletedAt)) {
     throw new Error('Your company account has been suspended or deleted. Please contact support.')
   }
+
   const isValid = await bcrypt.compare(data.password, user.passwordHash)
-  if (!isValid) throw new Error('Invalid email or password')
+  if (!isValid) {
+    // Record failed attempt — throws with warning/lockout error if threshold hit
+    recordFailedLogin(data.email, ip)
+    throw new Error('Invalid email or password')
+  }
+
   if (user.role !== 'admin' && (await isMaintenanceModeEnabled())) {
     throw new Error('Platform is currently in maintenance mode. Please try again later.')
   }
+
+  // ── Success: clear any accumulated failed attempts ────────────────────────
+  clearLoginAttempts(data.email, ip)
 
   await db.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } })
 

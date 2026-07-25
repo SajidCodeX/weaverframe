@@ -19,16 +19,19 @@ import {
   Smartphone,
   MessageCircle,
   Search,
-  ChevronDown
+  ChevronDown,
+  Trash2,
+  Globe,
+  X
 } from "lucide-react";
-import { getReviewsData, sendReviewRequest, submitClientReview, getLeadsData, getPublicReviews, replyToReview } from "@/lib/dashboard";
+import { getReviewsData, sendReviewRequest, submitClientReview, getLeadsData, getPublicReviews, replyToReview, connectReviewPlatform, disconnectReviewPlatform } from "@/lib/dashboard";
 
 export const Route = createFileRoute("/reviews")({
   loader: async ({ context }) => {
     if (typeof window === 'undefined' && !context.session) {
       return { platforms: [], requests: [], leads: [], publicReviews: [] };
     }
-    const activeRole = typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? localStorage.getItem('active_role') ?? undefined) : undefined;
+    const activeRole = typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? undefined) : undefined;
     const reviews = await getReviewsData({ data: { activeRole } });
     // Also load leads so builder can select a completed project to ask reviews for
     const leads = await getLeadsData({ data: { activeRole } });
@@ -38,7 +41,7 @@ export const Route = createFileRoute("/reviews")({
   staleTime: 5000,
   head: () => ({ 
     meta: [
-      { title: "Reputation & Reviews — Builder's Edge" }, 
+      { title: "Reputation & Reviews — WeaverFrame" }, 
       { name: "description", content: "Local SEO & 5-Star Trust Manager for custom home builders." }
     ] 
   }),
@@ -48,6 +51,9 @@ export const Route = createFileRoute("/reviews")({
 function ReviewsPage() {
   const { platforms = [], requests = [], leads = [], publicReviews: loadedPublicReviews = [] } = useLoaderData({ from: '/reviews' }) || {};
   const router = useRouter();
+  const routeContext = (Route as any).useRouteContext ? (Route as any).useRouteContext() : {};
+  const session = routeContext?.session;
+  const isSalesAgent = session?.role === 'builder' && session?.builderRole === 'sales';
 
   // Create request form state
   const [clientName, setClientName] = useState("");
@@ -56,6 +62,12 @@ function ReviewsPage() {
   const [selectedLeadId, setSelectedLeadId] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [sendSuccess, setSendSuccess] = useState(false);
+
+  // Connect platform modal state
+  const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
+  const [connectPlatformName, setConnectPlatformName] = useState("Google Business Reviews");
+  const [connectProfileUrl, setConnectProfileUrl] = useState("");
+  const [isConnecting, setIsConnecting] = useState(false);
 
   // Selected private feedback viewer state
   const [activeFeedbackRequest, setActiveFeedbackRequest] = useState<any>(null);
@@ -100,6 +112,7 @@ function ReviewsPage() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         setIsFilterDropdownOpen(false);
+        setIsConnectModalOpen(false);
         setActiveFeedbackRequest(null);
         setSimulatingInviteId(null);
         setSelectedReviewId("");
@@ -111,6 +124,38 @@ function ReviewsPage() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
+
+  const handleConnectPlatform = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!connectPlatformName) return;
+    setIsConnecting(true);
+    try {
+      await connectReviewPlatform({
+        data: {
+          name: connectPlatformName,
+          profileUrl: connectProfileUrl || "https://google.com"
+        }
+      });
+      setIsConnectModalOpen(false);
+      setConnectProfileUrl("");
+      await router.invalidate();
+    } catch (err) {
+      console.error("Failed to connect platform:", err);
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
+  const handleDisconnectPlatform = async (id: string) => {
+    if (confirm("Are you sure you want to disconnect this platform block?")) {
+      try {
+        await disconnectReviewPlatform({ data: id });
+        await router.invalidate();
+      } catch (err) {
+        console.error("Failed to disconnect platform:", err);
+      }
+    }
+  };
 
 
   const handleSendRequest = async (e: React.FormEvent) => {
@@ -218,7 +263,6 @@ function ReviewsPage() {
   // Stats Calculations
   const {
     totalReviews,
-    totalGoal,
     averageRating,
     negativeSafeguarded,
     positivePublished,
@@ -228,10 +272,9 @@ function ReviewsPage() {
     feedbackItems,
   } = useMemo(() => {
     const totalRev = (platforms || []).reduce((sum: number, p: any) => sum + (p.reviewCount || 0), 0);
-    const totalGl = (platforms || []).reduce((sum: number, p: any) => sum + (p.reviewsGoal || 0), 0);
     const avgRating = totalRev > 0 ? parseFloat(
-      ((platforms || []).reduce((sum: number, p: any) => sum + ((p.rating || 0) * (p.reviewCount || 0)), 0) / totalRev).toFixed(2)
-    ) : 4.88;
+      ((platforms || []).reduce((sum: number, p: any) => sum + ((p.rating || 5.0) * (p.reviewCount || 0)), 0) / totalRev).toFixed(2)
+    ) : 5.0;
 
     const negSafeguarded = (requests || []).filter((r: any) => r.status === "Feedback").length;
     const posPublished = (requests || []).filter((r: any) => r.status === "Completed").length;
@@ -246,7 +289,6 @@ function ReviewsPage() {
 
     return {
       totalReviews: totalRev,
-      totalGoal: totalGl,
       averageRating: avgRating,
       negativeSafeguarded: negSafeguarded,
       positivePublished: posPublished,
@@ -280,8 +322,8 @@ function ReviewsPage() {
 
         <Card className="p-6 flex items-center justify-between">
           <div>
-            <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Total Reviews / Goal</div>
-            <div className="text-2xl font-bold font-display text-foreground mt-1">{totalReviews} <span className="text-sm font-medium text-muted-foreground">/ {totalGoal}</span></div>
+            <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Total Collected Reviews</div>
+            <div className="text-2xl font-bold font-display text-foreground mt-1">{totalReviews} <span className="text-xs font-medium text-muted-foreground font-mono">reviews</span></div>
           </div>
           <div className="size-10 bg-primary/10 rounded-lg flex items-center justify-center text-primary">
             <Star className="size-5 fill-current" />
@@ -313,52 +355,104 @@ function ReviewsPage() {
       <Card className="p-6 mb-6">
         <div className="flex items-center justify-between mb-5">
           <div>
-            <h3 className="text-sm font-semibold text-foreground">Local SEO & Reputation Directory Targets</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">Automated campaigns will direct happy clients to these platforms.</p>
+            <h3 className="text-sm font-semibold text-foreground">Connected Review Platforms & Directories</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Individual platform blocks. Connect platforms like Google, Houzz, or Facebook to route positive 5-star reviews.
+            </p>
           </div>
-          <span className="text-[10px] uppercase font-mono tracking-widest text-[#0A84FF] bg-[#0A84FF]/10 px-2 py-0.5 rounded">Active Routing</span>
+          <button
+            onClick={() => setIsConnectModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-sm"
+          >
+            <Plus className="size-3.5" /> Connect Platform
+          </button>
         </div>
 
-        <div className="grid grid-cols-3 gap-5">
-          {platforms.map((p: any) => {
-            const percentage = Math.min(Math.round((p.reviewCount / p.reviewsGoal) * 100), 100);
-            return (
-              <div key={p.id} className="border border-border/80 rounded-lg p-5 bg-secondary/30 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs font-bold text-foreground">{p.name}</span>
-                    <a 
-                      href={p.profileUrl} 
-                      target="_blank" 
-                      rel="noreferrer"
-                      className="size-6 rounded hover:bg-white/[0.08] text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors"
-                    >
-                      <ExternalLink className="size-3.5" />
-                    </a>
-                  </div>
-                  
-                  <div className="flex items-baseline gap-1 mt-1">
-                    <span className="text-xl font-bold font-display text-foreground">{p.rating}</span>
-                    <span className="text-[10px] text-muted-foreground font-mono">/5.0 ({p.reviewCount} reviews)</span>
-                  </div>
-                </div>
+        {platforms.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {platforms.map((p: any) => {
+              const isGoogle = p.name.toLowerCase().includes("google");
+              const isHouzz = p.name.toLowerCase().includes("houzz");
+              const isFB = p.name.toLowerCase().includes("facebook");
+              
+              const platformColor = isGoogle 
+                ? "border-amber-500/20 bg-amber-500/[0.03]" 
+                : isHouzz 
+                  ? "border-emerald-500/20 bg-emerald-500/[0.03]" 
+                  : isFB 
+                    ? "border-blue-500/20 bg-blue-500/[0.03]" 
+                    : "border-border/80 bg-secondary/30";
 
-                <div className="mt-5 pt-4 border-t border-border/40">
-                  <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground mb-1.5">
-                    <span>Goal: {p.reviewsGoal}</span>
-                    <span>{percentage}%</span>
-                  </div>
-                  <div className="h-1.5 w-full bg-border rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-primary transition-all duration-500" 
-                      style={{ width: `${percentage}%` }}
-                    />
+              const badgeLetter = isGoogle ? "G" : isHouzz ? "H" : isFB ? "f" : "★";
+              const badgeBg = isGoogle ? "bg-amber-500/10 text-amber-400 border-amber-500/30" : isHouzz ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" : isFB ? "bg-blue-500/10 text-blue-400 border-blue-500/30" : "bg-primary/10 text-primary border-primary/30";
+
+              return (
+                <div key={p.id} className={`border rounded-xl p-5 flex flex-col justify-between transition-all duration-200 hover:border-white/20 ${platformColor}`}>
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className={`size-8 rounded-lg border font-bold text-sm flex items-center justify-center font-display ${badgeBg}`}>
+                          {badgeLetter}
+                        </div>
+                        <div>
+                          <span className="text-xs font-bold text-foreground block">{p.name}</span>
+                          <span className="inline-flex items-center gap-1 text-[10px] text-success font-medium">
+                            <span className="size-1.5 rounded-full bg-success animate-pulse" /> Connected
+                          </span>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-1.5">
+                        <a 
+                          href={p.profileUrl} 
+                          target="_blank" 
+                          rel="noreferrer"
+                          title="Open Profile Page"
+                          className="size-7 rounded-md hover:bg-white/[0.08] text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors border border-border/50"
+                        >
+                          <ExternalLink className="size-3.5" />
+                        </a>
+                        <button
+                          onClick={() => handleDisconnectPlatform(p.id)}
+                          title="Disconnect Platform"
+                          className="size-7 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive flex items-center justify-center transition-colors border border-border/50"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-baseline justify-between mt-4 pt-3 border-t border-border/30">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xl font-bold font-display text-foreground">{p.rating ? p.rating.toFixed(1) : "5.0"}</span>
+                        <div className="flex gap-0.5 text-warning shrink-0">
+                          {[1, 2, 3, 4, 5].map((s) => (
+                            <Star key={s} className="size-3 fill-current text-amber-400" />
+                          ))}
+                        </div>
+                      </div>
+                      <span className="text-xs text-muted-foreground font-mono font-medium">{p.reviewCount || 0} reviews</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="text-center py-10 border border-dashed border-border rounded-xl bg-secondary/10">
+            <Globe className="size-8 text-muted-foreground mx-auto mb-2 opacity-50" />
+            <h4 className="text-xs font-semibold text-foreground">No Review Platforms Connected Yet</h4>
+            <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
+              Click "+ Connect Platform" to add your Google Business Profile, Houzz, or Facebook Review page.
+            </p>
+            <button
+              onClick={() => setIsConnectModalOpen(true)}
+              className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors"
+            >
+              <Plus className="size-3.5" /> Connect First Platform
+            </button>
+          </div>
+        )}
       </Card>
       {/* AI Review Responder & Local SEO Rank Optimizer - Full Width */}
       <Card className="p-6 mb-6 relative overflow-hidden border border-primary/20 bg-card">
@@ -658,7 +752,12 @@ function ReviewsPage() {
               Manually request feedback from custom home buyers. The system automatically triggers the gatekeeper layout.
             </p>
 
-            <form onSubmit={handleSendRequest} className="space-y-5">
+            {isSalesAgent ? (
+              <div className="py-12 text-center text-xs text-muted-foreground border border-dashed border-border/60 rounded-lg bg-secondary/10 font-mono">
+                Review invitation requests can only be sent by Account Owners & Managers.
+              </div>
+            ) : (
+              <form onSubmit={handleSendRequest} className="space-y-5">
               <div>
                 <label className="block text-[10px] text-muted-foreground mb-1.5 uppercase tracking-widest font-semibold">Select Lead Project (Optional)</label>
                 <select
@@ -736,20 +835,23 @@ function ReviewsPage() {
 
               <button
                 type="submit"
-                disabled={isSending || !clientName}
-                className="w-full bg-primary text-primary-foreground font-semibold text-xs py-2.5 rounded hover:bg-primary/90 transition-all duration-150 inline-flex items-center justify-center gap-1.5 disabled:opacity-50"
+                disabled={isSending}
+                className="w-full py-2.5 bg-primary text-primary-foreground text-xs font-semibold rounded-md hover:bg-primary/90 transition-all duration-150 flex items-center justify-center gap-2 shadow-sm disabled:opacity-50"
               >
                 {isSending ? (
                   <>
-                    <Loader2 className="size-3.5 animate-spin" /> Sending...
+                    <Loader2 className="size-3.5 animate-spin" />
+                    Dispatching Review Request...
                   </>
                 ) : (
                   <>
-                    <Send className="size-3.5" /> Trigger Automation
+                    <Send className="size-3.5" />
+                    Dispatch Customer Review Invitation
                   </>
                 )}
               </button>
             </form>
+            )}
           </div>
 
           <div className="border-t border-border/40 pt-5 mt-6">
@@ -851,7 +953,7 @@ function ReviewsPage() {
           </div>
 
           <div className="border-t border-border/40 pt-5 mt-6 text-center text-[10px] text-muted-foreground font-mono leading-relaxed">
-            <p className="text-sm font-medium">All private submissions are fully gated. They are strictly visible inside the Builder's Edge dashboard.</p>
+            <p className="text-sm font-medium">All private submissions are fully gated. They are strictly visible inside the WeaverFrame dashboard.</p>
           </div>
         </Card>
       </div>
@@ -973,6 +1075,77 @@ function ReviewsPage() {
           </table>
         </div>
       </Card>
+
+      {/* ── Connect Review Platform Modal ── */}
+      {isConnectModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-2xl relative animate-in zoom-in-95 duration-150">
+            <button
+              onClick={() => setIsConnectModalOpen(false)}
+              className="absolute top-4 right-4 text-muted-foreground hover:text-foreground"
+            >
+              <X className="size-4" />
+            </button>
+
+            <h3 className="text-base font-bold text-foreground mb-1">Connect Review Platform</h3>
+            <p className="text-xs text-muted-foreground mb-4">
+              Add a new platform block to collect, monitor, and route 5-star customer reviews.
+            </p>
+
+            <form onSubmit={handleConnectPlatform} className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Platform Name</label>
+                <select
+                  value={connectPlatformName}
+                  onChange={(e) => setConnectPlatformName(e.target.value)}
+                  className="w-full bg-[#0a0a0a] border border-border rounded-md px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary"
+                >
+                  <option value="Google Business Reviews">Google Business Reviews</option>
+                  <option value="Houzz Reviews">Houzz Reviews</option>
+                  <option value="Facebook Reviews">Facebook Reviews</option>
+                  <option value="GuildQuality">GuildQuality</option>
+                  <option value="Yelp Reviews">Yelp Reviews</option>
+                  <option value="Custom Review Link">Custom Review Link</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Profile URL / Review Link</label>
+                <input
+                  type="url"
+                  placeholder="https://g.page/r/your-google-profile"
+                  value={connectProfileUrl}
+                  onChange={(e) => setConnectProfileUrl(e.target.value)}
+                  className="w-full bg-[#0a0a0a] border border-border rounded-md px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/40">
+                <button
+                  type="button"
+                  onClick={() => setIsConnectModalOpen(false)}
+                  className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isConnecting}
+                  className="px-4 py-1.5 bg-primary text-primary-foreground text-xs font-medium rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {isConnecting ? (
+                    <>
+                      <Loader2 className="size-3.5 animate-spin" /> Connecting...
+                    </>
+                  ) : (
+                    "Connect Platform"
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </Shell>
   );
 }

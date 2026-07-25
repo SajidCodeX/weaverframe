@@ -24,6 +24,14 @@ import { Loader2, Check, X, AlertCircle, Download } from "lucide-react";
 import { jsPDF } from "jspdf";
 
 export const Route = createFileRoute("/settings")({
+  beforeLoad: async ({ context }) => {
+    if (typeof window === 'undefined') return
+    const session = (context as any).session
+    if (session && session.role === 'builder' && (session.builderRole === 'manager' || session.builderRole === 'sales')) {
+      const { redirect } = await import('@tanstack/react-router')
+      throw redirect({ to: '/' })
+    }
+  },
   loader: async () => {
     // FIX-6: SSR bypass — mirrors the pattern used in index.tsx and admin routes.
     // Without this, the server runs requireAuth() during SSR without the client's
@@ -42,7 +50,7 @@ export const Route = createFileRoute("/settings")({
       };
     }
 
-    const activeRole = typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? localStorage.getItem('active_role') ?? undefined) : undefined;
+    const activeRole = typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? undefined) : undefined;
     const [integrationsStatus, builderProfile, qualRules, notifSettings, webhookUrl, billingProfile] = await Promise.all([
       getIntegrationsStatus(),
       getBuilderProfile({ data: { activeRole } }),
@@ -60,7 +68,7 @@ export const Route = createFileRoute("/settings")({
       billingProfile: billingProfile || { adSpendBalance: 0, paymentMethod: "None", plan: "trial" },
     };
   },
-  head: () => ({ meta: [{ title: "Settings — Builder's Edge" }, { name: "description", content: "Configure your account, qualification rules, and integrations." }] }),
+  head: () => ({ meta: [{ title: "Settings — WeaverFrame" }, { name: "description", content: "Configure your account, qualification rules, and integrations." }] }),
   component: SettingsPage,
 });
 
@@ -70,6 +78,10 @@ function SettingsPage() {
   const loaderData = useLoaderData({ from: "/settings" }) || {};
   const { integrationsStatus: loadedStatuses = {}, builderProfile: loadedProfile = {}, qualRules: loadedQualRules = {}, notifSettings: loadedNotif = {}, webhookUrl: loadedWebhookUrl = '', billingProfile: loadedBillingProfile = { adSpendBalance: 0, paymentMethod: "None", plan: "trial" } } = loaderData as any;
   const router = useRouter();
+  const routeContext = (Route as any).useRouteContext ? (Route as any).useRouteContext() : {};
+  const session = routeContext?.session;
+  const isOwner = session?.role === 'admin' || session?.builderRole === 'owner';
+  const availableSections = isOwner ? sections : sections.filter(s => s !== "Integrations" && s !== "Billing");
 
   // FIX-6: Hydration invalidation — if the SSR placeholder was served, trigger a
   // client-side refetch immediately after hydration to load the real settings data.
@@ -96,23 +108,13 @@ function SettingsPage() {
   
   // Modals
   const [isAddFundsOpen, setIsAddFundsOpen] = useState(false);
-  const [isUpdateCardOpen, setIsUpdateCardOpen] = useState(false);
   
   // Add funds form state
   const [fundingAmount, setFundingAmount] = useState("500");
   const [customFundingAmount, setCustomFundingAmount] = useState("");
   const [isFunding, setIsFunding] = useState(false);
   const [fundingSuccess, setFundingSuccess] = useState(false);
-  
-  // Card update form state
-  const [cardForm, setCardForm] = useState({
-    name: loadedProfile.companyName || "Your Company LLC",
-    number: "4242",
-    expiry: "12/28",
-    cvc: "123"
-  });
-  const [isUpdatingCard, setIsUpdatingCard] = useState(false);
-  const [cardUpdateSuccess, setCardUpdateSuccess] = useState(false);
+
 
   const downloadInvoicePDF = (date: string, amount: string, status: string) => {
     const company = loadedProfile.companyName || "Your Company LLC";
@@ -125,10 +127,10 @@ function SettingsPage() {
     doc.setFontSize(12);
     doc.text(`Invoice Date: ${date}`, 20, 40);
     doc.text(`Client Name: ${company}`, 20, 50);
-    doc.text(`Contract ID: BE-2026-904`, 20, 60);
-    doc.text(`Platform Fees: Builder's Edge SaaS Professional Plan`, 20, 70);
+    doc.text(`Contract ID: WF-2026-904`, 20, 60);
+    doc.text(`Platform Fees: WeaverFrame SaaS Professional Plan`, 20, 70);
     doc.text(`Payment Status: ${status} (Visa •••• 4242)`, 20, 80);
-    doc.text(`Merchant: Builder's Edge Inc.`, 20, 90);
+    doc.text(`Merchant: WeaverFrame Inc.`, 20, 90);
 
     doc.setLineWidth(0.5);
     doc.line(20, 100, 190, 100);
@@ -140,7 +142,7 @@ function SettingsPage() {
     doc.line(20, 115, 190, 115);
 
     doc.setFont("helvetica", "normal");
-    doc.text("Builder's Edge SaaS Monthly Platform Licensing", 20, 125);
+    doc.text("WeaverFrame SaaS Monthly Platform Licensing", 20, 125);
     doc.text("- Travis County permit feed streaming & ingestion", 25, 135);
     doc.text("- Advanced AI nurture concierge", 25, 145);
     doc.text("- Google Business reputation optimization", 25, 155);
@@ -175,7 +177,7 @@ function SettingsPage() {
 
   const handleSaveProfile = async () => {
     // Unique Zip Code Validation
-    const zips = profileForm.targetZipCodes.split(',').map(z => z.trim()).filter(Boolean);
+    const zips = profileForm.targetZipCodes.split(',').map((z: string) => z.trim()).filter(Boolean);
     const uniqueZips = new Set(zips);
     if (uniqueZips.size !== zips.length) {
       alert("Error: Duplicate zip codes are not allowed in Target Zip Codes. Please remove duplicates.");
@@ -436,7 +438,7 @@ function SettingsPage() {
     <Shell title="Settings">
       <div className="grid grid-cols-[200px_1fr] gap-6">
         <nav className="space-y-1">
-          {sections.map((s) => (
+          {availableSections.map((s) => (
             <button
               key={s}
               onClick={() => setActive(s)}
@@ -697,7 +699,7 @@ function SettingsPage() {
                       value={billingPlan}
                       onChange={async (val) => {
                         setBillingPlan(val);
-                        await updateBillingProfile({ data: { plan: val } });
+                        await updateBillingProfile({ data: { plan: val } as any });
                       }}
                       options={[
                         {label: "Professional", value: "professional"},
@@ -725,7 +727,13 @@ function SettingsPage() {
                 <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Payment method</div>
                 <div className="flex items-center justify-between p-4 border border-border rounded-md">
                   <span className="font-mono text-foreground">{paymentMethod}</span>
-                  <button onClick={() => setIsUpdateCardOpen(true)} className="text-xs text-primary hover:underline cursor-pointer">Update</button>
+                  <button 
+                    disabled
+                    title="Coming soon — secure payment setup in progress" 
+                    className="text-xs text-muted-foreground cursor-not-allowed opacity-50 flex items-center"
+                  >
+                    Add Payment Method
+                  </button>
                 </div>
               </div>
               <div>
@@ -899,149 +907,6 @@ function SettingsPage() {
                 </div>
               )}
 
-              {/* UPDATE CARD MODAL */}
-              {isUpdateCardOpen && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-100">
-                  <Card className="w-full max-w-md bg-[#0B0B0C] border border-white/[0.08] rounded-xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
-                    <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-[#101011]">
-                      <div>
-                        <h3 className="font-semibold text-xs text-white uppercase tracking-wider font-mono">
-                          Update Payment Method
-                        </h3>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">
-                          Enter card details securely
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => {
-                          setIsUpdateCardOpen(false);
-                          setCardUpdateSuccess(false);
-                        }}
-                        className="p-1 text-muted-foreground hover:text-white rounded-md hover:bg-white/[0.04] transition-colors"
-                      >
-                        <X className="size-4" />
-                      </button>
-                    </div>
-
-                    <div className="p-5 space-y-4">
-                      {cardUpdateSuccess ? (
-                        <div className="py-6 flex flex-col items-center justify-center text-center gap-2.5 animate-in zoom-in-95">
-                          <div className="size-12 rounded-full bg-success/15 border border-success/30 flex items-center justify-center text-success animate-bounce">
-                            <Check className="size-6" />
-                          </div>
-                          <h4 className="text-xs font-bold text-white uppercase tracking-wider font-mono">
-                            Payment Method Updated!
-                          </h4>
-                          <p className="text-[10px] text-muted-foreground leading-relaxed">
-                            Your credit card ending in •••• {cardForm.number.slice(-4)} has been registered.
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          <div className="space-y-1.5">
-                            <label className="block text-[9px] uppercase tracking-widest text-muted-foreground font-mono font-bold">
-                              Cardholder Name
-                            </label>
-                            <input
-                              type="text"
-                              value={cardForm.name}
-                              onChange={(e) => setCardForm((prev) => ({ ...prev, name: e.target.value }))}
-                              placeholder="Your Company LLC"
-                              className="w-full bg-[#141414] border border-border focus:border-primary/60 rounded-md px-3 py-2 text-xs text-white focus:outline-none"
-                            />
-                          </div>
-
-                          <div className="space-y-1.5">
-                            <label className="block text-[9px] uppercase tracking-widest text-muted-foreground font-mono font-bold">
-                              Card Number
-                            </label>
-                            <input
-                              type="text"
-                              value={cardForm.number}
-                              onChange={(e) => setCardForm((prev) => ({ ...prev, number: e.target.value.replace(/\D/g, "").slice(0, 16) }))}
-                              placeholder="4242 4242 4242 4242"
-                              className="w-full bg-[#141414] border border-border focus:border-primary/60 rounded-md px-3 py-2 text-xs text-white focus:outline-none font-mono"
-                            />
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-3">
-                            <div className="space-y-1.5">
-                              <label className="block text-[9px] uppercase tracking-widest text-muted-foreground font-mono font-bold">
-                                Expiration Date
-                              </label>
-                              <input
-                                type="text"
-                                value={cardForm.expiry}
-                                onChange={(e) => setCardForm((prev) => ({ ...prev, expiry: e.target.value.slice(0, 5) }))}
-                                placeholder="MM/YY"
-                                className="w-full bg-[#141414] border border-border focus:border-primary/60 rounded-md px-3 py-2 text-xs text-white focus:outline-none font-mono"
-                              />
-                            </div>
-
-                            <div className="space-y-1.5">
-                              <label className="block text-[9px] uppercase tracking-widest text-muted-foreground font-mono font-bold">
-                                CVC Code
-                              </label>
-                              <input
-                                type="password"
-                                value={cardForm.cvc}
-                                onChange={(e) => setCardForm((prev) => ({ ...prev, cvc: e.target.value.replace(/\D/g, "").slice(0, 3) }))}
-                                placeholder="123"
-                                className="w-full bg-[#141414] border border-border focus:border-primary/60 rounded-md px-3 py-2 text-xs text-white focus:outline-none font-mono"
-                              />
-                            </div>
-                          </div>
-
-                          <div className="border-t border-border pt-4 mt-2 flex items-center justify-end gap-2.5">
-                            <button
-                              type="button"
-                              onClick={() => setIsUpdateCardOpen(false)}
-                              className="px-4 py-2 text-xs font-semibold text-muted-foreground hover:text-white hover:bg-white/[0.02] rounded-md transition-colors"
-                            >
-                              Cancel
-                            </button>
-                            
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                if (!cardForm.name || cardForm.number.length < 4 || !cardForm.expiry || !cardForm.cvc) return;
-                                setIsUpdatingCard(true);
-                                const cardStr = `Visa •••• ${cardForm.number.slice(-4)}`;
-                                try {
-                                  await updateBillingProfile({ data: { paymentMethod: cardStr } });
-                                  await router.invalidate();
-                                  setCardUpdateSuccess(true);
-                                  setTimeout(() => {
-                                    setIsUpdateCardOpen(false);
-                                    setCardUpdateSuccess(false);
-                                  }, 2000);
-                                } catch (err) {
-                                  console.error("Failed to update payment method:", err);
-                                  alert("Failed to update payment method. Please try again.");
-                                } finally {
-                                  setIsUpdatingCard(false);
-                                }
-                              }}
-                              disabled={isUpdatingCard || !cardForm.name || cardForm.number.length < 4 || !cardForm.expiry || !cardForm.cvc}
-                              className="px-4 py-2 bg-white text-black text-xs font-bold rounded-md hover:bg-white/90 transition-colors disabled:opacity-40 flex items-center gap-1.5 cursor-pointer"
-                            >
-                              {isUpdatingCard ? (
-                                <>
-                                  <Loader2 className="size-3.5 animate-spin text-black" /> Secure Saving...
-                                </>
-                              ) : (
-                                <>
-                                  Update Card
-                                </>
-                              )}
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </Card>
-                </div>
-              )}
             </div>
           )}
 

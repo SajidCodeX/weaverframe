@@ -4,24 +4,22 @@ import { Shell } from '@/components/dashboard/Shell'
 import { Card } from '@/components/dashboard/primitives'
 import { CustomSelect } from '@/components/dashboard/CustomSelect'
 import { getTeamData, createTeamInvite, removeTeamMember, generatePasswordResetLink } from '@/lib/dashboard'
-import { X, Trash2, Mail, Clock, Shield, KeyRound } from 'lucide-react'
+import { X, Trash2, Mail, Clock, Shield, KeyRound, Check, Copy } from 'lucide-react'
+import { toast } from 'sonner'
 
 export const Route = createFileRoute('/team')({
   head: () => ({
     meta: [{ title: 'Manage Team — Builder\'s Edge' }]
   }),
   beforeLoad: async ({ context }) => {
-    // FIX-5: Restrict team management to owner-role users only.
-    // Sales agents and members can view the team list but cannot manage it.
-    // We redirect non-owners to the overview to prevent unauthorized mutations.
     if (typeof window === 'undefined') return
     const session = (context as any).session
-    if (session && session.role === 'builder' && session.builderRole !== 'owner') {
+    if (session && session.role === 'builder' && (session.builderRole === 'manager' || session.builderRole === 'sales')) {
       const { redirect } = await import('@tanstack/react-router')
       throw redirect({ to: '/' })
     }
   },
-  loader: async () => await getTeamData({ data: { activeRole: typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? localStorage.getItem('active_role') ?? undefined) : undefined } }),
+  loader: async () => await getTeamData({ data: { activeRole: typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? undefined) : undefined } }),
   component: TeamRoute,
 })
 
@@ -33,6 +31,7 @@ function TeamRoute() {
   const [email, setEmail] = useState('')
   const [role, setRole] = useState('sales')
   const [inviteLink, setInviteLink] = useState('')
+  const [isCopied, setIsCopied] = useState(false)
   
   // Member detail view state
   const [selectedMember, setSelectedMember] = useState<any | null>(null)
@@ -49,12 +48,25 @@ function TeamRoute() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  const handleCopyLink = (linkToCopy: string) => {
+    try {
+      navigator.clipboard.writeText(linkToCopy)
+      setIsCopied(true)
+      toast.success("Invite link copied to clipboard!")
+      setTimeout(() => setIsCopied(false), 2500)
+    } catch (err) {
+      toast.error("Failed to copy link")
+    }
+  }
+
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
       const res = await createTeamInvite({ data: { name, email, role } })
       if (res.success && res.inviteLink) {
-        setInviteLink(window.location.origin + res.inviteLink)
+        const fullLink = window.location.origin + res.inviteLink
+        setInviteLink(fullLink)
+        handleCopyLink(fullLink)
         setName('')
         setEmail('')
         setRole('sales')
@@ -62,7 +74,7 @@ function TeamRoute() {
       }
     } catch (err: any) {
       console.error(err)
-      alert(`Failed to send invite: ${err?.message || 'Check console for details.'}`)
+      toast.error(`Failed to send invite: ${err?.message || 'Check console for details.'}`)
     }
   }
 
@@ -73,7 +85,7 @@ function TeamRoute() {
         setSelectedMember(null)
         await router.invalidate()
       } catch (err) {
-        alert("Failed to remove team member")
+        toast.error("Failed to remove team member")
       }
     }
   }
@@ -84,12 +96,10 @@ function TeamRoute() {
       if (res.success && res.inviteLink) {
         const link = window.location.origin + res.inviteLink
         setInviteLink(link)
-        // Auto copy to clipboard
-        navigator.clipboard.writeText(link)
-        alert(`Reset link generated and copied to clipboard!\n\n${link}`)
+        handleCopyLink(link)
       }
     } catch (err: any) {
-      alert(`Failed to generate reset link: ${err?.message}`)
+      toast.error(`Failed to generate reset link: ${err?.message}`)
     }
   }
 
@@ -136,18 +146,16 @@ function TeamRoute() {
             </div>
             <div className="flex-1">
               <label className="block text-xs font-medium text-muted-foreground mb-1">Role</label>
-              <div className="mt-1">
-                <CustomSelect
-                  value={role}
-                  onChange={val => setRole(val)}
-                  className="w-full bg-[#0a0a0a] border border-[#333] h-[38px] rounded-md px-3 py-2 text-sm text-white"
-                  options={[
-                    { label: "Sales Agent", value: "sales" },
-                    { label: "Manager", value: "manager" },
-                    { label: "Admin", value: "admin" }
-                  ]}
-                />
-              </div>
+              <CustomSelect
+                value={role}
+                onChange={val => setRole(val)}
+                className="w-full"
+                options={[
+                  { label: "Sales Agent", value: "sales" },
+                  { label: "Manager", value: "manager" },
+                  { label: "Admin", value: "admin" }
+                ]}
+              />
             </div>
             <button type="submit" className="bg-white text-black px-4 py-2 rounded-md text-sm font-medium hover:bg-neutral-200 transition-colors">
               Generate Link
@@ -166,10 +174,24 @@ function TeamRoute() {
                   onClick={e => (e.target as HTMLInputElement).select()}
                 />
                 <button 
-                  onClick={() => navigator.clipboard.writeText(inviteLink)}
-                  className="text-xs bg-success/20 hover:bg-success/30 text-success px-2 py-1 rounded transition-colors"
+                  onClick={() => handleCopyLink(inviteLink)}
+                  className={`text-xs font-medium px-3 py-1 rounded transition-all duration-200 flex items-center gap-1.5 shrink-0 ${
+                    isCopied 
+                      ? 'bg-success text-black font-semibold shadow-[0_0_10px_rgba(48,209,88,0.4)]' 
+                      : 'bg-success/20 hover:bg-success/30 text-success'
+                  }`}
                 >
-                  Copy
+                  {isCopied ? (
+                    <>
+                      <Check className="size-3.5" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="size-3.5" />
+                      Copy
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -187,6 +209,7 @@ function TeamRoute() {
                 <th className="px-6 py-3 font-semibold">Role</th>
                 <th className="px-6 py-3 font-semibold">Status</th>
                 <th className="px-6 py-3 font-semibold text-right">Last Login</th>
+                <th className="px-6 py-3 font-semibold text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -194,7 +217,7 @@ function TeamRoute() {
                 <tr 
                   key={u.id} 
                   className="hover:bg-white/[0.02] transition-colors cursor-pointer select-none"
-                  onDoubleClick={() => setSelectedMember(u)}
+                  onClick={() => setSelectedMember(u)}
                 >
                   <td className="px-6 py-4 font-medium text-foreground">{u.displayName}</td>
                   <td className="px-6 py-4 text-muted-foreground">{u.email}</td>
@@ -212,6 +235,14 @@ function TeamRoute() {
                   </td>
                   <td className="px-6 py-4 text-right text-muted-foreground">
                     {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString() : 'Never'}
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setSelectedMember(u); }}
+                      className="text-xs px-2.5 py-1 bg-secondary hover:bg-secondary/80 text-muted-foreground hover:text-foreground rounded-md border border-border transition-colors"
+                    >
+                      View
+                    </button>
                   </td>
                 </tr>
               ))}

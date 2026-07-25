@@ -2,10 +2,10 @@ import { createFileRoute, useLoaderData, useRouter } from "@tanstack/react-route
 import { useState, useEffect, useRef, useMemo } from "react";
 import { Shell } from "@/components/dashboard/Shell";
 import { Card, Badge } from "@/components/dashboard/primitives";
-import { 
-  getConversations, 
-  getMessagesForLead, 
-  sendMessage, 
+import {
+  getConversations,
+  getMessagesForLead,
+  sendMessage,
   bookAppointment,
   getAiToggleMap,
   setLeadAiToggle,
@@ -13,51 +13,117 @@ import {
   summarizeConversation,
   simulateLeadMessage
 } from "@/lib/dashboard";
-import { 
-  MessageSquare, 
-  Send, 
-  Search, 
-  Calendar, 
-  FileText, 
-  Phone, 
-  Mail, 
-  Plus, 
-  Loader2, 
-  Check, 
-  Sparkles, 
-  Clock, 
-  AlertCircle, 
-  X, 
+import {
+  MessageSquare,
+  Send,
+  Search,
+  Calendar,
+  FileText,
+  Phone,
+  Mail,
+  Plus,
+  Loader2,
+  Check,
+  Sparkles,
+  Clock,
+  AlertCircle,
+  X,
   ChevronRight,
   ChevronDown,
   ExternalLink,
   BrainCircuit
 } from "lucide-react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/messages")({
   loader: async ({ context }) => {
     if (typeof window === 'undefined' && !context.session) {
       return { conversations: [], aiToggleMap: {}, integrationsStatus: {} };
     }
-    const activeRole = typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? localStorage.getItem('active_role') ?? undefined) : undefined;
+    const activeRole = typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? undefined) : undefined;
     const conversations = await getConversations({ data: { activeRole } });
     const aiToggleMap = await getAiToggleMap();
     const integrationsStatus = await getIntegrationsStatus();
     return { conversations, aiToggleMap, integrationsStatus };
   },
   staleTime: 2000,
-  head: () => ({ 
+  head: () => ({
     meta: [
-      { title: "Messages — Builder's Edge" }, 
+      { title: "Messages — WeaverFrame" },
       { name: "description", content: "Direct messages and AI lead nurture workspace." }
-    ] 
+    ]
   }),
   component: MessagesPage,
 });
 
+function FormattedSummary({ text }: { text: string }) {
+  const parseInlineMarkdown = (str: string) => {
+    const parts = str.split(/(\*\*.*?\*\*)/g);
+    return parts.map((part, i) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        return <strong key={i} className="text-white font-bold">{part.slice(2, -2)}</strong>;
+      }
+      return part;
+    });
+  };
+
+  const lines = text.split('\n').filter(l => l.trim().length > 0);
+
+  return (
+    <div className="space-y-2">
+      {lines.map((line, idx) => {
+        const trimmed = line.trim();
+        const isHeader = (trimmed.startsWith('**') && (trimmed.endsWith(':**') || trimmed.endsWith('**'))) ||
+          trimmed.startsWith('📋') || trimmed.startsWith('💰') || trimmed.startsWith('❓') || trimmed.startsWith('🎯') ||
+          (trimmed.toUpperCase().includes('PROFILE') && trimmed.includes(':')) ||
+          (trimmed.toUpperCase().includes('FINANCIALS') && trimmed.includes(':')) ||
+          (trimmed.toUpperCase().includes('CONCERNS') && trimmed.includes(':')) ||
+          (trimmed.toUpperCase().includes('ACTION') && trimmed.includes(':'));
+
+        if (isHeader && !trimmed.startsWith('* ') && !trimmed.startsWith('- ') && !trimmed.startsWith('+ ')) {
+          const cleanedHeader = trimmed.replace(/\*\*/g, '').replace(/:$/, '');
+          let icon = '';
+          if (cleanedHeader.includes('PROFILE') || cleanedHeader.includes('SPECS')) icon = '📋 ';
+          else if (cleanedHeader.includes('FINANCIALS') || cleanedHeader.includes('BUDGET')) icon = '💰 ';
+          else if (cleanedHeader.includes('CONCERNS') || cleanedHeader.includes('OBJECTIONS')) icon = '❓ ';
+          else if (cleanedHeader.includes('ACTION') || cleanedHeader.includes('DELIVERABLES')) icon = '🎯 ';
+
+          return (
+            <div key={idx} className="pt-2 pb-1 border-b border-white/10 first:pt-0">
+              <h5 className="text-[11px] font-bold text-primary tracking-wider uppercase font-display flex items-center gap-1.5">
+                <span>{icon}</span> {cleanedHeader.replace(/^[📋💰❓🎯]\s*/, '')}
+              </h5>
+            </div>
+          );
+        }
+
+        const isBullet = trimmed.startsWith('* ') || trimmed.startsWith('- ') || trimmed.startsWith('+ ') || trimmed.startsWith('• ');
+        const bulletText = isBullet ? trimmed.replace(/^[\*\-\+\•]\s*/, '') : trimmed;
+
+        return (
+          <div key={idx} className="flex items-start gap-2 text-xs text-slate-200 leading-relaxed pl-1">
+            {isBullet ? (
+              <span className="size-1.5 rounded-full bg-primary shrink-0 mt-1.5" />
+            ) : null}
+            <div className="flex-1">{parseInlineMarkdown(bulletText)}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function MessagesPage() {
   const router = useRouter();
   const { conversations: initialConversations, aiToggleMap: initialAiToggleMap, integrationsStatus: initialIntegrationsStatus } = useLoaderData({ from: "/messages" }) as { conversations: any[]; aiToggleMap: Record<string, boolean>; integrationsStatus: any };
+
+  const [conversationsList, setConversationsList] = useState<any[]>(initialConversations || []);
+
+  useEffect(() => {
+    if (initialConversations) {
+      setConversationsList(initialConversations);
+    }
+  }, [initialConversations]);
 
   // Track selected lead & active conversation
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
@@ -85,7 +151,7 @@ function MessagesPage() {
   };
 
   const isGCalConnected = initialIntegrationsStatus?.google?.isConnected ?? false;
-  
+
   // Drag resizable split panel state
   const [leftWidth, setLeftWidth] = useState(() => {
     if (typeof window !== "undefined") {
@@ -126,11 +192,11 @@ function MessagesPage() {
       window.removeEventListener("mouseup", handleMouseUp);
     };
   }, [isDragging]);
-  
+
   // Search and filter tab states
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"all" | "unread" | "hot">("all");
-  
+
   // Loading and sending UI states
   const [isLoadingChat, setIsLoadingChat] = useState(false);
   const loadedLeadIdRef = useRef<string | null>(null);
@@ -150,7 +216,7 @@ function MessagesPage() {
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [aiToggleMap, setAiToggleMap] = useState<Record<string, boolean>>(initialAiToggleMap || {});
   const isAiActive = selectedLeadId ? (aiToggleMap[selectedLeadId] ?? true) : true;
-  
+
   // Summarize feature
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [chatSummary, setChatSummary] = useState<string | null>(null);
@@ -170,13 +236,39 @@ function MessagesPage() {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
+  // User Scroll Locking (Prevents polling from auto-scrolling while reading history)
+  const [isUserScrolledUp, setIsUserScrolledUp] = useState(false);
+  const isUserScrolledUpRef = useRef(false);
+
+  const handleChatScroll = () => {
+    if (!chatContainerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
+    const isFarFromBottom = scrollHeight - scrollTop - clientHeight > 120;
+    setIsUserScrolledUp(isFarFromBottom);
+    isUserScrolledUpRef.current = isFarFromBottom;
+  };
+
+  // Scroll active chat feed to bottom (respects user scroll position unless forced)
+  const scrollToBottom = (force = false) => {
+    if (!force && isUserScrolledUpRef.current) return;
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTo({
+        top: chatContainerRef.current.scrollHeight,
+        behavior: "smooth"
+      });
+    }
+    if (chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  };
+
   // Auto-select the first conversation on initial load if none selected
   useEffect(() => {
-    if (initialConversations.length > 0 && !selectedLeadId) {
-      setSelectedLeadId(initialConversations[0].leadId);
+    if (conversationsList.length > 0 && !selectedLeadId) {
+      setSelectedLeadId(conversationsList[0].leadId);
       setIsLoadingChat(true);
     }
-  }, [initialConversations, selectedLeadId]);
+  }, [conversationsList, selectedLeadId]);
 
   // Fetch messages when selected lead changes
   useEffect(() => {
@@ -192,14 +284,16 @@ function MessagesPage() {
         setChatSummary(null); // Reset summary when lead changes
       }
       try {
-        const lead = initialConversations.find(c => c.leadId === selectedLeadId);
-        const { messages } = await getMessagesForLead({ data: { leadId: selectedLeadId, activeRole: sessionStorage.getItem('active_role') ?? localStorage.getItem('active_role') ?? undefined } });
+        const lead = conversationsList.find(c => c.leadId === selectedLeadId);
+        const { messages } = await getMessagesForLead({ data: { leadId: selectedLeadId, activeRole: sessionStorage.getItem('active_role') ?? undefined } });
         if (isMounted) {
           setActiveChat({ lead, messages });
           loadedLeadIdRef.current = selectedLeadId;
           setIsLoadingChat(false);
-          // Auto-scroll on load
-          setTimeout(scrollToBottom, 50);
+          // Force scroll to bottom on new lead selection
+          setIsUserScrolledUp(false);
+          isUserScrolledUpRef.current = false;
+          setTimeout(() => scrollToBottom(true), 50);
         }
       } catch (error) {
         console.error(error);
@@ -210,19 +304,54 @@ function MessagesPage() {
     };
     fetchChat();
     return () => { isMounted = false; };
-  }, [selectedLeadId, initialConversations]);
+  }, [selectedLeadId, conversationsList]);
 
-  // Scroll active chat feed to bottom
-  const scrollToBottom = () => {
-    if (chatEndRef.current) {
-      chatEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  };
+  // Real-time Live WhatsApp Polling: Refresh active chat & thread list every 2.5s
+  useEffect(() => {
+    let isMounted = true;
+    const pollLiveChat = async () => {
+      try {
+        const activeRole = sessionStorage.getItem('active_role') ?? undefined;
+        // 1. Silently update thread list
+        const latestThreads = await getConversations({ data: { activeRole } });
+        if (isMounted && Array.isArray(latestThreads) && latestThreads.length > 0) {
+          setConversationsList(latestThreads);
+        }
+
+        // 2. Silently update messages for active selected lead
+        if (selectedLeadId) {
+          const { messages: latestMsgs } = await getMessagesForLead({ data: { leadId: selectedLeadId, activeRole } });
+          if (isMounted && Array.isArray(latestMsgs)) {
+            setActiveChat(prev => {
+              if (!prev) return null;
+              const lead = latestThreads.find(c => c.leadId === selectedLeadId) || prev.lead;
+              const hasNewMessages = prev.messages.length !== latestMsgs.length ||
+                (latestMsgs.length > 0 && prev.messages[prev.messages.length - 1]?.id !== latestMsgs[latestMsgs.length - 1]?.id);
+
+              if (hasNewMessages) {
+                setTimeout(scrollToBottom, 60);
+                return { lead, messages: latestMsgs };
+              }
+              return { ...prev, lead };
+            });
+          }
+        }
+      } catch (_) {
+        // Silent catch for background poll
+      }
+    };
+
+    const timer = setInterval(pollLiveChat, 2500);
+    return () => {
+      isMounted = false;
+      clearInterval(timer);
+    };
+  }, [selectedLeadId]);
 
   // Trigger scroll on chat messages update
   useEffect(() => {
     if (activeChat?.messages) {
-      scrollToBottom();
+      scrollToBottom(false);
     }
   }, [activeChat?.messages]);
 
@@ -289,18 +418,18 @@ function MessagesPage() {
 
   // Filter conversations
   const filteredThreads = useMemo(() => {
-    let threads = initialConversations;
+    let threads = conversationsList;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      threads = threads.filter(t => 
-        (t.leadName && t.leadName.toLowerCase().includes(q)) || 
+      threads = threads.filter(t =>
+        (t.leadName && t.leadName.toLowerCase().includes(q)) ||
         (t.lastMessage && t.lastMessage.toLowerCase().includes(q))
       );
     }
     if (activeTab === "unread") return threads.filter(t => t.unreadCount > 0 && t.leadId !== selectedLeadId);
     if (activeTab === "hot") return threads.filter(t => t.scoreTier === "Hot");
     return threads;
-  }, [initialConversations, searchQuery, activeTab, selectedLeadId]);
+  }, [conversationsList, searchQuery, activeTab, selectedLeadId]);
 
   // Handle sending text message
   const handleSendMessage = async (e?: React.FormEvent) => {
@@ -342,7 +471,7 @@ function MessagesPage() {
     } catch (err) {
       console.error("Failed to send message:", err);
       setNewMessageText(originalText);
-      alert("Error sending message. Please try again.");
+      toast.error("Failed to send message. Please try again.");
     } finally {
       setIsSending(false);
       setTimeout(scrollToBottom, 60);
@@ -366,32 +495,23 @@ function MessagesPage() {
       const res = await sendMessage({
         data: {
           leadId: selectedLeadId,
-          content: brochureContent,
-          enableAiReply: isAiActive
+          content: brochureContent
         }
       });
 
       setActiveChat(prev => {
         if (!prev) return null;
+        const userMsg = (res as any).userMessage || res;
         const updatedMsgs = [
           ...prev.messages,
           {
-            id: res.userMessage.id,
+            id: userMsg.id || String(Date.now()),
             sender: "user" as const,
-            content: res.userMessage.content,
+            content: userMsg.content || brochureContent,
             createdAt: new Date().toISOString(),
             isRead: true
           }
         ];
-        if (res.leadMessage) {
-          updatedMsgs.push({
-            id: res.leadMessage.id,
-            sender: "lead" as const,
-            content: res.leadMessage.content,
-            createdAt: new Date(Date.now() + 500).toISOString(),
-            isRead: false
-          });
-        }
         return {
           ...prev,
           messages: updatedMsgs
@@ -440,32 +560,23 @@ function MessagesPage() {
       const res = await sendMessage({
         data: {
           leadId: selectedLeadId,
-          content: calendarMessage,
-          enableAiReply: isAiActive
+          content: calendarMessage
         }
       });
 
       setActiveChat(prev => {
         if (!prev) return null;
+        const userMsg = (res as any).userMessage || res;
         const updatedMsgs = [
           ...prev.messages,
           {
-            id: res.userMessage.id,
+            id: userMsg.id || String(Date.now()),
             sender: "user" as const,
-            content: res.userMessage.content,
+            content: userMsg.content || calendarMessage,
             createdAt: new Date().toISOString(),
             isRead: true
           }
         ];
-        if (res.leadMessage) {
-          updatedMsgs.push({
-            id: res.leadMessage.id,
-            sender: "lead" as const,
-            content: res.leadMessage.content,
-            createdAt: new Date(Date.now() + 500).toISOString(),
-            isRead: false
-          });
-        }
         return {
           ...prev,
           messages: updatedMsgs
@@ -522,19 +633,19 @@ function MessagesPage() {
   };
 
   const selectedThread = useMemo(() => {
-    return initialConversations.find(c => c.leadId === selectedLeadId) || null;
-  }, [initialConversations, selectedLeadId]);
+    return conversationsList.find(c => c.leadId === selectedLeadId) || null;
+  }, [conversationsList, selectedLeadId]);
 
   return (
     <Shell title="Direct Lead Messages" noPadding>
       <div ref={containerRef} className="flex h-full w-full bg-card/40 backdrop-blur-xl relative">
-        
+
         {/* LEFT COLUMN: Search & Thread List */}
-        <div 
+        <div
           style={{ width: `${leftWidth}px` }}
           className="border-r border-border flex flex-col h-full min-h-0 bg-[#080808]/90 shrink-0"
         >
-          
+
           {/* Thread Search Box */}
           <div className="p-4 border-b border-border space-y-3">
             <div className="relative">
@@ -547,18 +658,17 @@ function MessagesPage() {
                 className="w-full bg-secondary border border-border rounded-md pl-9 pr-4 py-2 text-xs text-foreground focus:outline-none focus:border-primary/60 placeholder:text-muted-foreground transition-colors"
               />
             </div>
-            
+
             {/* Filter Tabs */}
             <div className="flex gap-1.5 p-0.5 bg-secondary/60 rounded-lg">
               {(["all", "unread", "hot"] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`flex-1 py-1 text-[11px] font-medium capitalize rounded-md transition-all ${
-                    activeTab === tab 
-                      ? "bg-card text-foreground shadow-sm" 
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
+                  className={`flex-1 py-1 text-[11px] font-medium capitalize rounded-md transition-all ${activeTab === tab
+                    ? "bg-card text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                    }`}
                 >
                   {tab}
                 </button>
@@ -587,9 +697,8 @@ function MessagesPage() {
                       setActiveChat(null);
                       setIsLoadingChat(true);
                     }}
-                    className={`w-full text-left p-4 flex gap-3 transition-colors hover:bg-secondary/40 select-none outline-none focus:bg-secondary/40 relative ${
-                      isActive ? "bg-secondary text-foreground" : "text-muted-foreground"
-                    }`}
+                    className={`w-full text-left p-4 flex gap-3 transition-colors hover:bg-secondary/40 select-none outline-none focus:bg-secondary/40 relative ${isActive ? "bg-secondary text-foreground" : "text-muted-foreground"
+                      }`}
                   >
                     {/* Left border active bar */}
                     {isActive && (
@@ -598,14 +707,13 @@ function MessagesPage() {
 
                     {/* Avatar Container */}
                     <div className="relative shrink-0">
-                      <div className={`size-10 rounded-full flex items-center justify-center text-xs font-semibold tracking-tighter border transition-all ${
-                        isActive 
-                          ? "bg-primary/10 border-primary/20 text-white" 
-                          : "bg-white/[0.02] border-white/[0.05] text-muted-foreground"
-                      }`}>
+                      <div className={`size-10 rounded-full flex items-center justify-center text-xs font-semibold tracking-tighter border transition-all ${isActive
+                        ? "bg-primary/10 border-primary/20 text-white"
+                        : "bg-white/[0.02] border-white/[0.05] text-muted-foreground"
+                        }`}>
                         {initials}
                       </div>
-                      
+
                       {/* Online Status Dot */}
                       {thread.isOnline && (
                         <div className="absolute bottom-0 right-0 size-2.5 rounded-full bg-success ring-2 ring-[#080808]" />
@@ -671,9 +779,8 @@ function MessagesPage() {
         {/* Draggable Divider splitter */}
         <div
           onMouseDown={startDrag}
-          className={`w-[4px] hover:w-[6px] cursor-col-resize h-full hover:bg-primary/50 active:bg-primary z-40 shrink-0 relative flex items-center justify-center transition-all duration-100 select-none ${
-            isDragging ? "bg-primary w-[6px]" : "bg-border/40"
-          }`}
+          className={`w-[4px] hover:w-[6px] cursor-col-resize h-full hover:bg-primary/50 active:bg-primary z-40 shrink-0 relative flex items-center justify-center transition-all duration-100 select-none ${isDragging ? "bg-primary w-[6px]" : "bg-border/40"
+            }`}
           title="Drag to resize panels"
         >
           {/* Visual indicator handle */}
@@ -682,12 +789,12 @@ function MessagesPage() {
 
         {/* RIGHT COLUMN: Selected Active Chat Workspace */}
         <div className="flex-1 min-w-0 flex flex-col h-full min-h-0 bg-card/25 backdrop-blur-md relative overflow-hidden">
-          
+
           {selectedThread && activeChat ? (
             <>
               {/* CHAT PANEL HEADER */}
               <div className="px-6 py-4 border-b border-border bg-[#0B0B0C]/80 flex items-center justify-between gap-4">
-                
+
                 {/* User Info Card */}
                 <div className="flex items-center gap-3">
                   <div className="size-9 rounded-full bg-primary/5 border border-white/[0.06] flex items-center justify-center font-bold text-xs text-white">
@@ -740,11 +847,10 @@ function MessagesPage() {
                           setAiToggleMap(prev => ({ ...prev, [selectedLeadId]: isAiActive }));
                         }
                       }}
-                      className={`px-3 py-1.5 text-[11px] font-semibold rounded-md border flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer ${
-                        isAiActive 
-                          ? "bg-white/10 text-success border-success/30 hover:bg-white/15" 
-                          : "bg-white/[0.02] text-muted-foreground border-white/[0.05] hover:text-white"
-                      }`}
+                      className={`px-3 py-1.5 text-[11px] font-semibold rounded-md border flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer ${isAiActive
+                        ? "bg-white/10 text-success border-success/30 hover:bg-white/15"
+                        : "bg-white/[0.02] text-muted-foreground border-white/[0.05] hover:text-white"
+                        }`}
                       title={isAiActive ? "Pause AI Concierge Automated replies" : "Activate AI Concierge Automated replies"}
                     >
                       <Sparkles className={`size-3.5 ${isAiActive ? "text-success animate-pulse" : "text-muted-foreground"}`} />
@@ -758,7 +864,7 @@ function MessagesPage() {
                     >
                       <FileText className="size-3.5 text-muted-foreground" /> Portfolios
                     </button>
-                    
+
                     <button
                       onClick={handleSummarizeChat}
                       disabled={isSummarizing || !activeChat || activeChat.messages.length === 0}
@@ -798,32 +904,46 @@ function MessagesPage() {
                 </div>
               </div>
 
-              <div 
-                ref={chatContainerRef}
-                className="flex-1 overflow-y-auto p-6 space-y-4 min-h-0 bg-[#060606]/30 relative"
-              >
-                {chatSummary && (
-                  <div className="sticky top-0 z-10 mb-4 p-4 rounded-lg bg-primary/10 border border-primary/20 backdrop-blur-md animate-in fade-in slide-in-from-top-4 shadow-lg flex items-start gap-3">
-                    <BrainCircuit className="size-5 text-primary shrink-0 mt-0.5" />
-                    <div className="flex-1">
-                      <h4 className="text-xs font-bold text-primary mb-1">AI Chat Conclusion</h4>
-                      <p className="text-xs text-foreground/90 leading-relaxed">{chatSummary}</p>
+              {/* AI CHAT EXECUTIVE PRE-MEETING BRIEFING SHEET */}
+              {chatSummary && (
+                <div className="mx-6 mt-4 p-5 rounded-xl bg-[#0f0f14] border border-primary/40 shadow-2xl animate-in fade-in slide-in-from-top-4 relative z-30 shrink-0 max-h-[300px] overflow-y-auto">
+                  <div className="flex items-center justify-between pb-3 mb-3 border-b border-white/10 sticky top-0 bg-[#0f0f14] z-10">
+                    <div className="flex items-center gap-2">
+                      <div className="size-7 rounded-lg bg-primary/20 border border-primary/40 flex items-center justify-center">
+                        <BrainCircuit className="size-4 text-primary" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-white tracking-wider uppercase font-display">Builder Pre-Meeting Intelligence Briefing</h4>
+                        <p className="text-[10px] text-muted-foreground">AI-synthesized deal overview & action checklist</p>
+                      </div>
                     </div>
-                    <button onClick={() => setChatSummary(null)} className="text-muted-foreground hover:text-foreground">
+                    <button
+                      onClick={() => setChatSummary(null)}
+                      className="size-7 rounded-md bg-white/5 hover:bg-white/15 text-muted-foreground hover:text-white flex items-center justify-center transition-colors"
+                      title="Close Summary"
+                    >
                       <X className="size-4" />
                     </button>
                   </div>
-                )}
+                  <FormattedSummary text={chatSummary} />
+                </div>
+              )}
+
+              <div
+                ref={chatContainerRef}
+                onScroll={handleChatScroll}
+                className="flex-1 overflow-y-auto p-6 space-y-4 min-h-0 bg-[#060606]/30 relative"
+              >
                 {activeChat.messages.length > 0 ? (
                   activeChat.messages.map((msg, index) => {
                     const isUser = msg.sender === "user" || msg.sender === "system";
                     const isAI = msg.sender === "system";
-                    
+
                     const msgDate = new Date(msg.createdAt);
                     const prevMsg = index > 0 ? activeChat.messages[index - 1] : null;
                     let showDateDivider = false;
                     let dateLabel = "";
-                    
+
                     if (!prevMsg) {
                       showDateDivider = true;
                     } else {
@@ -837,7 +957,7 @@ function MessagesPage() {
                       const today = new Date();
                       const yesterday = new Date();
                       yesterday.setDate(yesterday.getDate() - 1);
-                      
+
                       if (msgDate.toDateString() === today.toDateString()) {
                         dateLabel = "Today";
                       } else if (msgDate.toDateString() === yesterday.toDateString()) {
@@ -846,7 +966,7 @@ function MessagesPage() {
                         dateLabel = msgDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
                       }
                     }
-                    
+
                     // Render high-fidelity custom cards for brochure shares
                     const isBrochureCard = msg.content.includes("📄 Document Shared");
                     // Render high-fidelity custom cards for calendars/appointments
@@ -864,85 +984,84 @@ function MessagesPage() {
                         <div
                           className={`flex flex-col ${isUser ? "items-end" : "items-start"} w-full group animate-in slide-in-from-bottom-2 duration-150`}
                         >
-                        {isBrochureCard ? (
-                          /* Digital specs brochure presentation card */
-                          <div className="bg-[#111111] border border-white/[0.08] rounded-xl p-4 max-w-[400px] shadow-2xl relative overflow-hidden group/brochure">
-                            <div className="flex gap-3">
-                              <div className="size-10 bg-primary/10 rounded-lg flex items-center justify-center border border-primary/20 shrink-0 text-primary">
-                                <FileText className="size-5" />
+                          {isBrochureCard ? (
+                            /* Digital specs brochure presentation card */
+                            <div className="bg-[#111111] border border-white/[0.08] rounded-xl p-4 max-w-[400px] shadow-2xl relative overflow-hidden group/brochure">
+                              <div className="flex gap-3">
+                                <div className="size-10 bg-primary/10 rounded-lg flex items-center justify-center border border-primary/20 shrink-0 text-primary">
+                                  <FileText className="size-5" />
+                                </div>
+                                <div className="min-w-0">
+                                  <h4 className="text-xs font-bold text-white truncate">{msg.content.replace("📄 Document Shared: ", "").split(".pdf|size=")[0]}</h4>
+                                  <p className="text-[10px] text-muted-foreground mt-0.5">Custom Specifications & Lookbook · {msg.content.includes("|size=") ? msg.content.split("|size=")[1] : "4.8 MB"}</p>
+                                </div>
                               </div>
-                              <div className="min-w-0">
-                                <h4 className="text-xs font-bold text-white truncate">{msg.content.replace("📄 Document Shared: ", "").split(".pdf|size=")[0]}</h4>
-                                <p className="text-[10px] text-muted-foreground mt-0.5">Custom Specifications & Lookbook · {msg.content.includes("|size=") ? msg.content.split("|size=")[1] : "4.8 MB"}</p>
-                              </div>
-                            </div>
-                            <div className="border-t border-border/50 mt-4 pt-3 flex items-center justify-between">
-                              <span className="text-[9px] text-muted-foreground font-mono">Sent to Lead SMS & Email</span>
-                              <a
-                                href="#"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  setIsLookbookOpen(true);
-                                  setLookbookPage(0);
-                                }}
-                                className="inline-flex items-center gap-1 text-[10px] font-bold text-white hover:underline"
-                              >
-                                Preview lookbook <ExternalLink className="size-3" />
-                              </a>
-                            </div>
-                          </div>
-                        ) : isAppointmentCard ? (
-                          /* Premium Calendar Booking Confirmation Card */
-                          <div className="bg-success/5 border border-success/30 rounded-xl p-4 max-w-[400px] shadow-2xl relative overflow-hidden">
-                            <div className="flex gap-3">
-                              <div className="size-10 bg-success/15 rounded-lg flex items-center justify-center border border-success/30 shrink-0 text-success">
-                                <Calendar className="size-5" />
-                              </div>
-                              <div className="min-w-0">
-                                <h4 className="text-xs font-bold text-white">Site Walkthrough Booked</h4>
-                                <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">
-                                  {msg.content.replace("📆 Site Visit Booked: ", "")}
-                                </p>
+                              <div className="border-t border-border/50 mt-4 pt-3 flex items-center justify-between">
+                                <span className="text-[9px] text-muted-foreground font-mono">Sent to Lead SMS & Email</span>
+                                <a
+                                  href="#"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    setIsLookbookOpen(true);
+                                    setLookbookPage(0);
+                                  }}
+                                  className="inline-flex items-center gap-1 text-[10px] font-bold text-white hover:underline"
+                                >
+                                  Preview lookbook <ExternalLink className="size-3" />
+                                </a>
                               </div>
                             </div>
-                            <div className="border-t border-success/10 mt-4 pt-3 flex items-center justify-between">
-                              <span className="inline-flex items-center gap-1 text-[9px] text-success font-semibold tracking-wider uppercase font-mono">
-                                <Check className="size-3" /> Confirmed Calendar Lock
-                              </span>
-                              {isGCalConnected ? (
-                                <span className="inline-flex items-center gap-1 text-[9px] text-success font-bold font-mono">
-                                  <Check className="size-2.5" /> Synced to GCal
+                          ) : isAppointmentCard ? (
+                            /* Premium Calendar Booking Confirmation Card */
+                            <div className="bg-success/5 border border-success/30 rounded-xl p-4 max-w-[400px] shadow-2xl relative overflow-hidden">
+                              <div className="flex gap-3">
+                                <div className="size-10 bg-success/15 rounded-lg flex items-center justify-center border border-success/30 shrink-0 text-success">
+                                  <Calendar className="size-5" />
+                                </div>
+                                <div className="min-w-0">
+                                  <h4 className="text-xs font-bold text-white">Site Walkthrough Booked</h4>
+                                  <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">
+                                    {msg.content.replace("📆 Site Visit Booked: ", "")}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="border-t border-success/10 mt-4 pt-3 flex items-center justify-between">
+                                <span className="inline-flex items-center gap-1 text-[9px] text-success font-semibold tracking-wider uppercase font-mono">
+                                  <Check className="size-3" /> Confirmed Calendar Lock
                                 </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 text-[9px] text-amber-500/80 font-bold font-mono" title="Connect Google Business Reviews integration in Settings to sync calendar">
-                                  <AlertCircle className="size-2.5" /> Local Lock (GCal Disconnected)
-                                </span>
-                              )}
+                                {isGCalConnected ? (
+                                  <span className="inline-flex items-center gap-1 text-[9px] text-success font-bold font-mono">
+                                    <Check className="size-2.5" /> Synced to GCal
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-[9px] text-amber-500/80 font-bold font-mono" title="Connect Google Business Reviews integration in Settings to sync calendar">
+                                    <AlertCircle className="size-2.5" /> Local Lock (GCal Disconnected)
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        ) : (
-                          /* Standard Message Bubble */
-                          <div
-                            className={`relative p-3 rounded-2xl text-xs leading-relaxed max-w-[70%] font-sans select-text ${
-                              isUser
+                          ) : (
+                            /* Standard Message Bubble */
+                            <div
+                              className={`relative p-3 rounded-2xl text-xs leading-relaxed max-w-[70%] font-sans select-text ${isUser
                                 ? "bg-primary text-black rounded-tr-none font-medium shadow-md"
                                 : "bg-white/[0.04] border border-white/[0.08] text-white rounded-tl-none"
-                            }`}
-                          >
-                            {isAI && (
-                              <div className="absolute -top-2 -left-2 bg-[#0B0B0C] rounded-full p-1 border border-primary/30 text-primary shadow-sm" title="Generated by AI Concierge">
-                                <Sparkles className="size-3" />
-                              </div>
-                            )}
-                            <p className="whitespace-pre-line">{msg.content}</p>
-                          </div>
-                        )}
-                        
-                        {/* Hover Timestamp metadata display */}
-                        <span className="text-[9px] text-muted-foreground/60 mt-1 select-none font-mono px-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                          {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </div>
+                                }`}
+                            >
+                              {isAI && (
+                                <div className="absolute -top-2 -left-2 bg-[#0B0B0C] rounded-full p-1 border border-primary/30 text-primary shadow-sm" title="Generated by AI Concierge">
+                                  <Sparkles className="size-3" />
+                                </div>
+                              )}
+                              <p className="whitespace-pre-line">{msg.content}</p>
+                            </div>
+                          )}
+
+                          {/* Hover Timestamp metadata display */}
+                          <span className="text-[9px] text-muted-foreground/60 mt-1 select-none font-mono px-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                            {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
                       </div>
                     );
                   })
@@ -955,7 +1074,7 @@ function MessagesPage() {
                     </p>
                   </div>
                 )}
-                
+
                 {/* Scroll Anchor */}
                 <div ref={chatEndRef} />
               </div>
@@ -982,7 +1101,22 @@ function MessagesPage() {
               </div>
 
               {/* MESSAGE COMPOSER FOOTER INPUT */}
-              <div className="p-4 border-t border-border bg-[#0B0B0C]/80 backdrop-blur-md">
+              <div className="p-4 border-t border-border bg-[#0B0B0C]/80 backdrop-blur-md relative">
+                {isUserScrolledUp && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setIsUserScrolledUp(false);
+                      isUserScrolledUpRef.current = false;
+                      scrollToBottom(true);
+                    }}
+                    className="absolute -top-22 left-1/2 -translate-x-1/2 z-40 size-8 rounded-full bg-[#141418] border border-primary/60 text-primary shadow-2xl flex items-center justify-center cursor-pointer active:scale-90 transition-all"
+                    title="Scroll to latest messages"
+                  >
+                    <ChevronDown className="size-4 text-primary" />
+                  </button>
+                )}
                 <form onSubmit={handleSendMessage} className="relative flex items-center">
                   <input
                     type="text"
@@ -1037,7 +1171,7 @@ function MessagesPage() {
           {isSchedulingOpen && selectedThread && (
             <div className="absolute inset-0 bg-[#000000]/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-100">
               <Card className="w-full max-w-md bg-[#0B0B0C] border border-white/[0.08] rounded-xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
-                
+
                 {/* Modal Header */}
                 <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-[#101011]">
                   <div>
@@ -1091,7 +1225,7 @@ function MessagesPage() {
                             <span>{dropdownOptions.find(o => o.value === apptType)?.label || apptType}</span>
                             <ChevronDown className={`size-4 text-muted-foreground transition-transform duration-150 ${isDropdownOpen ? "rotate-180" : ""}`} />
                           </button>
-                          
+
                           {isDropdownOpen && (
                             <div className="absolute z-[60] w-full mt-1 bg-[#141414] border border-border rounded-md shadow-2xl overflow-hidden py-1 animate-in fade-in slide-in-from-top-1 duration-100">
                               {dropdownOptions.map((option, index) => {
@@ -1105,11 +1239,10 @@ function MessagesPage() {
                                       setIsDropdownOpen(false);
                                     }}
                                     onMouseEnter={() => setHighlightedIndex(index)}
-                                    className={`px-3 py-2 text-xs cursor-pointer select-none flex items-center justify-between transition-colors ${
-                                      isHighlighted 
-                                        ? "bg-white/[0.06] text-white" 
-                                        : "text-muted-foreground hover:text-white"
-                                    } ${isSelected ? "font-bold text-white bg-white/[0.03]" : ""}`}
+                                    className={`px-3 py-2 text-xs cursor-pointer select-none flex items-center justify-between transition-colors ${isHighlighted
+                                      ? "bg-white/[0.06] text-white"
+                                      : "text-muted-foreground hover:text-white"
+                                      } ${isSelected ? "font-bold text-white bg-white/[0.03]" : ""}`}
                                   >
                                     <span>{option.label}</span>
                                     {isSelected && <Check className="size-3.5 text-white" />}
@@ -1173,7 +1306,7 @@ function MessagesPage() {
                         >
                           Cancel
                         </button>
-                        
+
                         <button
                           type="submit"
                           disabled={isBooking || !apptDateTime}
@@ -1333,9 +1466,8 @@ function MessagesPage() {
                           key={idx}
                           type="button"
                           onClick={() => setLookbookPage(idx)}
-                          className={`size-2 rounded-full transition-all duration-300 ${
-                            lookbookPage === idx ? "bg-primary w-5" : "bg-white/10 hover:bg-white/30"
-                          }`}
+                          className={`size-2 rounded-full transition-all duration-300 ${lookbookPage === idx ? "bg-primary w-5" : "bg-white/10 hover:bg-white/30"
+                            }`}
                         />
                       ))}
                     </div>
@@ -1350,7 +1482,7 @@ function MessagesPage() {
                       >
                         Previous
                       </button>
-                      
+
                       {lookbookPage < 3 ? (
                         <button
                           type="button"
@@ -1459,13 +1591,13 @@ function MessagesPage() {
                   ))
                 )}
               </div>
-              
+
               <div className="border-t border-border pt-4">
                 <p className="text-xs font-semibold text-foreground mb-2">Upload New Portfolio</p>
                 <div className="flex gap-2">
-                  <input 
-                    type="text" 
-                    placeholder="e.g. Modern Farmhouse Collection" 
+                  <input
+                    type="text"
+                    placeholder="e.g. Modern Farmhouse Collection"
                     value={newPortfolioName}
                     onChange={e => setNewPortfolioName(e.target.value)}
                     className="flex-1 bg-secondary border border-border rounded-md px-3 py-2 text-xs text-foreground focus:outline-none focus:border-white/60"

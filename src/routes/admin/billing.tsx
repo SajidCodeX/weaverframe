@@ -21,7 +21,7 @@ export const Route = createFileRoute("/admin/billing")({
   },
   head: () => ({
     meta: [
-      { title: "Billing & Subscriptions — Builder's Edge Admin" },
+      { title: "Billing & Subscriptions — WeaverFrame Admin" },
     ],
   }),
   component: AdminBillingRoute,

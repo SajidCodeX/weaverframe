@@ -77,11 +77,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Builder's Edge Dashboard" },
-      { name: "description", content: "Track, manage, and convert AI-generated home buyer leads with Builder's Edge." },
-      { name: "author", content: "Builder's Edge" },
+      { title: "WeaverFrame Dashboard" },
+      { name: "description", content: "Track, manage, and convert AI-generated home buyer leads with WeaverFrame." },
+      { name: "author", content: "WeaverFrame" },
       { name: "theme-color", content: "#0A0A0A" },
-      { property: "og:title", content: "Builder's Edge Dashboard" },
+      { property: "og:title", content: "WeaverFrame Dashboard" },
       { property: "og:description", content: "Track, manage, and convert AI-generated home buyer leads." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -111,11 +111,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     let activeRole = undefined;
     if (typeof window !== 'undefined') {
       activeRole =
-        // FIX-4: sessionStorage is wiped on tab close. Fall back to localStorage
-        // so returning users (e.g. after 1 week) still send the correct role hint
-        // to the server and avoid the multi-cookie UNAUTHORIZED redirect.
+        // sessionStorage is set by start.ts on load from localStorage.role_${tabId}
+        // so this is always tab-specific and correct.
         sessionStorage.getItem('active_role') ??
-        localStorage.getItem('active_role') ??
         undefined;
     }
 
@@ -133,10 +131,6 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     if (typeof window !== 'undefined' && session?.role) {
       if (!sessionStorage.getItem('active_role')) {
         sessionStorage.setItem('active_role', session.role);
-      }
-      // FIX-4: also keep localStorage in sync so next cold visit has the role
-      if (!localStorage.getItem('active_role')) {
-        localStorage.setItem('active_role', session.role);
       }
       const tabId = sessionStorage.getItem('tab_id');
       if (tabId && !localStorage.getItem(`role_${tabId}`)) {

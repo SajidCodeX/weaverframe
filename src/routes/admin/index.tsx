@@ -28,7 +28,7 @@ export const Route = createFileRoute("/admin/")({
   },
   head: () => ({
     meta: [
-      { title: "Global Overview — Builder's Edge Admin" },
+      { title: "Global Overview — WeaverFrame Admin" },
     ],
   }),
   component: AdminOverview,
@@ -72,7 +72,7 @@ function AdminOverview() {
         </div>
         <h3 className="text-2xl font-bold text-foreground tracking-tight">System Administrator Console</h3>
         <p className="mt-2 text-muted-foreground max-w-md">
-          Welcome to the Builder's Edge global administration dashboard. Use the sidebar to manage builders, monitor system health, and configure global settings.
+          Welcome to the WeaverFrame global administration dashboard. Use the sidebar to manage builders, monitor system health, and configure global settings.
         </p>
       </Card>
     </Shell>

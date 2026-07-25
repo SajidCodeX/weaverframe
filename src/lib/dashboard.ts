@@ -215,6 +215,10 @@ export const getLastSyncTime = createServerFn({ method: 'POST' })
     const session = await requireAuth(data?.activeRole ?? undefined);
     const db = await getTenantDb(session);
     try {
+      const syncStatus = await db.systemSync.findUnique({ where: { id: 'rencast_leads' } });
+      if (syncStatus) {
+        return syncStatus.lastSyncAt.toISOString();
+      }
       const latestLead = await db.lead.findFirst({
         orderBy: { createdAt: 'desc' },
         select: { createdAt: true }
@@ -302,7 +306,12 @@ export const getLeadsData = createServerFn({ method: 'POST' })
   try {
     const session = await requireAuth(data?.activeRole ?? undefined)
     const db = await getTenantDb(session)
+    const whereClause: any = {}
+    if (session.role === 'builder' && session.builderRole === 'sales') {
+      whereClause.assignedToId = session.userId
+    }
     const leads = await db.lead.findMany({
+      where: whereClause,
       orderBy: { purchaseDate: 'desc' },
       include: {
         activities: {
@@ -329,6 +338,7 @@ export const addManualLead = createServerFn({ method: 'POST' })
     county: string;
     state: string;
     landPrice: number;
+    estimatedBudget?: number;
     status: string;
     scoreTier: string;
     source: string;
@@ -338,10 +348,12 @@ export const addManualLead = createServerFn({ method: 'POST' })
     const session = await requireAuth()
     const db = await getTenantDb()
     try {
-      const estimatedBudget = data.landPrice * 4
+      const estimatedBudget = data.estimatedBudget || data.landPrice * 4
+      const assignedToId = (session.role === 'builder' && session.builderRole === 'sales') ? session.userId : undefined
       const lead = await db.lead.create({
         data: {
           builderId: session.builderId || '',
+          assignedToId,
           name: data.name,
           phone: data.phone || null,
           email: data.email || null,
@@ -375,7 +387,11 @@ export const addManualLead = createServerFn({ method: 'POST' })
 export const deleteLead = createServerFn({ method: 'POST' })
   .inputValidator((id: string) => id)
   .handler(async ({ data: id }) => {
-    const { getTenantDb } = await import('./server-utils.server');
+    const { getTenantDb, requireAuth } = await import('./server-utils.server');
+    const session = await requireAuth()
+    if (session.role === 'builder' && session.builderRole === 'sales') {
+      throw new Error("FORBIDDEN: Sales Agents cannot delete leads")
+    }
     const db = await getTenantDb()
     try {
       await db.activity.deleteMany({ where: { leadId: id } })
@@ -396,6 +412,7 @@ export const updateLead = createServerFn({ method: 'POST' })
     county?: string;
     state?: string;
     landPrice?: number;
+    estimatedBudget?: number;
     status?: string;
     scoreTier?: string;
     source?: string;
@@ -572,6 +589,15 @@ export const getReviewsData = createServerFn({ method: 'POST' })
   try {
     const session = await requireAuth(data?.activeRole ?? undefined)
     const db = await getTenantDb(session)
+
+    // Clean up legacy dummy seed platform records with fake stats (42, 18, 12 reviews)
+    await db.reviewPlatform.deleteMany({
+      where: {
+        reviewCount: { in: [42, 18, 12] },
+        profileUrl: { in: ["https://business.google.com", "https://houzz.com", "https://facebook.com"] }
+      }
+    })
+
     const platforms = await db.reviewPlatform.findMany({
       orderBy: { name: 'asc' }
     })
@@ -596,11 +622,55 @@ export const getReviewsData = createServerFn({ method: 'POST' })
   }
 })
 
+export const connectReviewPlatform = createServerFn({ method: 'POST' })
+  .inputValidator((data: { name: string; profileUrl: string }) => data)
+  .handler(async ({ data }) => {
+    const { getTenantDb, requireAuth } = await import('./server-utils.server');
+    const session = await requireAuth();
+    const db = await getTenantDb();
+    try {
+      const platform = await db.reviewPlatform.create({
+        data: {
+          builderId: session.builderId || '',
+          name: data.name,
+          profileUrl: data.profileUrl || 'https://google.com',
+          rating: 5.0,
+          reviewCount: 0,
+          reviewsGoal: 0
+        }
+      });
+      return platform;
+    } catch (error) {
+      console.error("Error in connectReviewPlatform:", error);
+      throw error;
+    }
+  });
+
+export const disconnectReviewPlatform = createServerFn({ method: 'POST' })
+  .inputValidator((id: string) => id)
+  .handler(async ({ data: id }) => {
+    const { getTenantDb, requireAuth } = await import('./server-utils.server');
+    const session = await requireAuth();
+    const db = await getTenantDb();
+    try {
+      await db.reviewPlatform.delete({
+        where: { id }
+      });
+      return { success: true };
+    } catch (error) {
+      console.error("Error in disconnectReviewPlatform:", error);
+      throw error;
+    }
+  });
+
 export const sendReviewRequest = createServerFn({ method: 'POST' })
   .inputValidator((data: { clientName: string; clientEmail?: string; clientPhone?: string; leadId?: string }) => data)
   .handler(async ({ data }) => {
     const { getTenantDb, requireAuth } = await import('./server-utils.server');
     const session = await requireAuth()
+    if (session.role === 'builder' && session.builderRole === 'sales') {
+      throw new Error("FORBIDDEN: Sales Agents cannot send review requests")
+    }
     const { clientName, clientEmail, clientPhone, leadId } = data
     const db = await getTenantDb()
     try {
@@ -876,11 +946,44 @@ export const simulateAIChatReply = createServerFn({ method: 'POST' })
       const leadName = lead ? lead.name : "Client";
       const leadCounty = lead ? lead.county : "your area";
 
+      // Fetch upcoming active appointments for this builder to check calendar availability
+      const upcomingAppts = await db.appointment.findMany({
+        where: {
+          builderId: session.builderId || '',
+          status: { in: ['Confirmed', 'Pending'] }
+        },
+        include: { lead: true },
+        orderBy: { dateTime: 'asc' },
+        take: 10
+      });
+
+      const apptScheduleStr = upcomingAppts.length > 0
+        ? upcomingAppts.map(a => `- ${new Date(a.dateTime).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}: ${a.type} with ${a.lead?.name || 'Client'} (${a.location})`).join('\n')
+        : "No upcoming booked meetings currently in calendar.";
+
       const systemPrompt = `You are Alex, the premium AI Concierge for ${companyName}. Your supervisor is ${contactName}. 
-Your persona is knowledgeable, highly professional, polite, and responsive. You never sound robotic.
+Your persona is knowledgeable, highly professional, polite, and responsive. You text like a smart, natural human sales executive.
+
+CRITICAL CONVERSATION & GREETING RULES:
+- DO NOT start your message with greetings like "Hello [Name]", "Hi [Name]", "Hey [Name]", or "Good morning" if replying in an ongoing, continuous chat thread. In a continuous back-and-forth text conversation, respond DIRECTLY to the lead's question or statement without repeating "Hello/Hi", exactly like a human texting on WhatsApp or SMS.
+- ONLY include a greeting (e.g. "Hello [Name]") if this is the very first outreach message to a lead or if starting a brand new topic after a long period of inactivity.
+
+CALENDAR & APPOINTMENT AVAILABILITY RULES:
+- You have LIVE access to the builder's real-time booked appointment calendar.
+- Builder's Currently Booked Schedule:
+${apptScheduleStr}
+
+DATE, DAY & TIME CLARIFICATION RULES:
+1. If the client asks for a meeting, call, or site visit WITHOUT specifying a clear DATE or DAY OF THE WEEK (e.g. if they only mention time like "Can we meet at 4 PM?", "4 baje milna hai", or "Call me at 3 PM"):
+   - DO NOT assume today, tomorrow, or any specific date.
+   - Politely ask the client to confirm WHICH DATE or DAY OF THE WEEK they are aiming for at that time (e.g., *"I'd be happy to schedule a site visit! Could you please let me know which date or day of the week (e.g. this Saturday or next Monday) works best for you at 4 PM?"*).
+2. If the client specifies BOTH a DATE/DAY AND A TIME (e.g. "Tomorrow at 4 PM", "This Saturday at 11 AM", "July 30th at 2 PM"):
+   - Check the Builder's Currently Booked Schedule above for time conflicts on that date.
+   - If there is a conflict: *"Let me check our builder calendar... It looks like we already have a site visit booked at that exact time on [Day]. Would [Alternative Time 30-60 mins before/after] work for you instead?"*
+   - If the slot is free: *"Let me check our builder calendar... Great, [Day/Date] at [Requested Time] is completely open! I've reserved that slot for your site visit."*
 
 Your goal is to perform a 2-part task:
-1. Formulate an elegant, helpful response to the client (under 3-4 sentences, optimal for SMS), personalized using their name and target county. Finish with a single helpful call-to-action (e.g. asking a qualifying question or suggesting a quick phone call to discuss their project).
+1. Formulate an elegant, direct, helpful response to the client (under 2-3 sentences, optimal for SMS/WhatsApp), focusing directly on their inquiry. Finish with a single helpful call-to-action (e.g. asking a qualifying question or suggesting a quick phone call to discuss their project).
 2. Analyze the client's latest message intent and classify it into one of these categories:
    - "HOT": The client wants to build, is planning to start construction soon (e.g. within 6 months), wants a phone call, or is looking for a builder.
    - "COLD": The client is doing it themselves, has already hired another builder, is not interested, or told you to stop messaging them.
@@ -934,6 +1037,16 @@ Do not output any introductory or conversational text outside of the raw JSON ob
           intent = 'COLD';
         } else {
           intent = 'WARM';
+        }
+      }
+
+      // Strip redundant repetitive greetings (e.g. "Hello Aman,", "Hi Aman,", "Aman,") in continuous conversation
+      if (chatHistory.length > 0 && replyText) {
+        const firstName = leadName ? leadName.split(' ')[0] : '';
+        const greetingRegex = new RegExp(`^(Hello|Hi|Hey|Good morning|Good afternoon|${firstName})\\s*([A-Za-z0-9]+)?\\s*[,!.:-]\\s*`, 'i');
+        replyText = replyText.replace(greetingRegex, '').trim();
+        if (replyText.length > 0) {
+          replyText = replyText.charAt(0).toUpperCase() + replyText.slice(1);
         }
       }
 
@@ -998,24 +1111,51 @@ export const summarizeConversation = createServerFn({ method: 'POST' })
 
       const chatLog = messages.map(m => `${m.sender.toUpperCase()}: ${m.content}`).join('\n');
       
-      const prompt = `You are an expert sales manager summarizing a chat log between a home builder and a lead. 
-Analyze this conversation and provide a highly accurate, 2-3 sentence conclusion. Do NOT list out the messages. 
-Just state where the deal is at right now (e.g., "The lead is ready to book a site visit. They have a $400k budget and own their land.").
+      const apiKey = process.env.GROQ_API_KEY?.replace(/['"]/g, '').trim();
+      if (!apiKey) return "Groq API key not configured.";
 
-Conversation:
+      const prompt = `You are an expert AI Builder Sales Strategist preparing an Executive Pre-Meeting Briefing Sheet for a custom home builder before they meet or call a lead.
+
+Analyze the entire conversation log and construct a detailed, highly structured Pre-Meeting Briefing covering these 4 core categories:
+
+📋 CLIENT PROFILE & DESIGN SPECS:
+• Summarize home style, square footage, bed/bath count, target county/city, land ownership, lot conditions (slopes, utilities, etc.).
+
+💰 FINANCIALS & FEASIBILITY:
+• Summarize stated budget range, per sq ft cost discussions, slope/foundation/retaining wall engineering cost expectations.
+
+❓ KEY CONCERNS & OBJECTIONS RAISED:
+• Summarize specific technical or pricing questions the client asked that the builder must address during the call.
+
+🎯 ACTION PLAN & MEETING DELIVERABLES:
+• Summarize scheduled meeting/call date, time, phone number, and exact documents requested (e.g. site evaluation report, floor plan proposals, estimate sheets).
+
+Format the output clearly using bullet points and bold section headers. Keep it professional, highly detailed, clear, and actionable for the builder.
+
+Conversation Log:
 ${chatLog}`;
 
-      const { generateGroqCompletion } = await import('./ai-agent.server');
-      const summary = await generateGroqCompletion({ 
-        data: { 
-          messages: [{ role: 'system', content: prompt }] 
-        } 
+      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: "llama-3.3-70b-versatile",
+          messages: [{ role: 'system', content: prompt }],
+          temperature: 0.5,
+          max_tokens: 300
+        })
       });
 
-      return summary || "Unable to summarize chat.";
+      if (!res.ok) throw new Error(`Groq status ${res.status}`);
+      const json = await res.json();
+      const summary = json.choices?.[0]?.message?.content;
+      return summary || "Unable to generate chat summary.";
     } catch (err) {
       console.error("Summarization error:", err);
-      return "Failed to generate summary.";
+      return "Failed to generate summary. Please try again.";
     }
   });
 
@@ -1092,7 +1232,12 @@ export const getAppointmentsData = createServerFn({ method: 'POST' })
     try {
       const session = await requireAuth(data?.activeRole ?? undefined)
       const db = await getTenantDb(session)
+      const whereClause: any = {}
+      if (session.role === 'builder' && session.builderRole === 'sales') {
+        whereClause.lead = { assignedToId: session.userId }
+      }
       const appts = await db.appointment.findMany({
+        where: whereClause,
         orderBy: { dateTime: 'asc' },
         include: {
           lead: true
@@ -1298,7 +1443,12 @@ export const getConversations = createServerFn({ method: 'POST' })
   try {
     const session = await requireAuth(data?.activeRole ?? undefined)
     const db = await getTenantDb(session)
+    const whereClause: any = {}
+    if (session.role === 'builder' && session.builderRole === 'sales') {
+      whereClause.assignedToId = session.userId
+    }
     const leads = await db.lead.findMany({
+      where: whereClause,
       include: {
         messages: {
           orderBy: { createdAt: 'desc' }
@@ -1881,12 +2031,19 @@ export const testIntegrationConnection = createServerFn({ method: 'POST' })
     return { success: true };
   })
 
-export const exportLeadsToCsv = createServerFn({ method: 'GET' })
-  .handler(async () => {
-    const { getTenantDb } = await import('./server-utils.server');
-    const db = await getTenantDb()
+export const exportLeadsToCsv = createServerFn({ method: 'POST' })
+  .inputValidator((data: { activeRole?: string | null } | undefined) => data)
+  .handler(async ({ data }) => {
+    const { getTenantDb, requireAuth } = await import('./server-utils.server');
+    const session = await requireAuth(data?.activeRole ?? undefined);
+    const db = await getTenantDb(session);
     try {
+      const whereClause: any = {};
+      if (session.role === 'builder' && session.builderRole === 'sales') {
+        whereClause.assignedToId = session.userId;
+      }
       const leads = await db.lead.findMany({
+        where: whereClause,
         orderBy: { purchaseDate: 'desc' }
       })
       
@@ -2245,10 +2402,13 @@ export const createTeamInvite = createServerFn({ method: 'POST' })
     const { getTenantDb, requireAuth } = await import('./server-utils.server');
     const session = await requireAuth();
 
-    // FIX-5: Server-side RBAC guard — only owner-role builders may invite new team members.
-    // This is defense-in-depth: the route guard is the first layer, this is the second.
-    if (session.role === 'builder' && session.builderRole !== 'owner') {
-      throw new Error('FORBIDDEN: Only the account owner can invite team members.')
+    if (session.role === 'builder') {
+      if (session.builderRole === 'sales' || session.builderRole === 'manager') {
+        throw new Error('FORBIDDEN: Only Owners and Admins can invite team members.')
+      }
+      if (session.builderRole === 'admin' && (data.role === 'owner' || data.role === 'admin')) {
+        throw new Error('FORBIDDEN: Admins can only invite Manager or Sales Agent roles.')
+      }
     }
 
     const db = await getTenantDb()
@@ -2284,20 +2444,37 @@ export const removeTeamMember = createServerFn({ method: 'POST' })
     const { getTenantDb, requireAuth } = await import('./server-utils.server');
     const session = await requireAuth();
 
-    // FIX-5: Server-side RBAC guard — only owner-role builders may remove team members.
-    if (session.role === 'builder' && session.builderRole !== 'owner') {
-      throw new Error('FORBIDDEN: Only the account owner can remove team members.')
+    if (session.role === 'builder') {
+      if (session.builderRole === 'sales' || session.builderRole === 'manager') {
+        throw new Error('FORBIDDEN: Only Owners and Admins can remove team members.')
+      }
     }
 
     const db = await getTenantDb()
     try {
+      const targetUser = await db.user.findUnique({
+        where: { id: userId },
+        select: { id: true, builderRole: true }
+      })
+
+      if (!targetUser) throw new Error("User not found")
+
+      if (session.role === 'builder') {
+        if (targetUser.builderRole === 'owner') {
+          throw new Error('FORBIDDEN: Cannot remove Owner account.')
+        }
+        if (session.builderRole === 'admin' && targetUser.builderRole === 'admin') {
+          throw new Error('FORBIDDEN: Admins cannot remove other Admin accounts.')
+        }
+      }
+
       await db.user.delete({
         where: { id: userId, builderId: session.builderId || undefined }
       })
       return { success: true }
-    } catch (error) {
-      console.error("Error in removeTeamMember:", error)
-      throw error
+    } catch (err) {
+      console.error("Error in removeTeamMember:", err)
+      throw err
     }
   })
 

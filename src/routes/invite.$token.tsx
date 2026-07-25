@@ -59,7 +59,7 @@ function InviteRoute() {
               <path d="M2 12L12 17L22 12" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </div>
-          <span className="text-xl font-bold tracking-tight text-white">Builder's Edge</span>
+          <span className="text-xl font-bold tracking-tight text-white">WeaverFrame</span>
         </div>
         <h2 className="mt-6 text-center text-3xl font-bold tracking-tight text-white">
           Welcome to the platform

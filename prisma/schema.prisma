@@ -57,7 +57,8 @@ model User {
   updatedAt         DateTime  @updatedAt
   deletedAt         DateTime?
 
-  builder   Builder?  @relation(fields: [builderId], references: [id], onDelete: Cascade)
+  builder       Builder?  @relation(fields: [builderId], references: [id], onDelete: Cascade)
+  assignedLeads Lead[]    @relation("AssignedUserLeads")
 }
 
 // ─── LEADS ───────────────────────────────────────────────────────────────────
@@ -65,6 +66,9 @@ model Lead {
   id              String     @id @default(uuid())
   builderId       String
   builder         Builder    @relation(fields: [builderId], references: [id], onDelete: Cascade)
+  
+  assignedToId    String?
+  assignedTo      User?      @relation("AssignedUserLeads", fields: [assignedToId], references: [id], onDelete: SetNull)
   
   name            String
   county          String     

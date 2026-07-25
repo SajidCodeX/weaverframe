@@ -21,21 +21,18 @@ if (typeof window !== "undefined") {
   //
   // NEW (correct): Priority chain — never guess blindly from URL.
   //   1. Already in sessionStorage (e.g., user is mid-session, already hydrated)
-  //   2. localStorage.active_role  (set on successful login, survives tab close)
-  //   3. localStorage.role_${tabId} (per-tab fallback for backward compat)
-  //   4. NOTHING on /login or /invite — let login.tsx set it after auth succeeds
-  //   5. URL-based guess ONLY for non-auth pages when truly no role is stored
+  //   2. localStorage.role_${tabId} (tab-specific cross-session persistence)
+  //   3. NOTHING on /login or /invite — let login.tsx set it after auth succeeds
+  //   4. URL-based guess ONLY for non-auth pages when truly no role is stored
   const alreadyInSession = sessionStorage.getItem('active_role');
 
   if (!alreadyInSession) {
     const persistedRole =
-      localStorage.getItem('active_role') ||      // primary: set on login
-      localStorage.getItem(`role_${tabId}`);       // fallback: per-tab
+      localStorage.getItem(`role_${tabId}`);       // tab-specific cross-session persistence
 
     if (persistedRole) {
       // Restore known role into this tab's session
       sessionStorage.setItem('active_role', persistedRole);
-      localStorage.setItem(`role_${tabId}`, persistedRole); // keep in sync
     } else {
       // No stored role at all. Only guess from URL on protected routes.
       // On /login and /invite: do NOT set anything — login.tsx will set it

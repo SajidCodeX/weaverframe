@@ -25,6 +25,30 @@ function formatRelativeTime(dateString: string): string {
   }
 }
 
+function formatLiveSyncTime(dateString: string): string {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffSec = Math.max(0, Math.floor(diffMs / 1000));
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHr = Math.floor(diffMin / 60);
+  const diffDay = Math.floor(diffHr / 24);
+
+  if (diffSec < 10) {
+    return "Just now";
+  } else if (diffSec < 60) {
+    return `${diffSec}s ago`;
+  } else if (diffMin < 60) {
+    return `${diffMin}m ago`;
+  } else if (diffHr < 24) {
+    return `${diffHr}h ago`;
+  } else if (diffDay < 7) {
+    return `${diffDay}d ago`;
+  } else {
+    return date.toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  }
+}
+
 export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCollapsed?: boolean; lastSyncAt?: string | null }) {
   const router = useRouter();
   const { session } = useRouteContext({ strict: false }) as any;
@@ -36,10 +60,26 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
   const [activeIndex, setActiveIndex] = useState(0);
   const [userInitials, setUserInitials] = useState("?");
   const [realSyncTime, setRealSyncTime] = useState<string | null>(lastSyncAt || null);
+  const [tick, setTick] = useState(0);
+
+  // Sync realSyncTime when lastSyncAt prop changes
+  useEffect(() => {
+    if (lastSyncAt) {
+      setRealSyncTime(lastSyncAt);
+    }
+  }, [lastSyncAt]);
+
+  // Tick for live-updating relative timestamp
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTick((t) => t + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     if (!lastSyncAt && !isAdmin) {
-      const activeRole = sessionStorage.getItem('active_role') ?? localStorage.getItem('active_role') ?? undefined;
+      const activeRole = sessionStorage.getItem('active_role') ?? undefined;
       getLastSyncTime({ data: { activeRole } }).then(time => {
         if (time) setRealSyncTime(time);
       });
@@ -66,7 +106,7 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
       return;
     }
     import("@/lib/dashboard").then(({ getBuilderProfile }) => {
-      const activeRole = sessionStorage.getItem('active_role') ?? localStorage.getItem('active_role') ?? undefined;
+      const activeRole = sessionStorage.getItem('active_role') ?? undefined;
       getBuilderProfile({ data: { activeRole } }).then((profile) => {
         if (profile?.primaryContact) {
           const initials = profile.primaryContact
@@ -95,7 +135,18 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
         { title: "Review Booster", url: "/reviews" },
         { title: "AI Activity Logs", url: "/ai-activity" },
         { title: "Appointments Calendar", url: "/appointments" },
+        { title: "Messages", url: "/messages" },
+        { title: "Reports", url: "/reports" },
+        { title: "Team Management", url: "/team" },
+        { title: "Settings", url: "/settings" },
       ];
+
+  const builderRole = session?.builderRole || 'sales';
+  const filteredQuickNavItems = quickNavItems.filter(item => {
+    if (item.url === '/reports' && builderRole === 'sales') return false;
+    if ((item.url === '/team' || item.url === '/settings') && (builderRole === 'sales' || builderRole === 'manager')) return false;
+    return true;
+  });
 
   // Popover states
   const [isNotifOpen, setIsNotifOpen] = useState(false);
@@ -165,7 +216,6 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
     }
     const activeRole =
       sessionStorage.getItem('active_role') ??
-      localStorage.getItem('active_role') ??
       undefined;
     getNotificationsData({ data: { activeRole } })
       .then((data) => {
@@ -217,7 +267,7 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
     }
     if (isSearchOpen && leads.length === 0) {
       setLoadingLeads(true);
-      const activeRole = sessionStorage.getItem('active_role') ?? localStorage.getItem('active_role') ?? undefined;
+      const activeRole = sessionStorage.getItem('active_role') ?? undefined;
       getLeadsData({ data: { activeRole } })
         .then((data) => {
           setLeads(data);
@@ -318,7 +368,7 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
           {/* Data Last Updated */}
           <div className="hidden sm:flex items-center justify-center h-[34px] text-[11px] text-success/80 bg-success/10 border border-success/20 rounded-md px-3 cursor-default font-medium">
             <div className="size-1.5 rounded-full bg-success mr-2 animate-pulse" />
-            Live DB Sync: {realSyncTime ? new Date(realSyncTime).toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' }) : new Date().toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' })}
+            Live DB Sync: {realSyncTime ? formatLiveSyncTime(realSyncTime) : "Just now"}
           </div>
 
           {/* Today's Date (mm/dd/yy) */}
@@ -495,7 +545,7 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
                 onKeyDown={(e) => {
                   const isQueryEmpty = searchQuery.trim() === "";
                   const itemsCount = isQueryEmpty
-                    ? quickNavItems.length
+                    ? filteredQuickNavItems.length
                     : isAdmin
                       ? filteredNavItems.length
                       : filteredLeads.length;
@@ -511,7 +561,7 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
                     e.preventDefault();
                     setIsSearchOpen(false);
                     if (isQueryEmpty || isAdmin) {
-                      const selectedNav = (isQueryEmpty ? quickNavItems : filteredNavItems)[
+                      const selectedNav = (isQueryEmpty ? filteredQuickNavItems : filteredNavItems)[
                         activeIndex
                       ];
                       if (selectedNav) {
@@ -545,7 +595,7 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
                   <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-3 py-1.5">
                     Quick Navigation
                   </div>
-                  {quickNavItems.map((nav, index) => (
+                  {filteredQuickNavItems.map((nav, index) => (
                     <a
                       key={nav.title}
                       href={nav.url}

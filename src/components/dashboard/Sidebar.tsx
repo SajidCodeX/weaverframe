@@ -50,7 +50,15 @@ export function Sidebar({
   const { session } = useRouteContext({ strict: false }) as any;
   const isAdminView = pathname.startsWith('/admin');
   const isAdminPreviewingBuilder = session?.role === 'admin' && !!session?.actingAsBuilderId;
-  const items = isAdminView ? adminItems : builderItems;
+  
+  const builderRole = session?.builderRole || 'sales';
+  const filteredBuilderItems = builderItems.filter(item => {
+    if (item.to === '/reports' && builderRole === 'sales') return false;
+    if ((item.to === '/team' || item.to === '/settings') && (builderRole === 'sales' || builderRole === 'manager')) return false;
+    return true;
+  });
+
+  const items = isAdminView ? adminItems : filteredBuilderItems;
 
   const handleLogout = async () => {
     if (typeof window !== 'undefined') {
@@ -103,7 +111,7 @@ export function Sidebar({
             isCollapsed ? "opacity-0 w-0 scale-x-0 overflow-hidden ml-0" : "opacity-100 w-auto scale-x-100 ml-0"
           }`}
         >
-          Builder's Edge
+          WeaverFrame
         </span>
       </div>
 
@@ -168,7 +176,7 @@ export function Sidebar({
             {isAdminView ? 'Administration' : 'Company'}
           </div>
           <div className="text-sm text-foreground font-medium mt-0.5 truncate">
-            {isAdminView ? "Builder's Edge" : (session?.companyName || 'Company Name')}
+            {isAdminView ? "WeaverFrame" : (session?.companyName || 'Company Name')}
           </div>
         </div>
 
@@ -209,7 +217,7 @@ export function Sidebar({
             <div className="text-sm text-foreground truncate font-medium">
               {isAdminView ? 'SajidAli Ansari' : (session?.displayName || 'User')}
             </div>
-            <div className="text-xs text-muted-foreground">{isAdminView ? 'Superuser' : (session?.builderRole === 'owner' ? 'Owner' : 'Member')}</div>
+            <div className="text-xs text-muted-foreground capitalize">{isAdminView ? 'Superuser' : (session?.builderRole === 'sales' ? 'Sales Agent' : session?.builderRole || 'Owner')}</div>
           </div>
           
           <button 

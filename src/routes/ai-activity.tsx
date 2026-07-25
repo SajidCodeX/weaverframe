@@ -3,7 +3,7 @@ import { Shell } from "@/components/dashboard/Shell";
 import { Card, CardHeader, Badge } from "@/components/dashboard/primitives";
 import { Bot, Zap, Clock, MessageSquare, Send, Sparkles, User, BrainCircuit, ChevronDown, Trash2, Eye, X } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
-import { getLeadsData, simulateAIChatReply, generateAIScriptUpdate } from "@/lib/dashboard";
+import { getLeadsData, simulateAIChatReply, generateAIScriptUpdate, getBuilderProfile } from "@/lib/dashboard";
 import { obscurePII } from "@/lib/utils";
 import { useRouteContext } from "@tanstack/react-router";
 
@@ -12,12 +12,12 @@ export const Route = createFileRoute("/ai-activity")({
     if (typeof window === 'undefined' && !context.session) {
       return [];
     }
-    const activeRole = typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? localStorage.getItem('active_role') ?? undefined) : undefined;
+    const activeRole = typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? undefined) : undefined;
     return await getLeadsData({ data: { activeRole } });
   },
   head: () => ({
     meta: [
-      { title: "AI Activity — Builder's Edge" },
+      { title: "AI Activity — WeaverFrame" },
       { name: "description", content: "AI conversation log and scripts." },
     ],
   }),
@@ -97,13 +97,22 @@ function AIPage() {
   const loaderData = useLoaderData({ from: '/ai-activity' });
   const leads = (loaderData as any) || [];
 
+  const [builderProfile, setBuilderProfile] = useState({ companyName: 'Your Company', primaryContact: 'Alex' });
+
+  useEffect(() => {
+    const activeRole = typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? undefined) : undefined;
+    getBuilderProfile({ data: { activeRole } }).then(p => {
+      if (p) setBuilderProfile({ companyName: p.companyName || 'Your Company', primaryContact: p.primaryContact || 'Alex' });
+    }).catch(() => {});
+  }, []);
+
   // Script customization state
   const [scriptInstruction, setScriptInstruction] = useState("");
   const [isGeneratingScripts, setIsGeneratingScripts] = useState(false);
   const [scripts, setScripts] = useState([
     {
       t: "Message 1 · Immediate (< 60s)",
-      body: "Hi [Name], I noticed your new residential building permit application filed in [County] County. I'm Your Name's assistant from Your Company. Since custom builds in Austin require early structural reviews, have you already hired a general builder?",
+      body: "Hi [Name], I noticed your new residential building permit application filed in [County] County. I'm [Your Name]'s assistant from [Your Company]. Since custom builds in Austin require early structural reviews, have you already hired a general builder?",
       color: "#30D158",
     },
     {
@@ -156,7 +165,7 @@ function AIPage() {
     } else {
       const name = getCleanLeadName(leadObj);
       const defaultGreeting = [
-        { role: 'assistant' as const, content: `Hi, I noticed your new residential building permit application filed in ${leadObj.county || 'Travis County'}. I'm Alex, Your Name's assistant from Your Company. Since custom builds in Austin require early structural reviews, have you already hired a general builder?` }
+        { role: 'assistant' as const, content: `Hi, I noticed your new residential building permit application filed in ${leadObj.county || 'Travis County'}. I'm ${builderProfile.primaryContact}, assistant from ${builderProfile.companyName}. Since custom builds in Austin require early structural reviews, have you already hired a general builder?` }
       ];
       setChatHistory(defaultGreeting);
     }
@@ -473,7 +482,7 @@ function AIPage() {
                 </div>
                 <div>
                   <h4 className="text-xs font-semibold text-foreground">Alex Concierge Simulator</h4>
-                  <span className="text-[10px] text-muted-foreground">Your Company AI Agent</span>
+                  <span className="text-[10px] text-muted-foreground">{builderProfile.companyName} AI Agent</span>
                 </div>
               </div>
               

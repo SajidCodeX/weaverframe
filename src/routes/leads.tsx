@@ -18,13 +18,13 @@ export const Route = createFileRoute("/leads")({
   loader: async ({ context }) => {
     // SSR Blocking Loader: Fetches data on the server and blocks HTML streaming until ready.
     const activeRole = typeof window !== 'undefined' 
-      ? (sessionStorage.getItem('active_role') ?? localStorage.getItem('active_role') ?? undefined) 
+      ? (sessionStorage.getItem('active_role') ?? undefined) 
       : undefined;
       
     return await getLeadsData({ data: { activeRole } });
   },
   staleTime: 60 * 1000, // 1 minute cache
-  head: () => ({ meta: [{ title: "Leads — Builder's Edge" }, { name: "description", content: "Manage all your leads." }] }),
+  head: () => ({ meta: [{ title: "Leads — WeaverFrame" }, { name: "description", content: "Manage all your leads." }] }),
   component: LeadsPage,
 });
 
@@ -37,6 +37,7 @@ function AiStatus({ status }: { status: string }) {
 function LeadsPage() {
   const { session } = useRouteContext({ strict: false }) as any;
   const isPrivacyMode = session?.role === 'admin' && !!session?.actingAsBuilderId;
+  const isSalesAgent = session?.role === 'builder' && session?.builderRole === 'sales';
 
   const rawLeads = useLoaderData({ from: '/leads' }) || [];
   const router = useRouter();
@@ -823,23 +824,25 @@ function LeadsPage() {
                                   >
                                     <Edit className="size-3" /> Edit Lead
                                   </button>
-                                  <button
-                                    onClick={async (e) => {
-                                      e.stopPropagation();
-                                      setActiveMoreLead(null);
-                                      if (confirm(`Are you sure you want to delete ${lead.firstName}?`)) {
-                                        try {
-                                          await deleteLead({ data: lead.id });
-                                          await router.invalidate();
-                                        } catch (err) {
-                                          console.error("Failed to delete lead", err);
+                                  {!isSalesAgent && (
+                                    <button
+                                      onClick={async (e) => {
+                                        e.stopPropagation();
+                                        setActiveMoreLead(null);
+                                        if (confirm(`Are you sure you want to delete ${lead.firstName}?`)) {
+                                          try {
+                                            await deleteLead({ data: lead.id });
+                                            await router.invalidate();
+                                          } catch (err) {
+                                            console.error("Failed to delete lead", err);
+                                          }
                                         }
-                                      }
-                                    }}
-                                    className="w-full text-left text-xs px-2.5 py-1.5 rounded hover:bg-danger/10 text-danger font-medium transition-colors"
-                                  >
-                                    Delete Lead
-                                  </button>
+                                      }}
+                                      className="w-full text-left text-xs px-2.5 py-1.5 rounded hover:bg-danger/10 text-danger font-medium transition-colors"
+                                    >
+                                      Delete Lead
+                                    </button>
+                                  )}
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
@@ -1552,8 +1555,7 @@ const KANBAN_COLUMNS = [
   {
     id: 'qualified',
     label: 'Qualified (Hot)',
-    stages: [],
-    filterFn: (lead: any) => lead.scoreTier === 'Hot',
+    stages: ['Qualified', 'Closed Won'],
     icon: '⭐',
     accent: 'border-t-green-500',
     headerBg: 'bg-green-500/10',
@@ -1569,9 +1571,7 @@ function KanbanBoard(props: KanbanBoardProps) {
   return (
     <div className="flex gap-3 h-full px-4 py-4">
       {KANBAN_COLUMNS.map(col => {
-        const colLeads = col.filterFn
-          ? leads.filter(col.filterFn)
-          : leads.filter(l => col.stages.includes(l.stage));
+        const colLeads = leads.filter(l => col.stages.includes(l.status || l.stage));
         return (
           <KanbanColumn
             key={col.id}

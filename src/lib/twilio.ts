@@ -1,27 +1,27 @@
 /**
- * Plivo SMS Service
- * Handles outgoing SMS via Plivo REST API.
+ * Twilio SMS Service
+ * Handles outgoing SMS via Twilio REST API.
  * Dev mode: logs warning if credentials missing — does NOT throw.
  *
  * Required env vars (set in .env):
- *   PLIVO_AUTH_ID        — From console.plivo.com → Account → API
- *   PLIVO_AUTH_TOKEN     — From console.plivo.com → Account → API
- *   PLIVO_FROM_NUMBER    — Your Plivo phone number in E.164 (+15125550199)
+ *   TWILIO_ACCOUNT_SID   — From console.twilio.com -> Account Info
+ *   TWILIO_AUTH_TOKEN    — From console.twilio.com -> Account Info
+ *   TWILIO_FROM_NUMBER   — Your Twilio phone number in E.164 (+15125550199)
  *   APP_BASE_URL         — Base URL for portal magic links
  */
 
-const PLIVO_AUTH_ID    = process.env.PLIVO_AUTH_ID;
-const PLIVO_AUTH_TOKEN = process.env.PLIVO_AUTH_TOKEN;
-const PLIVO_FROM       = process.env.PLIVO_FROM_NUMBER;
-const APP_BASE_URL     = process.env.APP_BASE_URL || 'http://localhost:8081';
+const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
+const TWILIO_AUTH_TOKEN  = process.env.TWILIO_AUTH_TOKEN;
+const TWILIO_FROM        = process.env.TWILIO_FROM_NUMBER;
+const APP_BASE_URL       = process.env.APP_BASE_URL || 'http://localhost:8081';
 
-const isPlivoConfigured =
-  PLIVO_AUTH_ID &&
-  PLIVO_AUTH_TOKEN &&
-  PLIVO_FROM &&
-  !PLIVO_AUTH_ID.includes('YOUR_') &&
-  !PLIVO_AUTH_TOKEN.includes('YOUR_') &&
-  !PLIVO_FROM.includes('YOUR_');
+const isTwilioConfigured =
+  TWILIO_ACCOUNT_SID &&
+  TWILIO_AUTH_TOKEN &&
+  TWILIO_FROM &&
+  !TWILIO_ACCOUNT_SID.includes('YOUR_') &&
+  !TWILIO_AUTH_TOKEN.includes('YOUR_') &&
+  !TWILIO_FROM.includes('YOUR_');
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -43,45 +43,45 @@ function normalizePhone(phone: string): string {
 // ─── Send a single SMS ───────────────────────────────────────────────────────
 
 export async function sendSms(to: string, body: string): Promise<SmsSendResult> {
-  if (!isPlivoConfigured) {
+  if (!isTwilioConfigured) {
     console.warn(
-      '[Plivo] ⚠️  Credentials not configured — SMS skipped (dev mode).\n' +
-      `[Plivo] Would have sent to: ${to}\n[Plivo] Message: ${body}`
+      '[Twilio] ⚠️  Credentials not configured — SMS skipped (dev mode).\n' +
+      `[Twilio] Would have sent to: ${to}\n[Twilio] Message: ${body}`
     );
-    return { sent: false, error: 'Plivo not configured' };
+    return { sent: false, error: 'Twilio not configured' };
   }
 
   const toNormalized = normalizePhone(to);
-  const authHeader = `Basic ${Buffer.from(`${PLIVO_AUTH_ID}:${PLIVO_AUTH_TOKEN}`).toString('base64')}`;
+  const basicAuth = Buffer.from(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`).toString('base64');
 
   try {
     const res = await fetch(
-      `https://api.plivo.com/v1/Account/${PLIVO_AUTH_ID}/Message/`,
+      `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`,
       {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          Authorization: authHeader,
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Authorization: `Basic ${basicAuth}`,
         },
-        body: JSON.stringify({
-          src:  PLIVO_FROM,
-          dst:  toNormalized,
-          text: body,
-        }),
+        body: new URLSearchParams({
+          From: TWILIO_FROM!,
+          To: toNormalized,
+          Body: body,
+        }).toString(),
       }
     );
 
     if (!res.ok) {
       const errText = await res.text();
-      console.error('[Plivo] SMS API error:', res.status, errText);
+      console.error('[Twilio] SMS API error:', res.status, errText);
       return { sent: false, error: errText };
     }
 
     const data = await res.json();
-    console.info(`[Plivo] ✅ SMS sent to ${toNormalized} — UUID: ${data.message_uuid}`);
-    return { sent: true, messageUuid: data.message_uuid };
+    console.info(`[Twilio] ✅ SMS sent to ${toNormalized} — SID: ${data.sid}`);
+    return { sent: true, messageUuid: data.sid };
   } catch (err: any) {
-    console.error('[Plivo] Network error:', err.message);
+    console.error('[Twilio] Network error:', err.message);
     return { sent: false, error: err.message };
   }
 }
@@ -142,10 +142,10 @@ export const DRIP_INTERVALS_DAYS: Record<DripStep, number> = {
   4: 14, // Day 14
 };
 
-// ─── Validate Plivo webhook signature ────────────────────────────────────────
-// Used in /api/plivo/webhook to verify requests come from Plivo
+// ─── Validate Twilio webhook signature ────────────────────────────────────────
+// Used in /api/twilio/webhook to verify requests come from Twilio
 
-export function validatePlivoSignature(
+export function validateTwilioSignature(
   authToken: string,
   signature: string,
   url: string,

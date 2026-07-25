@@ -28,7 +28,7 @@ const handleRateLogic = createServerFn({ method: 'GET' })
         status: 403, 
         html: `<html>
           <head>
-            <title>Invalid Request — Builder's Edge</title>
+            <title>Invalid Request — WeaverFrame</title>
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <style>
               body { background: #000; color: #fff; font-family: monospace; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }
@@ -53,7 +53,7 @@ const handleRateLogic = createServerFn({ method: 'GET' })
         status: 400, 
         html: `<html>
           <head>
-            <title>Invalid Request — Builder's Edge</title>
+            <title>Invalid Request — WeaverFrame</title>
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <style>
               body { background: #000; color: #fff; font-family: monospace; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }
@@ -78,7 +78,7 @@ const handleRateLogic = createServerFn({ method: 'GET' })
         status: 400, 
         html: `<html>
           <head>
-            <title>Invalid Rating — Builder's Edge</title>
+            <title>Invalid Rating — WeaverFrame</title>
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <style>
               body { background: #000; color: #fff; font-family: monospace; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }
@@ -106,7 +106,7 @@ const handleRateLogic = createServerFn({ method: 'GET' })
           status: 404, 
           html: `<html>
             <head>
-              <title>Not Found — Builder's Edge</title>
+              <title>Not Found — WeaverFrame</title>
               <meta name="viewport" content="width=device-width, initial-scale=1">
               <style>
                 body { background: #000; color: #fff; font-family: monospace; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }
