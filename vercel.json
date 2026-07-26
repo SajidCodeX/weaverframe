@@ -1,4 +1,4 @@
 {
   "framework": null,
-  "buildCommand": "vite build --config vite.config.vercel.ts"
+  "buildCommand": "vite build --config vite.config.vercel.ts && node scripts/vercel-postbuild.mjs"
 }
