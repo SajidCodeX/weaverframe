@@ -1,4 +1,4 @@
 {
   "framework": null,
-  "buildCommand": "NITRO_PRESET=vercel npm run build"
+  "buildCommand": "vite build --config vite.config.vercel.ts"
 }

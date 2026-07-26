@@ -15,8 +15,9 @@ export default defineConfig({
   cloudflare: false,
   tanstackStart: {
     server: { 
-      preset: process.env.VERCEL ? "vercel" : undefined,
-      entry: "server" 
+      // NOTE: entry:"server" was Cloudflare Workers-specific — removed for Vercel deployment.
+      // NITRO_PRESET env var in vercel.json handles the preset selection.
+      preset: "vercel",
     },
     serverFns: { disableCsrfMiddlewareWarning: true }
   },
