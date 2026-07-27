@@ -55,7 +55,18 @@ mkdirSync(FUNC_DIR, { recursive: true });
 console.log("📁 Copying client assets → .vercel/output/static/ ...");
 cpSync(DIST_CLIENT, STATIC_DIR, { recursive: true });
 
-// 3. Bundle server code with ALL dependencies using esbuild
+// 3. Copy Prisma into function node_modules so it's available at runtime
+console.log("📁 Copying Prisma to server function node_modules ...");
+const FUNC_NODE_MODULES = join(FUNC_DIR, "node_modules");
+mkdirSync(FUNC_NODE_MODULES, { recursive: true });
+if (existsSync(join(ROOT, "node_modules", "@prisma"))) {
+  cpSync(join(ROOT, "node_modules", "@prisma"), join(FUNC_NODE_MODULES, "@prisma"), { recursive: true });
+}
+if (existsSync(join(ROOT, "node_modules", ".prisma"))) {
+  cpSync(join(ROOT, "node_modules", ".prisma"), join(FUNC_NODE_MODULES, ".prisma"), { recursive: true });
+}
+
+// 4. Bundle server code with ALL dependencies (except Prisma/ws) using esbuild
 //    dist/server/server.js → ./assets/server-xxx.js → node_modules (externalized by Vite)
 //    esbuild re-bundles everything into one self-contained file.
 console.log("📦 Bundling server + dependencies with esbuild ...");
@@ -68,8 +79,7 @@ await esbuild({
   format: "esm",
   outfile: join(FUNC_DIR, "index.js"),
   // This project uses @prisma/adapter-pg (pure JS) — no native bindings.
-  // Everything can be safely bundled. Only 'ws' is explicitly external.
-  external: ["ws"],
+  external: ["ws", "@prisma/client", ".prisma/client"],
   define: {
     "process.env.NODE_ENV": JSON.stringify("production"),
   },
@@ -81,7 +91,7 @@ await esbuild({
 
 console.log("✅ Server bundle created → .vercel/output/functions/server.func/index.js");
 
-// 4. Write .vc-config.json (Vercel function runtime config)
+// 5. Write .vc-config.json (Vercel function runtime config)
 writeFileSync(
   join(FUNC_DIR, ".vc-config.json"),
   JSON.stringify(
@@ -95,7 +105,7 @@ writeFileSync(
   )
 );
 
-// 5. Write .vercel/output/config.json (Vercel routing rules)
+// 6. Write .vercel/output/config.json (Vercel routing rules)
 writeFileSync(
   join(VERCEL_OUT, "config.json"),
   JSON.stringify(
