@@ -113,65 +113,67 @@ writeFileSync(
   `// Auto-generated Node.js to Web Request adapter
 import app from "./server-bundle.js";
 
-export default async function handler(req, res) {
-  try {
-    const protocol = req.headers['x-forwarded-proto'] || 'https';
-    const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost';
-    const url = new URL(req.url || '/', \`\${protocol}://\${host}\`);
+export default function handler(req, res) {
+  (async () => {
+    try {
+      const protocol = req.headers['x-forwarded-proto'] || 'https';
+      const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost';
+      const url = new URL(req.url || '/', \`\${protocol}://\${host}\`);
 
-    const headers = new Headers();
-    for (const [key, value] of Object.entries(req.headers)) {
-      if (value !== undefined) {
-        if (Array.isArray(value)) {
-          value.forEach(v => headers.append(key, v));
-        } else {
-          headers.set(key, value);
+      const headers = new Headers();
+      for (const [key, value] of Object.entries(req.headers)) {
+        if (value !== undefined) {
+          if (Array.isArray(value)) {
+            value.forEach(v => headers.append(key, v));
+          } else {
+            headers.set(key, value);
+          }
         }
       }
-    }
 
-    let body = undefined;
-    if (req.method !== 'GET' && req.method !== 'HEAD') {
-      body = new ReadableStream({
-        start(controller) {
-          req.on('data', chunk => controller.enqueue(chunk));
-          req.on('end', () => controller.close());
-          req.on('error', err => controller.error(err));
-        }
+      let body = undefined;
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        body = new ReadableStream({
+          start(controller) {
+            req.on('data', chunk => controller.enqueue(chunk));
+            req.on('end', () => controller.close());
+            req.on('error', err => controller.error(err));
+          }
+        });
+      }
+
+      const webReq = new Request(url, {
+        method: req.method,
+        headers,
+        body,
+        duplex: 'half'
       });
-    }
 
-    const webReq = new Request(url, {
-      method: req.method,
-      headers,
-      body,
-      duplex: 'half'
-    });
+      const webRes = await app.fetch(webReq, {}, {});
 
-    const webRes = await app.fetch(webReq, {}, {});
+      res.statusCode = webRes.status;
+      res.statusMessage = webRes.statusText;
+      webRes.headers.forEach((value, key) => {
+        res.setHeader(key, value);
+      });
 
-    res.statusCode = webRes.status;
-    res.statusMessage = webRes.statusText;
-    webRes.headers.forEach((value, key) => {
-      res.setHeader(key, value);
-    });
-
-    if (webRes.body) {
-      const reader = webRes.body.getReader();
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        res.write(value);
+      if (webRes.body) {
+        const reader = webRes.body.getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          res.write(value);
+        }
+        res.end();
+      } else {
+        res.end();
       }
-      res.end();
-    } else {
-      res.end();
+    } catch (error) {
+      console.error('Wrapper error:', error);
+      res.statusCode = 500;
+      res.end('Internal Server Error');
     }
-  } catch (error) {
-    console.error('Wrapper error:', error);
-    res.statusCode = 500;
-    res.end('Internal Server Error');
-  }
+  })();
 }
 `
 );
