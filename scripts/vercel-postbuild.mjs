@@ -77,7 +77,7 @@ await esbuild({
   platform: "node",
   target: "node22",
   format: "esm",
-  outfile: join(FUNC_DIR, "index.js"),
+  outfile: join(FUNC_DIR, "server-bundle.js"),
   // This project uses @prisma/adapter-pg (pure JS) — no native bindings.
   external: ["ws", "@prisma/client", ".prisma/client"],
   define: {
@@ -105,7 +105,21 @@ writeFileSync(
   )
 );
 
-// 6. Write .vercel/output/config.json (Vercel routing rules)
+// 6. Write thin index.js wrapper
+//    server.js exports { default: { fetch(request, env, ctx) } }
+//    Vercel Node.js runtime calls the default export as a function.
+writeFileSync(
+  join(FUNC_DIR, "index.js"),
+  `// Auto-generated wrapper for Vercel Node.js runtime
+import app from "./server-bundle.js";
+
+export default async function handler(request) {
+  return app.fetch(request, {}, {});
+}
+`
+);
+
+// 7. Write .vercel/output/config.json (Vercel routing rules)
 writeFileSync(
   join(VERCEL_OUT, "config.json"),
   JSON.stringify(
