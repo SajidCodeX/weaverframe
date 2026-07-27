@@ -105,6 +105,12 @@ writeFileSync(
   )
 );
 
+// 5.5 Write package.json to force ESM (fixes "Cannot use import statement outside a module")
+writeFileSync(
+  join(FUNC_DIR, "package.json"),
+  JSON.stringify({ type: "module" }, null, 2)
+);
+
 // 6. Write full adapter index.js wrapper
 //    Vercel Node.js runtime passes (req, res) (IncomingMessage, ServerResponse)
 //    But app.fetch expects a Web Request. We manually convert.
