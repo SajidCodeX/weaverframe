@@ -1,4 +1,4 @@
-import { createFileRoute, useLoaderData, useRouter } from "@tanstack/react-router";
+import { createFileRoute, useLoaderData, useRouter, useRouteContext } from "@tanstack/react-router";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { Shell } from "@/components/dashboard/Shell";
 import { Card, Badge } from "@/components/dashboard/primitives";
@@ -225,8 +225,8 @@ function MessagesPage() {
   const [isSimulateOpen, setIsSimulateOpen] = useState(false);
   const [simulateMessageText, setSimulateMessageText] = useState("");
   const [isSimulating, setIsSimulating] = useState(false);
-  const activeRole = typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? 'owner') : 'owner';
-  const canSimulate = activeRole === 'admin' || activeRole === 'owner';
+  const { session } = useRouteContext({ strict: false }) as any;
+  const canSimulate = session?.role === 'admin' || session?.builderRole === 'owner' || session?.builderRole === 'admin';
 
   // Custom dropdown states
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
