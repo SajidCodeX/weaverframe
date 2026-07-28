@@ -630,7 +630,8 @@ function MessagesPage() {
       await simulateLeadMessage({
         data: {
           leadId: selectedLeadId,
-          message: simulateMessageText
+          content: simulateMessageText,
+          enableAiReply: isAiActive
         }
       });
       setIsSimulateOpen(false);
