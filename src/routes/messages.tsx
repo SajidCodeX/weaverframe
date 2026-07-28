@@ -221,6 +221,13 @@ function MessagesPage() {
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [chatSummary, setChatSummary] = useState<string | null>(null);
 
+  // Simulation feature states
+  const [isSimulateOpen, setIsSimulateOpen] = useState(false);
+  const [simulateMessageText, setSimulateMessageText] = useState("");
+  const [isSimulating, setIsSimulating] = useState(false);
+  const activeRole = typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? 'owner') : 'owner';
+  const canSimulate = activeRole === 'admin' || activeRole === 'owner';
+
   // Custom dropdown states
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
@@ -614,6 +621,29 @@ function MessagesPage() {
     }
   };
 
+  const handleSimulateMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedLeadId || !simulateMessageText.trim()) return;
+    
+    setIsSimulating(true);
+    try {
+      await simulateLeadMessage({
+        data: {
+          leadId: selectedLeadId,
+          message: simulateMessageText
+        }
+      });
+      setIsSimulateOpen(false);
+      setSimulateMessageText("");
+      await router.invalidate();
+    } catch (err) {
+      console.error("Failed to simulate message:", err);
+      toast.error("Failed to simulate lead message.");
+    } finally {
+      setIsSimulating(false);
+    }
+  };
+
   // Formats relative time snippets (e.g. "Just now", "2m ago")
   const formatMsgTime = (isoString: string) => {
     try {
@@ -873,6 +903,15 @@ function MessagesPage() {
                       {isSummarizing ? <Loader2 className="size-3.5 animate-spin" /> : <BrainCircuit className="size-3.5" />}
                       Summarize Chat
                     </button>
+
+                    {canSimulate && (
+                      <button
+                        onClick={() => setIsSimulateOpen(true)}
+                        className="px-3 py-1.5 bg-secondary text-primary text-[11px] font-medium rounded-md border border-primary/20 hover:bg-secondary/80 flex items-center gap-1.5 transition-colors"
+                      >
+                        <MessageSquare className="size-3.5" /> Simulate Reply
+                      </button>
+                    )}
 
                     <button
                       onClick={() => setIsSchedulingOpen(true)}
@@ -1615,6 +1654,55 @@ function MessagesPage() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* SIMULATE MESSAGE MODAL */}
+      {isSimulateOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-[#0B0B0C] border border-border w-[400px] rounded-xl shadow-2xl flex flex-col animate-in fade-in zoom-in duration-200">
+            <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-sm text-foreground">Simulate Lead Reply</h3>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Send a test message as if the lead replied.</p>
+              </div>
+              <button
+                onClick={() => setIsSimulateOpen(false)}
+                className="size-7 rounded-md hover:bg-white/5 text-muted-foreground hover:text-white flex items-center justify-center transition-colors"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSimulateMessage} className="p-5 flex flex-col gap-4">
+              <textarea
+                autoFocus
+                required
+                value={simulateMessageText}
+                onChange={(e) => setSimulateMessageText(e.target.value)}
+                placeholder="Type the lead's simulated reply here..."
+                className="w-full bg-[#111111] border border-border rounded-lg p-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50 resize-none h-[100px]"
+              />
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsSimulateOpen(false)}
+                  className="px-4 py-2 rounded-md border border-border text-xs font-medium text-foreground hover:bg-white/5 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSimulating || !simulateMessageText.trim()}
+                  className="px-4 py-2 rounded-md bg-primary text-black text-xs font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-2"
+                >
+                  {isSimulating && <Loader2 className="size-3.5 animate-spin" />}
+                  Simulate Message
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
