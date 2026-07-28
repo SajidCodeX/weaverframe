@@ -25,5 +25,8 @@ export default defineConfig({
         external: ["ws"],
       },
     },
+    preview: {
+      allowedHosts: true,
+    },
   },
 });
