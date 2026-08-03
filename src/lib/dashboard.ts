@@ -3,15 +3,17 @@ import { getDb } from './db'
 
 
 
+import { getCache, setCache, invalidateCache } from './cache';
+
 export const getDashboardData = createServerFn({ method: 'POST' })
   .inputValidator((data: { activeRole?: string | null } | undefined) => data)
   .handler(async ({ data }) => {
-  // Pass activeRole explicitly so requireAuth() knows which cookie to read.
-  // Without this, when multiple cookies exist (jwt_admin + jwt_builder), the server
-  // function cannot safely resolve the session and throws UNAUTHORIZED, causing
-  // the loader to fail silently and the skeleton to loop forever.
   const { getTenantDb, requireAuth } = await import('./server-utils.server');
   const session = await requireAuth(data?.activeRole ?? undefined)
+
+  const cacheKey = "dashboard_" + session.builderId + "_" + session.userId;
+  const cached = getCache(cacheKey);
+  if (cached) return cached;
 
   // Pass session in — getTenantDb will skip its own requireAuth() call
   const db = await getTenantDb(session)
@@ -113,22 +115,28 @@ export const getDashboardData = createServerFn({ method: 'POST' })
       return d
     })
 
-    const dailyVolume = await Promise.all(
-      dailyDates.map(async (d) => {
-        const startOfDay = new Date(d)
-        startOfDay.setHours(0, 0, 0, 0)
+    const startOfMonth = new Date(currentYear, currentMonth, 1)
+    const endOfMonth = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59, 999)
 
-        const [total, qualified] = await Promise.all([
-          db.lead.count({ where: { createdAt: { gte: startOfDay, lte: d } } }),
-          db.lead.count({ where: { status: { not: 'New' }, createdAt: { gte: startOfDay, lte: d } } }),
-        ])
-        return {
-          date: d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
-          total,
-          qualified,
-        }
-      })
-    )
+    const allMonthLeads = await db.lead.findMany({
+      where: { createdAt: { gte: startOfMonth, lte: endOfMonth } },
+      select: { createdAt: true, status: true }
+    }) || []
+
+    const dailyVolume = dailyDates.map((d) => {
+      const startOfDay = new Date(d)
+      startOfDay.setHours(0, 0, 0, 0)
+
+      const leadsToday = allMonthLeads.filter((l: any) => l.createdAt && new Date(l.createdAt) >= startOfDay && new Date(l.createdAt) <= d)
+      const total = leadsToday.length
+      const qualified = leadsToday.filter((l: any) => l.status !== 'New').length
+
+      return {
+        date: d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
+        total,
+        qualified,
+      }
+    })
 
     // Fetch Last Sync Timestamp
     const syncStatus = await db.systemSync.findUnique({ where: { id: 'rencast_leads' } })
@@ -184,7 +192,7 @@ export const getDashboardData = createServerFn({ method: 'POST' })
       city: a.lead.county,
     }))
 
-    return {
+    const result = {
       totalLeads,
       qualifiedLeads,
       appointmentsSet,
@@ -203,7 +211,10 @@ export const getDashboardData = createServerFn({ method: 'POST' })
       aiQualRate,
       dailyVolume,
       lastSyncAt
-    }
+    };
+    
+    setCache(cacheKey, result, 60);
+    return result;
 })
 
 
@@ -315,7 +326,8 @@ export const getLeadsData = createServerFn({ method: 'POST' })
       orderBy: { purchaseDate: 'desc' },
       include: {
         activities: {
-          orderBy: { createdAt: 'desc' }
+          orderBy: { createdAt: 'desc' },
+          take: 5
         }
       }
     })
@@ -377,6 +389,7 @@ export const addManualLead = createServerFn({ method: 'POST' })
         }
       })
 
+      invalidateCache("dashboard_");
       return lead
     } catch (error) {
       console.error("Error in addManualLead:", error)
@@ -396,6 +409,7 @@ export const deleteLead = createServerFn({ method: 'POST' })
     try {
       await db.activity.deleteMany({ where: { leadId: id } })
       await db.lead.delete({ where: { id } })
+      invalidateCache("dashboard_");
       return { success: true }
     } catch (error) {
       console.error("Error in deleteLead:", error)
@@ -429,15 +443,9 @@ export const updateLead = createServerFn({ method: 'POST' })
       }
       const lead = await db.lead.update({
         where: { id },
-        data: updateData,
+        data: updateData
       })
-      await db.activity.create({
-        data: {
-          builderId: session.builderId || '',
-          leadId: id,
-          action: `✏️ Lead details updated by builder.`,
-        }
-      })
+      invalidateCache("dashboard_");
       return lead
     } catch (error) {
       console.error("Error in updateLead:", error)
@@ -590,13 +598,6 @@ export const getReviewsData = createServerFn({ method: 'POST' })
     const session = await requireAuth(data?.activeRole ?? undefined)
     const db = await getTenantDb(session)
 
-    // Clean up legacy dummy seed platform records with fake stats (42, 18, 12 reviews)
-    await db.reviewPlatform.deleteMany({
-      where: {
-        reviewCount: { in: [42, 18, 12] },
-        profileUrl: { in: ["https://business.google.com", "https://houzz.com", "https://facebook.com"] }
-      }
-    })
 
     const platforms = await db.reviewPlatform.findMany({
       orderBy: { name: 'asc' }
@@ -928,7 +929,7 @@ export const generateGroqCompletion = createServerFn({ method: 'POST' })
   })
 
 export const simulateAIChatReply = createServerFn({ method: 'POST' })
-  .inputValidator((data: { leadId: string; userMessage: string; chatHistory: Array<{ role: 'user' | 'assistant'; content: string }> }) => data)
+  .inputValidator((data: { leadId: string; userMessage: string; chatHistory: Array<{ role: 'user' | 'assistant'; content: string }>; isSimulated?: boolean }) => data)
   .handler(async ({ data }) => {
     const { getTenantDb, requireAuth } = await import('./server-utils.server');
     const session = await requireAuth();
@@ -1070,22 +1071,24 @@ Do not output any introductory or conversational text outside of the raw JSON ob
       }
 
       // Save Activity in database
-      await db.activity.create({
-        data: {
-          builderId: session.builderId || '',
-          leadId,
-          action: activityText
-        }
-      });
+      if (!data.isSimulated) {
+        await db.activity.create({
+          data: {
+            builderId: session.builderId || '',
+            leadId,
+            action: activityText
+          }
+        });
 
-      // Update Lead Status & Score Tier in database
-      await db.lead.update({
-        where: { id: leadId },
-        data: {
-          status: dbStatus,
-          scoreTier: dbScoreTier
-        }
-      });
+        // Update Lead Status & Score Tier in database
+        await db.lead.update({
+          where: { id: leadId },
+          data: {
+            status: dbStatus,
+            scoreTier: dbScoreTier
+          }
+        });
+      }
 
       return { replyText };
     } catch (error) {
@@ -1200,7 +1203,7 @@ Example Format:
       });
 
       // Parse array from text
-      let parsed = [];
+      let parsed: Array<{ t: string; body: string }> = [];
       try {
         const match = response.match(/\[\s*\{[\s\S]*\}\s*\]/);
         if (match) {
@@ -1451,14 +1454,25 @@ export const getConversations = createServerFn({ method: 'POST' })
       where: whereClause,
       include: {
         messages: {
-          orderBy: { createdAt: 'desc' }
+          orderBy: { createdAt: 'desc' },
+          take: 1
+        },
+        _count: {
+          select: {
+            messages: {
+              where: {
+                sender: 'lead',
+                isRead: false
+              }
+            }
+          }
         }
       }
     })
 
     const conversations = leads.map((l) => {
       const lastMsg = l.messages[0]
-      const unreadCount = l.messages.filter(m => m.sender === 'lead' && !m.isRead).length
+      const unreadCount = l._count.messages
       
       const isRecentlyActive = lastMsg && lastMsg.sender === 'lead' && 
           (new Date().getTime() - new Date(lastMsg.createdAt).getTime()) < 1000 * 60 * 30;
@@ -1487,7 +1501,7 @@ export const getConversations = createServerFn({ method: 'POST' })
 })
 
 export const getMessagesForLead = createServerFn({ method: 'POST' })
-  .inputValidator((data: { leadId: string; activeRole?: string | null }) => data)
+  .inputValidator((data: { leadId: string; activeRole?: string | null; isSimulated?: boolean }) => data)
   .handler(async ({ data }) => {
     const { getTenantDb, requireAuth } = await import('./server-utils.server');
     const session = await requireAuth(data?.activeRole ?? undefined)
@@ -1500,14 +1514,16 @@ export const getMessagesForLead = createServerFn({ method: 'POST' })
       if (!lead) throw new Error("Lead not found")
 
       const messages = await db.message.findMany({
-        where: { leadId },
+        where: { leadId, isSimulated: data.isSimulated || false },
         orderBy: { createdAt: 'asc' }
       })
 
-      await db.message.updateMany({
-        where: { leadId, sender: 'lead', isRead: false },
-        data: { isRead: true }
-      })
+      if (!data.isSimulated) {
+        await db.message.updateMany({
+          where: { leadId, sender: 'lead', isRead: false, isSimulated: false },
+          data: { isRead: true }
+        })
+      }
 
       return {
         lead,
@@ -1584,7 +1600,8 @@ export const simulateLeadMessage = createServerFn({ method: 'POST' })
           leadId,
           sender: 'lead',
           content,
-          isRead: true
+          isRead: true,
+          isSimulated: true
         }
       });
 
@@ -1609,7 +1626,8 @@ export const simulateLeadMessage = createServerFn({ method: 'POST' })
           data: { 
             leadId, 
             userMessage: content, 
-            chatHistory: formattedHistory 
+            chatHistory: formattedHistory,
+            isSimulated: true
           } 
         });
 
@@ -1621,7 +1639,8 @@ export const simulateLeadMessage = createServerFn({ method: 'POST' })
               leadId,
               sender: 'system',
               content: aiResponse.replyText,
-              isRead: true
+              isRead: true,
+              isSimulated: true
             }
           });
         }
@@ -1756,7 +1775,7 @@ export const getReportsData = createServerFn({ method: 'POST' })
     leadsBySource.sort((a, b) => b.leads - a.leads)
 
     // 3. Monthly Lead Volume (6 months history) in-memory
-    const monthlyTrend = []
+    const monthlyTrend: Array<{ month: string; leads: number; qualified: number; qualRate: number; appts: number; closed: number }> = []
     for (let i = 5; i >= 0; i--) {
       const d = new Date()
       d.setMonth(d.getMonth() - i)
@@ -2353,7 +2372,7 @@ function generateRealisticPermits(targetMarket: string, count: number): any[] {
   const firstNames = ["James", "Robert", "John", "Michael", "David", "William", "Richard", "Joseph", "Thomas", "Charles", "Christopher", "Daniel", "Matthew", "Anthony", "Mark", "Donald", "Steven", "Paul", "Andrew", "Joshua", "Emily", "Sarah", "Jessica", "Amanda", "Ashley", "Taylor", "Megan", "Hannah", "Kayla", "Madison"];
   const lastNames = ["Smith", "Johnson", "Williams", "Brown", "Jones", "Miller", "Davis", "Garcia", "Rodriguez", "Wilson", "Martinez", "Anderson", "Taylor", "Thomas", "Hernandez", "Moore", "Martin", "Jackson", "Thompson", "White", "Lopez", "Lee", "Gonzalez", "Harris", "Clark", "Lewis", "Robinson", "Walker", "Perez", "Hall"];
   
-  const permits = [];
+  const permits: Array<{ name: string; phone: string; email: string; county: string; state: string; landPrice: number; purchaseDate: Date }> = [];
   const now = new Date();
   
   for (let i = 0; i < count; i++) {

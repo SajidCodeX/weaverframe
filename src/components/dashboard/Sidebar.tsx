@@ -128,6 +128,7 @@ export function Sidebar({
               key={item.to}
               to={item.to}
               preload="intent"
+              preloadDelay={50}
               className={`group relative flex items-center rounded-md text-sm transition-all duration-300 ${
                 active ? "nav-active" : "nav-inactive"
               } px-3 py-2 ${isCollapsed ? "gap-0" : "gap-3"}`}

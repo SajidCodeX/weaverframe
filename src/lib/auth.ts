@@ -40,30 +40,40 @@ export const loginFn = createServerFn({ method: 'POST' })
     return handleLogin({ ...data, ip })
   })
 
+// ── In-memory Session Cache ──────────────────────────────────────────────────
+// Cache DB validation results for 30 seconds to prevent redundant DB queries
+// on every navigation. JWT verification still happens on every request.
+const sessionCache = new Map<string, { session: AuthSession; expiry: number }>()
+
 export const getSessionFn = createServerFn({ method: 'POST' })
   .inputValidator((data: { activeRole?: string | null } | undefined) => data)
   .handler(async ({ data }) => {
     try {
-      const { requireAuth } = await import('./server-utils.server')
-      const { getDb } = await import('./db')
+      const { requireAuth, getSessionFromCookie } = await import('./server-utils.server')
+      
+      // 1. Verify the JWT unconditionally (no DB queries)
+      const jwtSession = await getSessionFromCookie(data?.activeRole ?? undefined)
+      if (!jwtSession || !jwtSession.userId) {
+        return null
+      }
+      
+      // 2. Check cache for recent successful DB validation
+      const now = Date.now()
+      const cached = sessionCache.get(jwtSession.userId)
+      if (cached && cached.expiry > now) {
+        return cached.session
+      }
+
+      // 3. Not cached or expired -> Perform full DB validation
       const session = await requireAuth(data?.activeRole ?? undefined)
       
-      const db = await getDb()
-      const user = await db.user.findUnique({
-        where: { id: session.userId },
-        include: { builder: true }
-      })
+      // 4. Cache the result for 30 seconds
+      sessionCache.set(session.userId, { session, expiry: now + 30000 })
       
-      if (user) {
-        return {
-          ...session,
-          displayName: user.displayName || session.displayName,
-          companyName: user.builder?.companyName || session.companyName,
-          permissions: user.permissions || session.permissions,
-        }
-      }
       return session
-    } catch {
+    } catch (err: any) {
+      const fs = await import('fs')
+      fs.appendFileSync('auth-debug.log', `[${new Date().toISOString()}] getSessionFn failed: ${err.message || err}\n${err.stack}\n`)
       return null
     }
   })

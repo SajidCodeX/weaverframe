@@ -16,6 +16,7 @@ import { Card, CardHeader, ScoreBadge } from "@/components/dashboard/primitives"
 import { getDashboardData } from "../lib/dashboard";
 import { getSessionFn } from "@/lib/auth";
 import { obscurePII } from "@/lib/utils";
+import { RoutePending } from "@/components/dashboard/RoutePending";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -24,24 +25,22 @@ export const Route = createFileRoute("/")({
       { name: "description", content: "Platform overview." },
     ],
   }),
-  // SSR Blocking Loader: Fetches data on the server and blocks HTML streaming until ready.
-  // This completely eliminates the need for skeleton loading states.
-  loader: async ({ context }) => {
+  loader: ({ context }) => {
     const session = context.session;
     if (session?.role === 'admin' && !session?.actingAsBuilderId) {
       throw redirect({ to: '/admin' })
     }
-    // Pass activeRole so the server function knows which cookie to use
     const activeRole = typeof window !== 'undefined' 
       ? (sessionStorage.getItem('active_role') ?? undefined)
       : undefined;
       
-    return await getDashboardData({ data: { activeRole } });
+    return getDashboardData({ data: { activeRole } });
   },
+  staleTime: 60_000, // 60s — fresh data, instant revisits within a minute
+  pendingMs: 0,
+  pendingComponent: () => <RoutePending title="Loading Overview..." />,
   component: Overview,
 });
-
-
 
 /* ── Vivid avatar color per initials (deterministic) ─── */
 const avatarPalette = ["#FF453A", "#FF9F0A", "#30D158", "#0A84FF", "#BF5AF2", "#FF6B6B", "#34D399"];
@@ -128,16 +127,21 @@ function Kpi({
   );
 }
 
-
-/* ── Overview Page ───────────────────────────────────── */
+/* ── Overview Page Wrapper ───────────────────────────────────── */
 function Overview() {
-  const router = useRouter();
   const { session } = useRouteContext({ strict: false }) as any;
   const isPrivacyMode = session?.role === 'admin' && !!session?.actingAsBuilderId;
+  const data = Route.useLoaderData();
 
-  const data = Route.useLoaderData() as any;
+  return (
+    <Shell title="Overview">
+      <OverviewContent data={data} isPrivacyMode={isPrivacyMode} />
+    </Shell>
+  );
+}
 
-
+function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: boolean }) {
+  const router = useRouter();
 
   const {
     totalLeads = 0,
@@ -171,8 +175,7 @@ function Overview() {
   }, [dailyVolume]);
 
   return (
-    <Shell title="Overview" lastSyncAt={lastSyncAt}>
-
+    <>
       {/* KPI row */}
       <div className="grid grid-cols-4 gap-4">
         <Kpi
@@ -529,6 +532,6 @@ function Overview() {
           </div>
         </div>
       </Card>
-    </Shell>
+    </>
   );
 }

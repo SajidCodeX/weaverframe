@@ -1,3 +1,4 @@
+import { RoutePending } from "@/components/dashboard/RoutePending";
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { useState, useEffect } from 'react'
 import { Shell } from '@/components/dashboard/Shell'
@@ -19,7 +20,10 @@ export const Route = createFileRoute('/team')({
       throw redirect({ to: '/' })
     }
   },
-  loader: async () => await getTeamData({ data: { activeRole: typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? undefined) : undefined } }),
+  loader: () => getTeamData({ data: { activeRole: typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? undefined) : undefined } }),
+  staleTime: 60_000, // 60s — fresh data, instant revisits within a minute
+  pendingMs: 0,
+  pendingComponent: () => <RoutePending title="Loading..." />,
   component: TeamRoute,
 })
 

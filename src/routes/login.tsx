@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { useState, useEffect } from 'react'
 import { loginFn } from '@/lib/auth'
 import { toast } from 'sonner'
@@ -8,6 +8,7 @@ export const Route = createFileRoute('/login')({
 })
 
 function LoginRoute() {
+  const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -28,7 +29,6 @@ function LoginRoute() {
     setError('')
     setLoading(true)
 
-
     if (rememberMe) {
       localStorage.setItem('builders_edge_remembered_email', email)
     } else {
@@ -40,23 +40,28 @@ function LoginRoute() {
 
       if (result?.success) {
         // Lock tab identity in sessionStorage so the root beforeLoad knows which cookie to read.
-        // Also write to localStorage (FIX-3) so it survives tab/browser close.
-        // Without localStorage fallback, returning users have no role hint → multi-cookie
-        // ambiguity → server returns null → redirect to login even with a valid cookie.
+        // Also write to localStorage so it survives tab/browser close.
         const tabId =
           sessionStorage.getItem('tab_id') ??
           Math.random().toString(36).substring(2) + Date.now().toString(36)
         sessionStorage.setItem('tab_id', tabId)
         sessionStorage.setItem('active_role', result.role)
-        localStorage.setItem(`role_${tabId}`, result.role)     // tab-specific cross-session persistence
+        localStorage.setItem(`role_${tabId}`, result.role)
 
-        // Hard navigate so the full SSR cycle restarts cleanly with the new cookie
+        // ── Fast-path: cache session from login response ──────────────────────
+        // __root.tsx beforeLoad will consume this (one-shot) to skip getSessionFn.
+        // JWT was just set — no need to verify again immediately.
+        if (result.session) {
+          (window as any).__pendingLoginSession = result.session
+        }
+
+        // Client-side navigate — avoids full page reload (saves ~300ms + 1 DB call)
         if (result.forcePasswordReset) {
-          window.location.href = '/reset-password'
+          window.location.href = '/reset-password' // password reset needs full reload (different route setup)
         } else if (result.role === 'admin') {
-          window.location.href = '/admin'
+          await router.navigate({ to: '/admin' })
         } else {
-          window.location.href = '/'
+          await router.navigate({ to: '/' })
         }
         // Don't setLoading(false) — page is navigating away
       } else {

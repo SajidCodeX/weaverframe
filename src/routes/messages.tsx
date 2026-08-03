@@ -1,6 +1,7 @@
 import { createFileRoute, useLoaderData, useRouter, useRouteContext } from "@tanstack/react-router";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { Shell } from "@/components/dashboard/Shell";
+import { RoutePending } from "@/components/dashboard/RoutePending";
 import { Card, Badge } from "@/components/dashboard/primitives";
 import {
   getConversations,
@@ -46,13 +47,15 @@ export const Route = createFileRoute("/messages")({
     const integrationsStatus = await getIntegrationsStatus();
     return { conversations, aiToggleMap, integrationsStatus };
   },
-  staleTime: 2000,
+  staleTime: 60_000,
   head: () => ({
     meta: [
       { title: "Messages — WeaverFrame" },
       { name: "description", content: "Direct messages and AI lead nurture workspace." }
     ]
   }),
+  pendingMs: 0,
+  pendingComponent: () => <RoutePending title="Loading Messages..." type="messages" />,
   component: MessagesPage,
 });
 
@@ -286,13 +289,31 @@ function MessagesPage() {
     }
     let isMounted = true;
     const fetchChat = async () => {
+      const activeRole = sessionStorage.getItem('active_role') ?? undefined;
+      const cachedMessages = (window as any)._messagesCache?.get(selectedLeadId);
+      
       if (loadedLeadIdRef.current !== selectedLeadId) {
-        setIsLoadingChat(true);
+        if (cachedMessages) {
+          // Instant load from cache
+          const lead = conversationsList.find(c => c.leadId === selectedLeadId);
+          setActiveChat({ lead, messages: cachedMessages });
+          setIsLoadingChat(false);
+        } else {
+          setIsLoadingChat(true);
+        }
         setChatSummary(null); // Reset summary when lead changes
       }
+      
       try {
         const lead = conversationsList.find(c => c.leadId === selectedLeadId);
-        const { messages } = await getMessagesForLead({ data: { leadId: selectedLeadId, activeRole: sessionStorage.getItem('active_role') ?? undefined } });
+        const { messages } = await getMessagesForLead({ data: { leadId: selectedLeadId, activeRole } });
+        
+        // Update cache
+        if (!(window as any)._messagesCache) {
+          (window as any)._messagesCache = new Map();
+        }
+        (window as any)._messagesCache.set(selectedLeadId, messages);
+
         if (isMounted) {
           setActiveChat({ lead, messages });
           loadedLeadIdRef.current = selectedLeadId;
@@ -329,6 +350,9 @@ function MessagesPage() {
         if (selectedLeadId) {
           const { messages: latestMsgs } = await getMessagesForLead({ data: { leadId: selectedLeadId, activeRole } });
           if (isMounted && Array.isArray(latestMsgs)) {
+            if ((window as any)._messagesCache) {
+              (window as any)._messagesCache.set(selectedLeadId, latestMsgs);
+            }
             setActiveChat(prev => {
               if (!prev) return null;
               const lead = latestThreads.find(c => c.leadId === selectedLeadId) || prev.lead;
@@ -468,6 +492,11 @@ function MessagesPage() {
             isRead: true
           }
         ];
+        
+        if ((window as any)._messagesCache) {
+          (window as any)._messagesCache.set(selectedLeadId, updatedMsgs);
+        }
+        
         return {
           ...prev,
           messages: updatedMsgs

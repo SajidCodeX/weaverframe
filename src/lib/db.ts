@@ -2,11 +2,11 @@ import pkg from '@prisma/client'
 const { PrismaClient } = pkg
 
 const globalForPrisma = globalThis as unknown as { 
-  prisma?: PrismaClient
+  prisma?: any
   pgPool?: any
 }
 
-export const getDb = async (): Promise<PrismaClient> => {
+export const getDb = async (): Promise<any> => {
   if (globalForPrisma.prisma && (globalForPrisma.prisma as any).appointment) return globalForPrisma.prisma
 
   const dbUrlRaw =
@@ -39,13 +39,14 @@ export const getDb = async (): Promise<PrismaClient> => {
   if (!pool) {
     const maxPoolSize = typeof process !== 'undefined' && process.env.DATABASE_POOL_MAX
       ? parseInt(process.env.DATABASE_POOL_MAX, 10)
-      : 10
+      : 10 // Increased from 5 to 10 to handle parallel router fetches without severe queueing
 
     pool = new pg.default.Pool({
       connectionString: dbUrl,
       max: maxPoolSize,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 30000,
+      min: 0, // Don't keep idle connections open (Neon auto-suspends)
+      idleTimeoutMillis: 10000,  // Release idle connections quickly
+      connectionTimeoutMillis: 10000, // Match Neon's connect_timeout=10
     })
 
     // Handle unexpected errors on idle pool clients to prevent process crash

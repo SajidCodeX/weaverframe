@@ -2,9 +2,10 @@ import { createFileRoute } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 
 const handleCronLogic = createServerFn({ method: 'GET' })
-  .handler(async ({ request }) => {
+  .handler(async (ctx) => {
     // Basic security: require a Bearer token matching RENCAST_API_KEY
-    const authHeader = request.headers.get('Authorization');
+    const request = (ctx as any).request as Request;
+    const authHeader = request?.headers?.get('Authorization');
     if (authHeader !== `Bearer ${process.env.RENCAST_API_KEY}`) {
       return { isResponse: true, status: 401, body: 'Unauthorized' };
     }
@@ -20,7 +21,7 @@ const handleCronLogic = createServerFn({ method: 'GET' })
         }
       });
       
-      let externalLeads = [];
+      let externalLeads: any[] = [];
       if (response.ok) {
          const data = await response.json();
          externalLeads = data.leads || [];

@@ -72,6 +72,11 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   );
 }
 
+// ── Client-side session cache ─────────────────────────────────────────────────
+// Eliminates the HTTP round-trip to getSessionFn on tab switches.
+// JWT cookie is still the source of truth — this just avoids redundant calls.
+let _clientSession: any = null;
+
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   head: () => ({
     meta: [
@@ -103,28 +108,53 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   errorComponent: ErrorComponent,
   beforeLoad: async ({ location }) => {
     if (location.pathname === '/login' || location.pathname.startsWith('/api') || location.pathname.startsWith('/invite')) {
-      return { session: null };  // Always return consistent shape — bare `return` (undefined) crashes RootComponent
+      return { session: null };  
     }
 
-    // SSR: We no longer bypass session resolution. If the user has a single cookie, 
-    // it will be correctly resolved on the server, avoiding the empty UI flash.
-    let activeRole = undefined;
+    let activeRole: string | undefined = undefined;
     if (typeof window !== 'undefined') {
-      activeRole =
-        // sessionStorage is set by start.ts on load from localStorage.role_${tabId}
-        // so this is always tab-specific and correct.
-        sessionStorage.getItem('active_role') ??
-        undefined;
+      activeRole = sessionStorage.getItem('active_role') ?? undefined;
     }
 
+    // ── Fast-path after login ────────────────────────────────────────────────
+    if (typeof window !== 'undefined') {
+      const pending = (window as any).__pendingLoginSession;
+      if (pending) {
+        delete (window as any).__pendingLoginSession;
+        _clientSession = pending;
+        if (pending.role === 'admin' && !pending.actingAsBuilderId && !location.pathname.startsWith('/admin')) {
+          throw redirect({ to: '/admin' });
+        }
+        return { session: pending };
+      }
+    }
+
+    // ── Client-side cache hit — skip HTTP entirely ───────────────────────────
+    // We cache this indefinitely in browser memory for the lifetime of the tab.
+    // Why? Because every server function (getLeadsData, etc.) ALREADY validates 
+    // the session on the server. If auth is revoked, the data fetch will fail 
+    // anyway. We don't need to block UI navigation just to double-check auth.
+    if (typeof window !== 'undefined' && _clientSession) {
+      const s = _clientSession;
+      if (s.role === 'admin' && !s.actingAsBuilderId && !location.pathname.startsWith('/admin')) {
+        throw redirect({ to: '/admin' });
+      }
+      return { session: s };
+    }
+
+    // ── Cache miss (Initial Load) — call server ──────────────────────────────
     const session = await getSessionFn({ data: { activeRole } });
     if (!session) {
+      _clientSession = null;
       throw redirect({
         to: '/login',
-        search: {
-          redirect: location.href,
-        },
+        search: { redirect: location.href },
       });
+    }
+
+    // Cache on client indefinitely for this tab
+    if (typeof window !== 'undefined') {
+      _clientSession = session;
     }
 
     // Synchronously lock and self-heal tab identity on successful client-side validation

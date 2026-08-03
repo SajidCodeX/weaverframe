@@ -1,3 +1,4 @@
+import { RoutePending } from "@/components/dashboard/RoutePending";
 import { createFileRoute, useLoaderData, useRouter } from "@tanstack/react-router";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { Shell } from "@/components/dashboard/Shell";
@@ -27,24 +28,26 @@ import {
 import { getReviewsData, sendReviewRequest, submitClientReview, getLeadsData, getPublicReviews, replyToReview, connectReviewPlatform, disconnectReviewPlatform } from "@/lib/dashboard";
 
 export const Route = createFileRoute("/reviews")({
-  loader: async ({ context }) => {
+  loader: ({ context }) => {
     if (typeof window === 'undefined' && !context.session) {
       return { platforms: [], requests: [], leads: [], publicReviews: [] };
     }
     const activeRole = typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? undefined) : undefined;
-    const reviews = await getReviewsData({ data: { activeRole } });
-    // Also load leads so builder can select a completed project to ask reviews for
-    const leads = await getLeadsData({ data: { activeRole } });
-    const publicReviews = await getPublicReviews();
-    return { ...reviews, leads, publicReviews };
+    return Promise.all([
+      getReviewsData({ data: { activeRole } }),
+      getLeadsData({ data: { activeRole } }),
+      getPublicReviews()
+    ]).then(([reviews, leads, publicReviews]) => ({ ...reviews, leads, publicReviews }));
   },
-  staleTime: 5000,
+  staleTime: 60_000, // 60s — fresh data, instant revisits within a minute
   head: () => ({ 
     meta: [
       { title: "Reputation & Reviews — WeaverFrame" }, 
       { name: "description", content: "Local SEO & 5-Star Trust Manager for custom home builders." }
     ] 
   }),
+  pendingMs: 0,
+  pendingComponent: () => <RoutePending title="Loading..." />,
   component: ReviewsPage,
 });
 

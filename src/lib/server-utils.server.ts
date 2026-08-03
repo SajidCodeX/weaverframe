@@ -279,16 +279,32 @@ export const requireAuth = async (activeRole?: string): Promise<AuthSession> => 
   }
 
   // Instant Session Invalidation: Validate user exists in DB & is active
-  if (session.role === 'builder' && session.userId) {
+  if (session.userId) {
     const db = await getDb()
     const user = await db.user.findUnique({
       where: { id: session.userId },
-      select: { id: true, isActive: true, builderRole: true }
+      select: { 
+        id: true, 
+        isActive: true, 
+        deletedAt: true,
+        builderRole: true,
+        builder: {
+          select: { isActive: true, deletedAt: true }
+        }
+      }
     })
-    if (!user || user.isActive === false) {
+    
+    if (!user || user.isActive === false || user.deletedAt) {
       throw new Error('UNAUTHORIZED')
     }
-    session.builderRole = (user.builderRole || 'sales') as any
+    
+    if (user.builder && (user.builder.isActive === false || user.builder.deletedAt)) {
+      throw new Error('UNAUTHORIZED')
+    }
+    
+    if (session.role === 'builder') {
+      session.builderRole = (user.builderRole || 'sales') as any
+    }
   }
 
   return session
@@ -478,7 +494,13 @@ export const handleLogin = async (data: { email: string; password: string; ip?: 
   }
 
   await setAuthCookie(payload)
-  return { success: true, forcePasswordReset: user.forcePasswordReset, role: user.role }
+  return {
+    success: true,
+    forcePasswordReset: user.forcePasswordReset,
+    role: user.role,
+    // Return full session so client can skip the getSessionFn round-trip
+    session: payload,
+  }
 }
 
 export const handleVerifyInvite = async (token: string) => {

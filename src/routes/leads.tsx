@@ -1,3 +1,4 @@
+import { RoutePending } from "@/components/dashboard/RoutePending";
 import { createFileRoute, useLoaderData, useRouter, useRouteContext } from "@tanstack/react-router";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { Search, Plus, Download, Phone, Calendar, Eye, MoreHorizontal, X, Mail, Check, AlertCircle, Edit, RefreshCw, LayoutGrid, List, MessageSquare, Zap, Star } from "lucide-react";
@@ -15,24 +16,20 @@ export const Route = createFileRoute("/leads")({
   validateSearch: (search: Record<string, unknown>): LeadsSearch => ({
     stage: (search.stage as string) || undefined,
   }),
-  loader: async ({ context }) => {
+  loader: ({ context }) => {
     // SSR Blocking Loader: Fetches data on the server and blocks HTML streaming until ready.
     const activeRole = typeof window !== 'undefined' 
       ? (sessionStorage.getItem('active_role') ?? undefined) 
       : undefined;
       
-    return await getLeadsData({ data: { activeRole } });
+    return getLeadsData({ data: { activeRole } });
   },
-  staleTime: 60 * 1000, // 1 minute cache
+  staleTime: 60_000, // 60s — fresh data, instant revisits within a minute
   head: () => ({ meta: [{ title: "Leads — WeaverFrame" }, { name: "description", content: "Manage all your leads." }] }),
+  pendingMs: 0,
+  pendingComponent: () => <RoutePending title="Loading Leads..." type="leads" />,
   component: LeadsPage,
 });
-
-function AiStatus({ status }: { status: string }) {
-  if (status === "Replied") return <span className="inline-flex items-center gap-1 text-xs text-success"><span className="size-1.5 rounded-full bg-success inline-block" />Replied</span>;
-  if (status === "Awaiting") return <span className="inline-flex items-center gap-1 text-xs text-warning"><span className="size-1.5 rounded-full bg-warning inline-block" />Awaiting</span>;
-  return <span className="inline-flex items-center gap-1 text-xs text-danger"><span className="size-1.5 rounded-full bg-danger inline-block" />No response</span>;
-}
 
 function LeadsPage() {
   const { session } = useRouteContext({ strict: false }) as any;
@@ -40,6 +37,11 @@ function LeadsPage() {
   const isSalesAgent = session?.role === 'builder' && session?.builderRole === 'sales';
 
   const rawLeads = useLoaderData({ from: '/leads' }) || [];
+  const [optimisticLeads, setOptimisticLeads] = useState<any[]>(rawLeads);
+
+  useEffect(() => {
+    setOptimisticLeads(rawLeads);
+  }, [rawLeads]);
   const router = useRouter();
   const search = Route.useSearch();
   const [viewMode, setViewMode] = useState<'table' | 'pipeline'>('pipeline');
@@ -192,7 +194,7 @@ function LeadsPage() {
   }, []);
 
   const { mappedLeads, availableSources, filtered } = useMemo(() => {
-    const mapped = rawLeads.map(l => {
+    const mapped = optimisticLeads.map((l: any) => {
       // Read the accurate source string directly from Postgres
       const source = l.source || "Austin Building Permits";
       const aiStatus = l.status === "New" ? "Awaiting" : l.status === "Replied" ? "Replied" : "Awaiting";
@@ -293,7 +295,7 @@ function LeadsPage() {
     });
 
     return { mappedLeads: mapped, availableSources: sources, filtered: filt };
-  }, [rawLeads, query, selectedStages, selectedScores, selectedSources, selectedDateRange, customStart, customEnd, sortOption]);
+  }, [optimisticLeads, query, selectedStages, selectedScores, selectedSources, selectedDateRange, customStart, customEnd, sortOption]);
 
   // CSV Export Engine
   const exportToCSV = () => {
@@ -390,6 +392,7 @@ function LeadsPage() {
     setIsEditSubmitting(true);
     setEditError("");
     try {
+      setOptimisticLeads(prev => prev.map(l => l.id === editLead.id ? { ...l, name: editForm.name, phone: editForm.phone || null, email: editForm.email || null, county: editForm.county, state: editForm.state, landPrice: parseInt(editForm.landPrice), estimatedBudget: editForm.estimatedBudget ? parseInt(editForm.estimatedBudget) : parseInt(editForm.landPrice)*4, status: editForm.status, scoreTier: editForm.scoreTier, source: editForm.source } : l));
       await updateLead({
         data: {
           id: editLead.id,
@@ -648,6 +651,7 @@ function LeadsPage() {
               onDeleteLead={async (lead) => {
                 if (confirm(`Are you sure you want to delete ${lead.firstName}?`)) {
                   try {
+                    setOptimisticLeads(prev => prev.filter((l: any) => l.id !== lead.id));
                     await deleteLead({ data: lead.id });
                     await router.invalidate();
                   } catch (err) {
@@ -831,6 +835,7 @@ function LeadsPage() {
                                         setActiveMoreLead(null);
                                         if (confirm(`Are you sure you want to delete ${lead.firstName}?`)) {
                                           try {
+                                            setOptimisticLeads(prev => prev.filter((l: any) => l.id !== lead.id));
                                             await deleteLead({ data: lead.id });
                                             await router.invalidate();
                                           } catch (err) {
@@ -1197,6 +1202,7 @@ function EmailSimulatorModal({ lead, onClose }: { lead: any; onClose: () => void
       });
       // Update lead status to "Emailed" if it's still New
       if (lead.status === 'New') {
+        setOptimisticLeads(prev => prev.map((l: any) => l.id === lead.id ? { ...l, status: 'Emailed' } : l));
         await updateLead({ data: { id: lead.id, status: 'Emailed' } });
       }
       setIsSending(false);
