@@ -248,28 +248,39 @@ function MessagesPage() {
 
   // User Scroll Locking (Prevents polling from auto-scrolling while reading history)
   const [isUserScrolledUp, setIsUserScrolledUp] = useState(false);
+  const [newMessagesCount, setNewMessagesCount] = useState(0);
   const isUserScrolledUpRef = useRef(false);
 
   const handleChatScroll = () => {
     if (!chatContainerRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
-    const isFarFromBottom = scrollHeight - scrollTop - clientHeight > 120;
+    const isFarFromBottom = scrollHeight - scrollTop - clientHeight > 80;
     setIsUserScrolledUp(isFarFromBottom);
     isUserScrolledUpRef.current = isFarFromBottom;
+    if (!isFarFromBottom) {
+      setNewMessagesCount(0);
+    }
   };
 
   // Scroll active chat feed to bottom (respects user scroll position unless forced)
-  const scrollToBottom = (force = false) => {
+  const scrollToBottom = (force = false, mode: ScrollBehavior = "smooth") => {
     if (!force && isUserScrolledUpRef.current) return;
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTo({
         top: chatContainerRef.current.scrollHeight,
-        behavior: "smooth"
+        behavior: mode,
       });
+      if (mode === "instant" || mode === "auto") {
+        requestAnimationFrame(() => {
+          if (chatContainerRef.current) {
+            chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+          }
+        });
+      }
     }
-    if (chatEndRef.current) {
-      chatEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
+    setIsUserScrolledUp(false);
+    isUserScrolledUpRef.current = false;
+    setNewMessagesCount(0);
   };
 
   // Auto-select the first conversation on initial load if none selected
@@ -291,7 +302,7 @@ function MessagesPage() {
     const fetchChat = async () => {
       const activeRole = sessionStorage.getItem('active_role') ?? undefined;
       const cachedMessages = (window as any)._messagesCache?.get(selectedLeadId);
-      
+
       if (loadedLeadIdRef.current !== selectedLeadId) {
         if (cachedMessages) {
           // Instant load from cache
@@ -303,11 +314,11 @@ function MessagesPage() {
         }
         setChatSummary(null); // Reset summary when lead changes
       }
-      
+
       try {
         const lead = conversationsList.find(c => c.leadId === selectedLeadId);
         const { messages } = await getMessagesForLead({ data: { leadId: selectedLeadId, activeRole } });
-        
+
         // Update cache
         if (!(window as any)._messagesCache) {
           (window as any)._messagesCache = new Map();
@@ -318,10 +329,11 @@ function MessagesPage() {
           setActiveChat({ lead, messages });
           loadedLeadIdRef.current = selectedLeadId;
           setIsLoadingChat(false);
-          // Force scroll to bottom on new lead selection
+          // Position at bottom instantly on lead switch
           setIsUserScrolledUp(false);
           isUserScrolledUpRef.current = false;
-          setTimeout(() => scrollToBottom(true), 50);
+          setNewMessagesCount(0);
+          setTimeout(() => scrollToBottom(true, "instant"), 30);
         }
       } catch (error) {
         console.error(error);
@@ -356,11 +368,18 @@ function MessagesPage() {
             setActiveChat(prev => {
               if (!prev) return null;
               const lead = latestThreads.find(c => c.leadId === selectedLeadId) || prev.lead;
-              const hasNewMessages = prev.messages.length !== latestMsgs.length ||
+              const diffCount = latestMsgs.length - prev.messages.length;
+              const hasNewMessages = diffCount > 0 ||
                 (latestMsgs.length > 0 && prev.messages[prev.messages.length - 1]?.id !== latestMsgs[latestMsgs.length - 1]?.id);
 
               if (hasNewMessages) {
-                setTimeout(scrollToBottom, 60);
+                if (isUserScrolledUpRef.current) {
+                  // WhatsApp behavior: Do NOT auto-scroll when user is reading history! Show unread badge.
+                  setNewMessagesCount(c => c + Math.max(1, diffCount));
+                } else {
+                  // User is already at the bottom — scroll down to show new message
+                  setTimeout(() => scrollToBottom(true, "smooth"), 60);
+                }
                 return { lead, messages: latestMsgs };
               }
               return { ...prev, lead };
@@ -378,13 +397,6 @@ function MessagesPage() {
       clearInterval(timer);
     };
   }, [selectedLeadId]);
-
-  // Trigger scroll on chat messages update
-  useEffect(() => {
-    if (activeChat?.messages) {
-      scrollToBottom(false);
-    }
-  }, [activeChat?.messages]);
 
   // Click outside to close custom dropdown
   useEffect(() => {
@@ -492,11 +504,11 @@ function MessagesPage() {
             isRead: true
           }
         ];
-        
+
         if ((window as any)._messagesCache) {
           (window as any)._messagesCache.set(selectedLeadId, updatedMsgs);
         }
-        
+
         return {
           ...prev,
           messages: updatedMsgs
@@ -653,7 +665,7 @@ function MessagesPage() {
   const handleSimulateMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedLeadId || !simulateMessageText.trim()) return;
-    
+
     setIsSimulating(true);
     try {
       await simulateLeadMessage({
@@ -1001,7 +1013,7 @@ function MessagesPage() {
               <div
                 ref={chatContainerRef}
                 onScroll={handleChatScroll}
-                className="flex-1 overflow-y-auto p-6 space-y-4 min-h-0 bg-[#060606]/30 relative"
+                className="flex-1 overflow-y-auto p-6 space-y-4 min-h-0 bg-[#060606]/30 relative scroll-smooth custom-scrollbar"
               >
                 {activeChat.messages.length > 0 ? (
                   activeChat.messages.map((msg, index) => {
@@ -1176,14 +1188,19 @@ function MessagesPage() {
                     type="button"
                     onClick={(e) => {
                       e.preventDefault();
-                      setIsUserScrolledUp(false);
-                      isUserScrolledUpRef.current = false;
-                      scrollToBottom(true);
+                      scrollToBottom(true, "smooth");
                     }}
-                    className="absolute -top-22 left-1/2 -translate-x-1/2 z-40 size-8 rounded-full bg-[#141418] border border-primary/60 text-primary shadow-2xl flex items-center justify-center cursor-pointer active:scale-90 transition-all"
+                    className="absolute -top-20 left-1/2 -translate-x-1/2 z-40 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#141418]/95 border border-primary/50 text-primary shadow-2xl hover:bg-primary hover:text-black hover:scale-105 active:scale-95 transition-all group backdrop-blur-md cursor-pointer animate-in fade-in slide-in-from-bottom-2 duration-200"
                     title="Scroll to latest messages"
                   >
-                    <ChevronDown className="size-4 text-primary" />
+                    <ChevronDown className="size-4 transition-transform group-hover:translate-y-0.5" />
+                    {newMessagesCount > 0 ? (
+                      <span className="flex size-4 items-center justify-center rounded-full bg-emerald-500 text-[10px] font-bold text-black shadow">
+                        {newMessagesCount}
+                      </span>
+                    ) : (
+                      <span className="text-[11px] font-medium tracking-tight">Latest</span>
+                    )}
                   </button>
                 )}
                 <form onSubmit={handleSendMessage} className="relative flex items-center">
