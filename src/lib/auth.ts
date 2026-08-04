@@ -19,7 +19,7 @@ export const logoutFn = createServerFn({ method: 'POST' })
   })
 
 export const loginFn = createServerFn({ method: 'POST' })
-  .inputValidator((data: { email: string; password: string }) => data)
+  .inputValidator((data: { email: string; password: string; rememberMe?: boolean }) => data)
   .handler(async ({ data }) => {
     const { handleLogin } = await import('./server-utils.server')
 

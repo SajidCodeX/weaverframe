@@ -153,10 +153,10 @@ const getJwtSecret = () => {
   return secret
 }
 
-export const signToken = (payload: AuthSession): string => {
-  // FIX-2: 7-day sessions (industry standard for SaaS dashboards).
-  // Previously 24h — users visiting after 1+ day were forced back to login.
-  return jwt.sign(payload, getJwtSecret(), { expiresIn: '7d' })
+export const signToken = (payload: AuthSession, rememberMe: boolean = false): string => {
+  // If rememberMe is checked, token lasts 7 days; otherwise 1 day.
+  const expiresIn = rememberMe ? '7d' : '1d'
+  return jwt.sign(payload, getJwtSecret(), { expiresIn })
 }
 
 export const verifyToken = (token: string): AuthSession | null => {
@@ -340,9 +340,9 @@ export const requireManagerOrAbove = async (activeRole?: string): Promise<AuthSe
   return session
 }
 
-export const setAuthCookie = async (payload: AuthSession): Promise<void> => {
+export const setAuthCookie = async (payload: AuthSession, rememberMe: boolean = false): Promise<void> => {
   const { setCookie } = await import('@tanstack/react-start/server')
-  const token = signToken(payload)
+  const token = signToken(payload, rememberMe)
   const cookieName = COOKIE_NAME_MAP[payload.role] ?? 'jwt'
 
   // secure:true only in production (HTTPS). In local dev (http://localhost),
@@ -351,13 +351,20 @@ export const setAuthCookie = async (payload: AuthSession): Promise<void> => {
   // In production this must be true to prevent MITM interception.
   const isProduction = process.env.NODE_ENV === 'production'
 
-  setCookie(cookieName, token, {
+  const cookieOptions: any = {
     httpOnly: true,
     secure: isProduction,
     sameSite: 'lax',
-    maxAge: 604800,   // FIX-2: 7 days (matches JWT expiresIn: '7d')
     path: '/',
-  })
+  }
+
+  // If rememberMe is checked, set persistent cookie for 7 days (604,800s).
+  // If NOT checked, omit maxAge to create a Session Cookie (cleared when browser session ends).
+  if (rememberMe) {
+    cookieOptions.maxAge = 604800
+  }
+
+  setCookie(cookieName, token, cookieOptions)
 
   // NOTE: We intentionally do NOT set an active_role cookie.
   // Using a shared active_role cookie caused cross-tab role contamination:
@@ -441,7 +448,7 @@ export const getTenantDb = async (preResolvedSession?: AuthSession) => {
 
 // ─── Login / Invite Handlers ─────────────────────────────────────────────────
 
-export const handleLogin = async (data: { email: string; password: string; ip?: string }) => {
+export const handleLogin = async (data: { email: string; password: string; rememberMe?: boolean; ip?: string }) => {
   const db = await getDb()
   const ip = data.ip ?? 'unknown'
 
@@ -493,7 +500,7 @@ export const handleLogin = async (data: { email: string; password: string; ip?: 
     companyName: user.builder?.companyName,
   }
 
-  await setAuthCookie(payload)
+  await setAuthCookie(payload, data.rememberMe ?? false)
   return {
     success: true,
     forcePasswordReset: user.forcePasswordReset,
