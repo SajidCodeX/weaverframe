@@ -47,7 +47,7 @@ export const Route = createFileRoute("/reviews")({
     ] 
   }),
   pendingMs: 0,
-  pendingComponent: () => <RoutePending title="Loading..." />,
+  pendingComponent: () => <RoutePending title="Loading Reviews..." type="reviews" />,
   component: ReviewsPage,
 });
 

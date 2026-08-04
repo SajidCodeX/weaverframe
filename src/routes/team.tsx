@@ -23,7 +23,7 @@ export const Route = createFileRoute('/team')({
   loader: () => getTeamData({ data: { activeRole: typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? undefined) : undefined } }),
   staleTime: 60_000, // 60s — fresh data, instant revisits within a minute
   pendingMs: 0,
-  pendingComponent: () => <RoutePending title="Loading..." />,
+  pendingComponent: () => <RoutePending title="Loading Team..." type="team" />,
   component: TeamRoute,
 })
 

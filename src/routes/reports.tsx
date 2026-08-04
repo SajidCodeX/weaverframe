@@ -37,7 +37,7 @@ export const Route = createFileRoute("/reports")({
   staleTime: 60_000, // 60s — fresh data, instant revisits within a minute
   head: () => ({ meta: [{ title: "Reports — WeaverFrame" }, { name: "description", content: "Monthly ROI and performance reports." }] }),
   pendingMs: 0,
-  pendingComponent: () => <RoutePending title="Loading..." />,
+  pendingComponent: () => <RoutePending title="Loading Reports..." type="reports" />,
   component: ReportsPage,
 });
 

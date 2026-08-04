@@ -114,7 +114,7 @@ export const Route = createFileRoute("/appointments")({
     ] 
   }),
   pendingMs: 0,
-  pendingComponent: () => <RoutePending title="Loading..." />,
+  pendingComponent: () => <RoutePending title="Loading Appointments..." type="appointments" />,
   component: ApptPage,
 });
 

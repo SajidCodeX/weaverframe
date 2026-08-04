@@ -24,7 +24,7 @@ export const Route = createFileRoute("/ai-activity")({
   }),
   staleTime: 60_000, // 60s — fresh data, instant revisits within a minute
   pendingMs: 0,
-  pendingComponent: () => <RoutePending title="Loading..." />,
+  pendingComponent: () => <RoutePending title="Loading AI Activity..." type="ai-activity" />,
   component: AIPage,
 });
 

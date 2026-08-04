@@ -36,7 +36,7 @@ function LoginRoute() {
     }
 
     try {
-      const result = await loginFn({ data: { email, password } })
+      const result = await loginFn({ data: { email, password, rememberMe } })
 
       if (result?.success) {
         // Lock tab identity in sessionStorage so the root beforeLoad knows which cookie to read.

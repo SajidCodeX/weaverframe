@@ -38,7 +38,7 @@ export const Route = createFileRoute("/")({
   },
   staleTime: 60_000, // 60s — fresh data, instant revisits within a minute
   pendingMs: 0,
-  pendingComponent: () => <RoutePending title="Loading Overview..." />,
+  pendingComponent: () => <RoutePending title="Loading Overview..." type="overview" />,
   component: Overview,
 });
 

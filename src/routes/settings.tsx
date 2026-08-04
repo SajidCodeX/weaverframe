@@ -71,7 +71,7 @@ export const Route = createFileRoute("/settings")({
   head: () => ({ meta: [{ title: "Settings — WeaverFrame" }, { name: "description", content: "Configure your account, qualification rules, and integrations." }] }),
   staleTime: 60_000, // 60s — fresh data, instant revisits within a minute
   pendingMs: 0,
-  pendingComponent: () => <RoutePending title="Loading..." />,
+  pendingComponent: () => <RoutePending title="Loading Settings..." type="settings" />,
   component: SettingsPage,
 });
 
