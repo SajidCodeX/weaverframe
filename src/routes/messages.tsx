@@ -1018,161 +1018,223 @@ function MessagesPage() {
                 </div>
               )}
 
-              <div
-                ref={chatContainerRef}
-                onScroll={handleChatScroll}
-                className="flex-1 overflow-y-auto p-6 space-y-4 min-h-0 relative custom-scrollbar"
-                style={{
-                  backgroundColor: "#0B0E14",
-                  backgroundImage: `
-                    radial-gradient(circle at 50% 50%, rgba(16, 185, 129, 0.02) 0%, transparent 80%),
-                    url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23ffffff' fill-opacity='0.035'%3E%3Cpath d='M11 18h2v2h-2zM80 70h2v2h-2zM35 85h2v2h-2zM75 25h2v2h-2zM20 50a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm45-20a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm20 55a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM50 15h10v2H50zm-30 60h10v2H20zm40 10h12v2H60zM15 35l6 6-6 6-6-6 6-6zm50-10l6 6-6 6-6-6 6-6z'/%3E%3Cpath d='M42 45a4 4 0 1 1-8 0 4 4 0 0 1 8 0zm30-5a4 4 0 1 1-8 0 4 4 0 0 1 8 0zM18 80a4 4 0 1 1-8 0 4 4 0 0 1 8 0z'/%3E%3C/g%3E%3C/svg%3E")
-                  `,
-                }}
-              >
-                {activeChat.messages.length > 0 ? (
-                  activeChat.messages.map((msg, index) => {
-                    const isUser = msg.sender === "user" || msg.sender === "system";
-                    const isAI = msg.sender === "system";
+              {/* Fixed Viewport Background Layer for WhatsApp Wallpaper */}
+              <div className="flex-1 flex flex-col min-h-0 relative bg-[#050608] overflow-hidden">
+                {/* Native React SVG WhatsApp Doodle Overlay */}
+                <div className="absolute inset-0 pointer-events-none overflow-hidden z-0 select-none opacity-40">
+                  <svg className="w-full h-full text-white" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                      {/* LAYER A — base density layer */}
+                      <pattern id="doodle-layer-a" width="190" height="190" patternUnits="userSpaceOnUse">
+                        <g stroke="currentColor" strokeWidth="1.1" fill="none" strokeLinecap="round" strokeLinejoin="round" opacity="0.9">
+                          <g transform="translate(14,22) rotate(-31) scale(0.58)"><path d="M3 10 L9 4 L15 10 V16 H12 V11 H6 V16 H3 Z" /></g>
+                          <g transform="translate(71,9) rotate(63) scale(0.71)"><path d="M5 2 H13 V16 H5 Z M7 5 H9 M11 5 H11.1 M7 8 H9 M11 8 H11.1" /></g>
+                          <g transform="translate(133,31) rotate(-12) scale(0.49)"><path d="M3 16 V2 H14 M6 2 V16 M3 6 H11 M3 10 H11 M14 2 V9 L11 12" /></g>
+                          <g transform="translate(196,18) rotate(84) scale(0.66)"><circle cx="5" cy="5" r="3" /><path d="M8 5 H15 V9 H13 V7 H11 V9 H8 Z" /></g>
+                          <g transform="translate(29,68) rotate(-58) scale(0.73)"><path d="M3 12 C3 7 6 4 9 4 C12 4 15 7 15 12 H1 V14 H17 V12 Z" /></g>
+                          <g transform="translate(88,79) rotate(19) scale(0.55)"><path d="M4 2 H14 V16 H4 Z M4 6 H8 M4 10 H8 M4 14 H8" /></g>
+                          <g transform="translate(151,61) rotate(-73) scale(0.62)"><path d="M4 3 H14 V6 H11 V15 H7 V6 H4 Z M4 4 L14 14 M14 4 L4 14" /></g>
+                          <g transform="translate(210,88) rotate(41) scale(0.68)"><path d="M9 2 L10.5 7 L16 8.5 L10.5 10 L9 15 L7.5 10 L2 8.5 L7.5 7 Z" /></g>
+                          <g transform="translate(9,122) rotate(27) scale(0.6)"><path d="M3 3 H15 C16 3 17 4 17 5 V11 C17 12 16 13 15 13 H10 L5 16 V13 H3 Z" /></g>
+                          <g transform="translate(66,135) rotate(-46) scale(0.77)"><path d="M2 13 H12 V9 H8 L5 5 H2 V9 Z M3 15 H15" /></g>
+                          <g transform="translate(126,118) rotate(69) scale(0.53)"><path d="M3 4 H15 V16 H3 Z M3 8 H15 M6 2 V5 M12 2 V5" /></g>
+                          <g transform="translate(184,140) rotate(-24) scale(0.64)"><path d="M2 10 H10 V5 H14 L17 10 V14 H2 Z" /></g>
+                          <g transform="translate(38,178) rotate(52) scale(0.7)"><path d="M9 2 L11 6.5 L16 7 L12 11 L13.5 16 L9 13.5 L4.5 16 L6 11 L2 7 Z" /></g>
+                          <g transform="translate(97,191) rotate(-88) scale(0.57)"><path d="M3 10 L9 4 L15 10 V16 H12 V11 H6 V16 H3 Z" /></g>
+                          <g transform="translate(159,203) rotate(15) scale(0.61)"><path d="M5 2 H13 V16 H5 Z M7 5 H9 M11 5 H11.1 M7 8 H9 M11 8 H11.1" /></g>
+                          <g transform="translate(219,168) rotate(-39) scale(0.72)"><path d="M3 12 C3 7 6 4 9 4 C12 4 15 7 15 12 H1 V14 H17 V12 Z" /></g>
+                          <g transform="translate(55,225) rotate(76) scale(0.5)"><path d="M4 2 H14 V16 H4 Z M4 6 H8 M4 10 H8 M4 14 H8" /></g>
+                          <g transform="translate(112,215) rotate(-19) scale(0.65)"><path d="M9 2 L10.5 7 L16 8.5 L10.5 10 L9 15 L7.5 10 L2 8.5 L7.5 7 Z" /></g>
+                          <g transform="translate(178,228) rotate(33) scale(0.59)"><path d="M3 16 V2 H14 M6 2 V16 M3 6 H11 M3 10 H11 M14 2 V9 L11 12" /></g>
+                          <g transform="translate(226,120) rotate(-64) scale(0.63)"><circle cx="5" cy="5" r="3" /><path d="M8 5 H15 V9 H13 V7 H11 V9 H8 Z" /></g>
+                        </g>
+                      </pattern>
 
-                    const msgDate = new Date(msg.createdAt);
-                    const prevMsg = index > 0 ? activeChat.messages[index - 1] : null;
-                    let showDateDivider = false;
-                    let dateLabel = "";
+                      {/* LAYER B — different period, breaks alignment with A */}
+                      <pattern id="doodle-layer-b" width="137" height="167" patternUnits="userSpaceOnUse" x="61" y="94">
+                        <g stroke="currentColor" strokeWidth="1.1" fill="none" strokeLinecap="round" strokeLinejoin="round" opacity="0.55">
+                          <g transform="translate(20,30) rotate(44) scale(0.52)"><path d="M2 13 H12 V9 H8 L5 5 H2 V9 Z M3 15 H15" /></g>
+                          <g transform="translate(90,18) rotate(-71) scale(0.6)"><path d="M3 4 H15 V16 H3 Z M3 8 H15 M6 2 V5 M12 2 V5" /></g>
+                          <g transform="translate(148,45) rotate(22) scale(0.68)"><path d="M2 10 H10 V5 H14 L17 10 V14 H2 Z" /></g>
+                          <g transform="translate(35,95) rotate(-33) scale(0.57)"><path d="M3 2 H13 V16 H3 Z M6 5 H10 M6 8 H10" /></g>
+                          <g transform="translate(105,110) rotate(88) scale(0.63)"><path d="M9 2 L11 6.5 L16 7 L12 11 L13.5 16 L9 13.5 L4.5 16 L6 11 L2 7 Z" /></g>
+                          <g transform="translate(155,135) rotate(-9) scale(0.5)"><path d="M3 10 L9 4 L15 10 V16 H12 V11 H6 V16 H3 Z" /></g>
+                          <g transform="translate(18,165) rotate(57) scale(0.66)"><path d="M4 3 H14 V6 H11 V15 H7 V6 H4 Z M4 4 L14 14 M14 4 L4 14" /></g>
+                          <g transform="translate(80,180) rotate(-48) scale(0.54)"><circle cx="5" cy="5" r="3" /><path d="M8 5 H15 V9 H13 V7 H11 V9 H8 Z" /></g>
+                          <g transform="translate(135,190) rotate(30) scale(0.6)"><path d="M3 3 H15 C16 3 17 4 17 5 V11 C17 12 16 13 15 13 H10 L5 16 V13 H3 Z" /></g>
+                        </g>
+                      </pattern>
 
-                    if (!prevMsg) {
-                      showDateDivider = true;
-                    } else {
-                      const prevDate = new Date(prevMsg.createdAt);
-                      if (msgDate.toDateString() !== prevDate.toDateString()) {
+                      {/* LAYER C — third, slower period for max irregularity */}
+                      <pattern id="doodle-layer-c" width="155" height="124" patternUnits="userSpaceOnUse" x="29" y="118">
+                        <g stroke="currentColor" strokeWidth="1.1" fill="none" strokeLinecap="round" strokeLinejoin="round" opacity="0.4">
+                          <g transform="translate(25,20) rotate(-55) scale(0.55)"><path d="M5 2 H13 V16 H5 Z M7 5 H9 M11 5 H11.1 M7 8 H9 M11 8 H11.1" /></g>
+                          <g transform="translate(100,12) rotate(38) scale(0.62)"><path d="M3 16 V2 H14 M6 2 V16 M3 6 H11 M3 10 H11 M14 2 V9 L11 12" /></g>
+                          <g transform="translate(160,40) rotate(-18) scale(0.58)"><path d="M4 2 H14 V16 H4 Z M4 6 H8 M4 10 H8 M4 14 H8" /></g>
+                          <g transform="translate(40,80) rotate(70) scale(0.64)"><path d="M9 2 L10.5 7 L16 8.5 L10.5 10 L9 15 L7.5 10 L2 8.5 L7.5 7 Z" /></g>
+                          <g transform="translate(120,95) rotate(-27) scale(0.5)"><path d="M3 12 C3 7 6 4 9 4 C12 4 15 7 15 12 H1 V14 H17 V12 Z" /></g>
+                          <g transform="translate(170,120) rotate(46) scale(0.6)"><path d="M2 13 H12 V9 H8 L5 5 H2 V9 Z M3 15 H15" /></g>
+                        </g>
+                      </pattern>
+                    </defs>
+
+                    {/* Composite fill — all three layers stacked on same rect */}
+                    <rect width="100%" height="100%" fill="url(#doodle-layer-a)" />
+                    <rect width="100%" height="100%" fill="url(#doodle-layer-b)" />
+                    <rect width="100%" height="100%" fill="url(#doodle-layer-c)" />
+                  </svg>
+                </div>
+
+                {/* Messages Scroll Container - z-10 over fixed wallpaper */}
+                <div
+                  ref={chatContainerRef}
+                  onScroll={handleChatScroll}
+                  className="flex-1 overflow-y-auto p-6 space-y-4 min-h-0 relative z-10 custom-scrollbar"
+                >
+                  {activeChat.messages.length > 0 ? (
+                    activeChat.messages.map((msg, index) => {
+                      const isUser = msg.sender === "user" || msg.sender === "system";
+                      const isAI = msg.sender === "system";
+
+                      const msgDate = new Date(msg.createdAt);
+                      const prevMsg = index > 0 ? activeChat.messages[index - 1] : null;
+                      let showDateDivider = false;
+                      let dateLabel = "";
+
+                      if (!prevMsg) {
                         showDateDivider = true;
-                      }
-                    }
-
-                    if (showDateDivider) {
-                      const today = new Date();
-                      const yesterday = new Date();
-                      yesterday.setDate(yesterday.getDate() - 1);
-
-                      if (msgDate.toDateString() === today.toDateString()) {
-                        dateLabel = "Today";
-                      } else if (msgDate.toDateString() === yesterday.toDateString()) {
-                        dateLabel = "Yesterday";
                       } else {
-                        dateLabel = msgDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                        const prevDate = new Date(prevMsg.createdAt);
+                        if (msgDate.toDateString() !== prevDate.toDateString()) {
+                          showDateDivider = true;
+                        }
                       }
-                    }
 
-                    // Render high-fidelity custom cards for brochure shares
-                    const isBrochureCard = msg.content.includes("📄 Document Shared");
-                    // Render high-fidelity custom cards for calendars/appointments
-                    const isAppointmentCard = msg.content.includes("📆 Site Visit Booked");
+                      if (showDateDivider) {
+                        const today = new Date();
+                        const yesterday = new Date();
+                        yesterday.setDate(yesterday.getDate() - 1);
 
-                    return (
-                      <div key={msg.id} className="w-full">
-                        {showDateDivider && (
-                          <div className="flex justify-center my-6">
-                            <span className="text-[10px] font-medium text-muted-foreground bg-[#111111] border border-white/10 px-3 py-1 rounded-full uppercase tracking-widest font-mono">
-                              {dateLabel}
-                            </span>
-                          </div>
-                        )}
-                        <div
-                          className={`flex flex-col ${isUser ? "items-end" : "items-start"} w-full group animate-in slide-in-from-bottom-2 duration-150`}
-                        >
-                          {isBrochureCard ? (
-                            /* Digital specs brochure presentation card */
-                            <div className="bg-[#111111] border border-white/[0.08] rounded-xl p-4 max-w-[400px] shadow-2xl relative overflow-hidden group/brochure">
-                              <div className="flex gap-3">
-                                <div className="size-10 bg-primary/10 rounded-lg flex items-center justify-center border border-primary/20 shrink-0 text-primary">
-                                  <FileText className="size-5" />
-                                </div>
-                                <div className="min-w-0">
-                                  <h4 className="text-xs font-bold text-white truncate">{msg.content.replace("📄 Document Shared: ", "").split(".pdf|size=")[0]}</h4>
-                                  <p className="text-[10px] text-muted-foreground mt-0.5">Custom Specifications & Lookbook · {msg.content.includes("|size=") ? msg.content.split("|size=")[1] : "4.8 MB"}</p>
-                                </div>
-                              </div>
-                              <div className="border-t border-border/50 mt-4 pt-3 flex items-center justify-between">
-                                <span className="text-[9px] text-muted-foreground font-mono">Sent to Lead SMS & Email</span>
-                                <a
-                                  href="#"
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    setIsLookbookOpen(true);
-                                    setLookbookPage(0);
-                                  }}
-                                  className="inline-flex items-center gap-1 text-[10px] font-bold text-white hover:underline"
-                                >
-                                  Preview lookbook <ExternalLink className="size-3" />
-                                </a>
-                              </div>
-                            </div>
-                          ) : isAppointmentCard ? (
-                            /* Premium Calendar Booking Confirmation Card */
-                            <div className="bg-success/5 border border-success/30 rounded-xl p-4 max-w-[400px] shadow-2xl relative overflow-hidden">
-                              <div className="flex gap-3">
-                                <div className="size-10 bg-success/15 rounded-lg flex items-center justify-center border border-success/30 shrink-0 text-success">
-                                  <Calendar className="size-5" />
-                                </div>
-                                <div className="min-w-0">
-                                  <h4 className="text-xs font-bold text-white">Site Walkthrough Booked</h4>
-                                  <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">
-                                    {msg.content.replace("📆 Site Visit Booked: ", "")}
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="border-t border-success/10 mt-4 pt-3 flex items-center justify-between">
-                                <span className="inline-flex items-center gap-1 text-[9px] text-success font-semibold tracking-wider uppercase font-mono">
-                                  <Check className="size-3" /> Confirmed Calendar Lock
-                                </span>
-                                {isGCalConnected ? (
-                                  <span className="inline-flex items-center gap-1 text-[9px] text-success font-bold font-mono">
-                                    <Check className="size-2.5" /> Synced to GCal
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 text-[9px] text-amber-500/80 font-bold font-mono" title="Connect Google Business Reviews integration in Settings to sync calendar">
-                                    <AlertCircle className="size-2.5" /> Local Lock (GCal Disconnected)
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          ) : (
-                            /* Standard Message Bubble */
-                            <div
-                              className={`relative p-3 rounded-2xl text-xs leading-relaxed max-w-[70%] font-sans select-text ${isUser
-                                ? "bg-primary text-black rounded-tr-none font-medium shadow-md"
-                                : "bg-white/[0.04] border border-white/[0.08] text-white rounded-tl-none"
-                                }`}
-                            >
-                              {isAI && (
-                                <div className="absolute -top-2 -left-2 bg-[#0B0B0C] rounded-full p-1 border border-primary/30 text-primary shadow-sm" title="Generated by AI Concierge">
-                                  <Sparkles className="size-3" />
-                                </div>
-                              )}
-                              <p className="whitespace-pre-line">{msg.content}</p>
+                        if (msgDate.toDateString() === today.toDateString()) {
+                          dateLabel = "Today";
+                        } else if (msgDate.toDateString() === yesterday.toDateString()) {
+                          dateLabel = "Yesterday";
+                        } else {
+                          dateLabel = msgDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                        }
+                      }
+
+                      // Render high-fidelity custom cards for brochure shares
+                      const isBrochureCard = msg.content.includes("📄 Document Shared");
+                      // Render high-fidelity custom cards for calendars/appointments
+                      const isAppointmentCard = msg.content.includes("📆 Site Visit Booked");
+
+                      return (
+                        <div key={msg.id} className="w-full">
+                          {showDateDivider && (
+                            <div className="flex justify-center my-6">
+                              <span className="text-[10px] font-medium text-muted-foreground bg-[#111111] border border-white/10 px-3 py-1 rounded-full uppercase tracking-widest font-mono">
+                                {dateLabel}
+                              </span>
                             </div>
                           )}
+                          <div
+                            className={`flex flex-col ${isUser ? "items-end" : "items-start"} w-full group animate-in slide-in-from-bottom-2 duration-150`}
+                          >
+                            {isBrochureCard ? (
+                              /* Digital specs brochure presentation card */
+                              <div className="bg-[#111111] border border-white/[0.08] rounded-xl p-4 max-w-[400px] shadow-2xl relative overflow-hidden group/brochure">
+                                <div className="flex gap-3">
+                                  <div className="size-10 bg-primary/10 rounded-lg flex items-center justify-center border border-primary/20 shrink-0 text-primary">
+                                    <FileText className="size-5" />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <h4 className="text-xs font-bold text-white truncate">{msg.content.replace("📄 Document Shared: ", "").split(".pdf|size=")[0]}</h4>
+                                    <p className="text-[10px] text-muted-foreground mt-0.5">Custom Specifications & Lookbook · {msg.content.includes("|size=") ? msg.content.split("|size=")[1] : "4.8 MB"}</p>
+                                  </div>
+                                </div>
+                                <div className="border-t border-border/50 mt-4 pt-3 flex items-center justify-between">
+                                  <span className="text-[9px] text-muted-foreground font-mono">Sent to Lead SMS & Email</span>
+                                  <a
+                                    href="#"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      setIsLookbookOpen(true);
+                                      setLookbookPage(0);
+                                    }}
+                                    className="inline-flex items-center gap-1 text-[10px] font-bold text-white hover:underline"
+                                  >
+                                    Preview lookbook <ExternalLink className="size-3" />
+                                  </a>
+                                </div>
+                              </div>
+                            ) : isAppointmentCard ? (
+                              /* Premium Calendar Booking Confirmation Card */
+                              <div className="bg-success/5 border border-success/30 rounded-xl p-4 max-w-[400px] shadow-2xl relative overflow-hidden">
+                                <div className="flex gap-3">
+                                  <div className="size-10 bg-success/15 rounded-lg flex items-center justify-center border border-success/30 shrink-0 text-success">
+                                    <Calendar className="size-5" />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <h4 className="text-xs font-bold text-white">Site Walkthrough Booked</h4>
+                                    <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">
+                                      {msg.content.replace("📆 Site Visit Booked: ", "")}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="border-t border-success/10 mt-4 pt-3 flex items-center justify-between">
+                                  <span className="inline-flex items-center gap-1 text-[9px] text-success font-semibold tracking-wider uppercase font-mono">
+                                    <Check className="size-3" /> Confirmed Calendar Lock
+                                  </span>
+                                  {isGCalConnected ? (
+                                    <span className="inline-flex items-center gap-1 text-[9px] text-success font-bold font-mono">
+                                      <Check className="size-2.5" /> Synced to GCal
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 text-[9px] text-amber-500/80 font-bold font-mono" title="Connect Google Business Reviews integration in Settings to sync calendar">
+                                      <AlertCircle className="size-2.5" /> Local Lock (GCal Disconnected)
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            ) : (
+                              /* Standard Message Bubble */
+                              <div
+                                className={`relative p-3 rounded-2xl text-xs leading-relaxed max-w-[70%] font-sans select-text shadow-xl ${isUser
+                                  ? "bg-primary text-black rounded-tr-none font-medium opacity-100"
+                                  : "bg-[#151720] border border-white/10 text-white rounded-tl-none opacity-100"
+                                  }`}
+                              >
+                                {isAI && (
+                                  <div className="absolute -top-2 -left-2 bg-[#0B0B0C] rounded-full p-1 border border-primary/30 text-primary shadow-sm" title="Generated by AI Concierge">
+                                    <Sparkles className="size-3" />
+                                  </div>
+                                )}
+                                <p className="whitespace-pre-line">{msg.content}</p>
+                              </div>
+                            )}
 
-                          {/* Hover Timestamp metadata display */}
-                          <span className="text-[9px] text-muted-foreground/60 mt-1 select-none font-mono px-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                            {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
+                            {/* Hover Timestamp metadata display */}
+                            <span className="text-[9px] text-muted-foreground/60 mt-1 select-none font-mono px-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                              {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-full text-center">
-                    <MessageSquare className="size-8 text-muted-foreground mb-3" />
-                    <p className="text-xs text-foreground font-semibold">No direct messages yet</p>
-                    <p className="text-[11px] text-muted-foreground mt-1 max-w-xs leading-relaxed">
-                      Send a message to kick off direct communication. All follow-ups will log and track instantly.
-                    </p>
-                  </div>
-                )}
+                      );
+                    })
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-full text-center">
+                      <MessageSquare className="size-8 text-muted-foreground mb-3" />
+                      <p className="text-xs text-foreground font-semibold">No direct messages yet</p>
+                      <p className="text-[11px] text-muted-foreground mt-1 max-w-xs leading-relaxed">
+                        Send a message to kick off direct communication. All follow-ups will log and track instantly.
+                      </p>
+                    </div>
+                  )}
 
-                {/* Scroll Anchor */}
-                <div ref={chatEndRef} />
+                  {/* Scroll Anchor */}
+                  <div ref={chatEndRef} />
+                </div>
               </div>
 
               {/* QUICK INSTANT RESPONSE SHORTCUTS */}
