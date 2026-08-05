@@ -16,6 +16,7 @@ import {
 } from "@/lib/dashboard";
 import {
   MessageSquare,
+  MessageSquarePlus,
   Send,
   Search,
   Calendar,
@@ -38,14 +39,23 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/messages")({
   loader: async ({ context }) => {
-    if (typeof window === 'undefined' && !context.session) {
+    try {
+      if (typeof window === 'undefined' && !context.session) {
+        return { conversations: [], aiToggleMap: {}, integrationsStatus: {} };
+      }
+      const activeRole = typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? undefined) : undefined;
+      const conversations = await getConversations({ data: { activeRole } });
+      const aiToggleMap = await getAiToggleMap();
+      const integrationsStatus = await getIntegrationsStatus();
+      return {
+        conversations: conversations || [],
+        aiToggleMap: aiToggleMap || {},
+        integrationsStatus: integrationsStatus || {}
+      };
+    } catch (err) {
+      console.error("Error in messages route loader:", err);
       return { conversations: [], aiToggleMap: {}, integrationsStatus: {} };
     }
-    const activeRole = typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? undefined) : undefined;
-    const conversations = await getConversations({ data: { activeRole } });
-    const aiToggleMap = await getAiToggleMap();
-    const integrationsStatus = await getIntegrationsStatus();
-    return { conversations, aiToggleMap, integrationsStatus };
   },
   staleTime: 60_000,
   head: () => ({
@@ -118,12 +128,15 @@ function FormattedSummary({ text }: { text: string }) {
 
 function MessagesPage() {
   const router = useRouter();
-  const { conversations: initialConversations, aiToggleMap: initialAiToggleMap, integrationsStatus: initialIntegrationsStatus } = useLoaderData({ from: "/messages" }) as { conversations: any[]; aiToggleMap: Record<string, boolean>; integrationsStatus: any };
+  const loaderData = (useLoaderData({ from: "/messages" }) || {}) as any;
+  const initialConversations = loaderData?.conversations || [];
+  const initialAiToggleMap = loaderData?.aiToggleMap || {};
+  const initialIntegrationsStatus = loaderData?.integrationsStatus || {};
 
   const [conversationsList, setConversationsList] = useState<any[]>(initialConversations || []);
 
   useEffect(() => {
-    if (initialConversations) {
+    if (initialConversations && Array.isArray(initialConversations)) {
       setConversationsList(initialConversations);
     }
   }, [initialConversations]);
@@ -131,6 +144,22 @@ function MessagesPage() {
   // Track selected lead & active conversation
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [activeChat, setActiveChat] = useState<{ lead: any; messages: any[] } | null>(null);
+
+  // Active threads: Leads with actual messages or currently selected
+  const activeThreadsList = useMemo(() => {
+    if (!Array.isArray(conversationsList)) return [];
+    return conversationsList.filter(t => 
+      t && ((t.lastMessage && t.lastMessage !== "No messages yet") || t.leadId === selectedLeadId)
+    );
+  }, [conversationsList, selectedLeadId]);
+
+  // Uncontacted leads: Leads without messages
+  const uncontactedLeadsList = useMemo(() => {
+    if (!Array.isArray(conversationsList)) return [];
+    return conversationsList.filter(t => 
+      t && (!t.lastMessage || t.lastMessage === "No messages yet")
+    );
+  }, [conversationsList]);
 
   const [isLookbookOpen, setIsLookbookOpen] = useState(false);
   const [lookbookPage, setLookbookPage] = useState(0);
@@ -199,6 +228,10 @@ function MessagesPage() {
   // Search and filter tab states
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"all" | "unread" | "hot">("all");
+
+  // WhatsApp New Chat modal state
+  const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
+  const [newChatSearchQuery, setNewChatSearchQuery] = useState("");
 
   // Loading and sending UI states
   const [isLoadingChat, setIsLoadingChat] = useState(false);
@@ -283,13 +316,13 @@ function MessagesPage() {
     setNewMessagesCount(0);
   };
 
-  // Auto-select the first conversation on initial load if none selected
+  // Auto-select the first active conversation on initial load if none selected
   useEffect(() => {
-    if (conversationsList.length > 0 && !selectedLeadId) {
-      setSelectedLeadId(conversationsList[0].leadId);
+    if (activeThreadsList.length > 0 && !selectedLeadId) {
+      setSelectedLeadId(activeThreadsList[0].leadId);
       setIsLoadingChat(true);
     }
-  }, [conversationsList, selectedLeadId]);
+  }, [activeThreadsList, selectedLeadId]);
 
   const conversationsListRef = useRef(conversationsList);
   useEffect(() => {
@@ -467,9 +500,23 @@ function MessagesPage() {
     }
   };
 
-  // Filter conversations
+
+
+  // Filtered uncontacted leads for New Chat Modal search
+  const filteredUncontactedLeads = useMemo(() => {
+    if (!newChatSearchQuery.trim()) return uncontactedLeadsList;
+    const q = newChatSearchQuery.toLowerCase();
+    return uncontactedLeadsList.filter(l =>
+      (l.leadName && l.leadName.toLowerCase().includes(q)) ||
+      (l.phone && l.phone.includes(q)) ||
+      (l.email && l.email.toLowerCase().includes(q)) ||
+      (l.scoreTier && l.scoreTier.toLowerCase().includes(q))
+    );
+  }, [uncontactedLeadsList, newChatSearchQuery]);
+
+  // Filter active conversations for left sidebar list
   const filteredThreads = useMemo(() => {
-    let threads = conversationsList;
+    let threads = activeThreadsList;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       threads = threads.filter(t =>
@@ -480,7 +527,7 @@ function MessagesPage() {
     if (activeTab === "unread") return threads.filter(t => t.unreadCount > 0 && t.leadId !== selectedLeadId);
     if (activeTab === "hot") return threads.filter(t => t.scoreTier === "Hot");
     return threads;
-  }, [conversationsList, searchQuery, activeTab, selectedLeadId]);
+  }, [activeThreadsList, searchQuery, activeTab, selectedLeadId]);
 
   // Handle sending text message
   const handleSendMessage = async (e?: React.FormEvent) => {
@@ -723,7 +770,7 @@ function MessagesPage() {
         {/* LEFT COLUMN: Search & Thread List */}
         <div
           style={{ width: `${leftWidth}px` }}
-          className="border-r border-border flex flex-col h-full min-h-0 bg-[#080808]/90 shrink-0"
+          className="border-r border-border flex flex-col h-full min-h-0 bg-[#080808]/90 shrink-0 relative"
         >
 
           {/* Thread Search Box */}
@@ -854,6 +901,19 @@ function MessagesPage() {
               </div>
             )}
           </div>
+
+          {/* WhatsApp-Style Floating New Chat FAB Button */}
+          <button
+            type="button"
+            onClick={() => {
+              setNewChatSearchQuery("");
+              setIsNewChatModalOpen(true);
+            }}
+            className="absolute bottom-5 right-5 z-30 size-12 rounded-full bg-[#25D366] hover:bg-[#20bd5a] text-black font-bold shadow-[0_4px_20px_rgba(37,211,102,0.4)] flex items-center justify-center transition-all hover:scale-110 active:scale-95 group cursor-pointer"
+            title="Start new chat"
+          >
+            <MessageSquarePlus className="size-6 text-black group-hover:scale-110 transition-transform" />
+          </button>
         </div>
 
         {/* Draggable Divider splitter */}
@@ -1259,7 +1319,7 @@ function MessagesPage() {
               </div>
 
               {/* MESSAGE COMPOSER FOOTER INPUT */}
-              <div className="p-4 border-t border-border bg-[#0B0B0C]/80 backdrop-blur-md relative">
+              <div className="p-4 border-t border-border bg-[#0B0B0C]/80 backdrop-blur-md relative z-30">
                 {isUserScrolledUp && (
                   <button
                     type="button"
@@ -1267,7 +1327,7 @@ function MessagesPage() {
                       e.preventDefault();
                       scrollToBottom(true, "smooth");
                     }}
-                    className="absolute -top-20 left-1/2 -translate-x-1/2 z-40 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#141418]/95 border border-primary/50 text-primary shadow-2xl hover:bg-primary hover:text-black hover:scale-105 active:scale-95 transition-all group backdrop-blur-md cursor-pointer animate-in fade-in slide-in-from-bottom-2 duration-200"
+                    className="absolute -top-20 left-1/2 -translate-x-1/2 z-50 pointer-events-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#141418]/95 border border-primary/50 text-primary shadow-2xl hover:bg-primary hover:text-black hover:scale-105 active:scale-95 transition-all group backdrop-blur-md cursor-pointer animate-in fade-in slide-in-from-bottom-2 duration-200"
                     title="Scroll to latest messages"
                   >
                     <ChevronDown className="size-4 transition-transform group-hover:translate-y-0.5" />
@@ -1827,6 +1887,108 @@ function MessagesPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* START NEW CHAT MODAL (WhatsApp Style) */}
+      {isNewChatModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-150">
+          <div className="bg-[#12141C] border border-border/80 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[80vh] animate-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="p-4 border-b border-border/60 flex items-center justify-between bg-white/[0.02]">
+              <div className="flex items-center gap-2.5">
+                <div className="size-9 rounded-xl bg-[#25D366]/10 border border-[#25D366]/30 flex items-center justify-center text-[#25D366]">
+                  <MessageSquarePlus className="size-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white font-display">Start New Chat</h3>
+                  <p className="text-[11px] text-muted-foreground">Select an uncontacted lead to initiate conversation</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsNewChatModalOpen(false)}
+                className="size-8 rounded-lg bg-white/5 hover:bg-white/10 text-muted-foreground hover:text-white flex items-center justify-center transition-colors"
+                title="Close Modal"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+
+            {/* Modal Search Input */}
+            <div className="p-4 border-b border-border/40 bg-secondary/20">
+              <div className="relative">
+                <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Search lead by name, email, or phone..."
+                  value={newChatSearchQuery}
+                  onChange={(e) => setNewChatSearchQuery(e.target.value)}
+                  className="w-full bg-secondary border border-border/60 rounded-lg pl-9 pr-4 py-2 text-xs text-foreground focus:outline-none focus:border-primary/60 placeholder:text-muted-foreground transition-colors"
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            {/* Uncontacted Leads List */}
+            <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar min-h-[220px]">
+              {filteredUncontactedLeads.length > 0 ? (
+                filteredUncontactedLeads.map((lead) => {
+                  const initials = (lead.leadName || "Lead")
+                    .split(" ")
+                    .filter(Boolean)
+                    .map((n: string) => n[0])
+                    .join("")
+                    .slice(0, 2)
+                    .toUpperCase() || "L";
+
+                  return (
+                    <button
+                      key={lead.leadId}
+                      onClick={() => {
+                        setSelectedLeadId(lead.leadId);
+                        setActiveChat(null);
+                        setIsLoadingChat(true);
+                        setIsNewChatModalOpen(false);
+                        setTimeout(() => {
+                          if (inputRef.current) inputRef.current.focus();
+                        }, 150);
+                      }}
+                      className="w-full text-left p-3 rounded-xl flex items-center gap-3 hover:bg-white/[0.06] transition-all group border border-transparent hover:border-white/10 select-none"
+                    >
+                      <div className="size-10 rounded-full bg-primary/10 border border-primary/20 text-white flex items-center justify-center text-xs font-semibold shrink-0 group-hover:bg-primary/20 transition-colors">
+                        {initials}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xs font-semibold text-white truncate">{lead.leadName}</h4>
+                          {lead.scoreTier && (
+                            <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold tracking-wider uppercase ${
+                              lead.scoreTier === "Hot"
+                                ? "bg-red-500/10 text-red-400 border border-red-500/20"
+                                : lead.scoreTier === "Warm"
+                                ? "bg-warning/10 text-warning border border-warning/20"
+                                : "bg-cold/10 text-cold border border-cold/20"
+                            }`}>
+                              {lead.scoreTier}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                          {lead.email || lead.phone || lead.status || "New Lead"}
+                        </p>
+                      </div>
+                      <ChevronRight className="size-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                    </button>
+                  );
+                })
+              ) : (
+                <div className="p-8 text-center text-xs text-muted-foreground space-y-1">
+                  <p className="font-semibold text-white">No uncontacted leads found</p>
+                  <p className="text-[11px]">All available leads already have active chat conversations.</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
