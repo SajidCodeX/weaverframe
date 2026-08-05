@@ -1021,7 +1021,14 @@ function MessagesPage() {
               <div
                 ref={chatContainerRef}
                 onScroll={handleChatScroll}
-                className="flex-1 overflow-y-auto p-6 space-y-4 min-h-0 bg-[#060606]/30 relative custom-scrollbar"
+                className="flex-1 overflow-y-auto p-6 space-y-4 min-h-0 relative custom-scrollbar"
+                style={{
+                  backgroundColor: "#0B0E14",
+                  backgroundImage: `
+                    radial-gradient(circle at 50% 50%, rgba(16, 185, 129, 0.02) 0%, transparent 80%),
+                    url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23ffffff' fill-opacity='0.035'%3E%3Cpath d='M11 18h2v2h-2zM80 70h2v2h-2zM35 85h2v2h-2zM75 25h2v2h-2zM20 50a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm45-20a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm20 55a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM50 15h10v2H50zm-30 60h10v2H20zm40 10h12v2H60zM15 35l6 6-6 6-6-6 6-6zm50-10l6 6-6 6-6-6 6-6z'/%3E%3Cpath d='M42 45a4 4 0 1 1-8 0 4 4 0 0 1 8 0zm30-5a4 4 0 1 1-8 0 4 4 0 0 1 8 0zM18 80a4 4 0 1 1-8 0 4 4 0 0 1 8 0z'/%3E%3C/g%3E%3C/svg%3E")
+                  `,
+                }}
               >
                 {activeChat.messages.length > 0 ? (
                   activeChat.messages.map((msg, index) => {
