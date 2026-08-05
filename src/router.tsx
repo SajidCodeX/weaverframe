@@ -9,7 +9,7 @@ export const getRouter = () => {
     routeTree,
     context: { queryClient },
     scrollRestoration: true,
-    defaultPreload: 'intent',
+    defaultPreload: false,
     // FIX-1: staleTime MUST be 0. With any positive value, router.invalidate()
     // is silently ignored (data is considered "fresh"), causing the SSR placeholder
     // to never clear and the skeleton to loop forever.

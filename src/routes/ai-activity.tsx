@@ -1,3 +1,4 @@
+import { RoutePending } from "@/components/dashboard/RoutePending";
 import { createFileRoute, useLoaderData } from "@tanstack/react-router";
 import { Shell } from "@/components/dashboard/Shell";
 import { Card, CardHeader, Badge } from "@/components/dashboard/primitives";
@@ -8,12 +9,12 @@ import { obscurePII } from "@/lib/utils";
 import { useRouteContext } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/ai-activity")({
-  loader: async ({ context }) => {
+  loader: ({ context }) => {
     if (typeof window === 'undefined' && !context.session) {
       return [];
     }
     const activeRole = typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? undefined) : undefined;
-    return await getLeadsData({ data: { activeRole } });
+    return getLeadsData({ data: { activeRole } });
   },
   head: () => ({
     meta: [
@@ -21,6 +22,9 @@ export const Route = createFileRoute("/ai-activity")({
       { name: "description", content: "AI conversation log and scripts." },
     ],
   }),
+  staleTime: 60_000, // 60s — fresh data, instant revisits within a minute
+  pendingMs: 0,
+  pendingComponent: () => <RoutePending title="Loading AI Activity..." type="ai-activity" />,
   component: AIPage,
 });
 

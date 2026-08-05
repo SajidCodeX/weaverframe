@@ -16,6 +16,7 @@ export default defineConfig({
     tsConfigPaths({ projects: ["./tsconfig.json"] }),
     tanstackStart({
       serverFns: { disableCsrfMiddlewareWarning: true },
+      server: { preset: "vercel" }
     }),
     viteReact(),
   ],

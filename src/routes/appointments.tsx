@@ -1,3 +1,4 @@
+import { RoutePending } from "@/components/dashboard/RoutePending";
 import { createFileRoute, useLoaderData, useRouter, useRouteContext } from "@tanstack/react-router";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { obscurePII } from "@/lib/utils";
@@ -95,23 +96,25 @@ const getUSHoliday = (date: Date) => {
 };
 
 export const Route = createFileRoute("/appointments")({
-  loader: async ({ context }) => {
+  loader: ({ context }) => {
     if (typeof window === 'undefined' && !context.session) {
       return { appts: [], leads: [] };
     }
     const activeRole = typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? undefined) : undefined;
-    const [appts, leads] = await Promise.all([
+    return Promise.all([
       getAppointmentsData({ data: { activeRole } }),
       getLeadsData({ data: { activeRole } })
-    ]);
-    return { appts, leads };
+    ]).then(([appts, leads]) => ({ appts, leads }));
   },
+  staleTime: 60_000, // 60s — fresh data, instant revisits within a minute
   head: () => ({ 
     meta: [
       { title: "Appointments — WeaverFrame" }, 
       { name: "description", content: "Calendar and management of lead appointments." }
     ] 
   }),
+  pendingMs: 0,
+  pendingComponent: () => <RoutePending title="Loading Appointments..." type="appointments" />,
   component: ApptPage,
 });
 
@@ -516,7 +519,7 @@ function ApptPage() {
     const firstDayIndex = new Date(year, month, 1).getDay();
     const totalDays = new Date(year, month + 1, 0).getDate();
     
-    const days = [];
+    const days: Array<{ day: number | null; date: Date | null }> = [];
     // Add padding days for previous month
     for (let i = 0; i < firstDayIndex; i++) {
       days.push({ day: null, date: null });

@@ -1,3 +1,4 @@
+import { RoutePending } from "@/components/dashboard/RoutePending";
 import { createFileRoute, useLoaderData } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { FileText, FileSpreadsheet, Mail } from "lucide-react";
@@ -10,13 +11,14 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/reports")({
   beforeLoad: async ({ context }) => {
     if (typeof window === 'undefined') return
+
     const session = (context as any).session
     if (session && session.role === 'builder' && session.builderRole === 'sales') {
       const { redirect } = await import('@tanstack/react-router')
       throw redirect({ to: '/' })
     }
   },
-  loader: async ({ context }) => {
+  loader: ({ context }) => {
     if (typeof window === 'undefined' && !context.session) {
       return {
         timeframes: {},
@@ -30,9 +32,12 @@ export const Route = createFileRoute("/reports")({
       };
     }
     const activeRole = typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? undefined) : undefined;
-    return await getReportsData({ data: { activeRole } });
+    return getReportsData({ data: { activeRole } });
   },
+  staleTime: 60_000, // 60s — fresh data, instant revisits within a minute
   head: () => ({ meta: [{ title: "Reports — WeaverFrame" }, { name: "description", content: "Monthly ROI and performance reports." }] }),
+  pendingMs: 0,
+  pendingComponent: () => <RoutePending title="Loading Reports..." type="reports" />,
   component: ReportsPage,
 });
 

@@ -60,6 +60,8 @@ model User {
 
   builder       Builder?  @relation(fields: [builderId], references: [id], onDelete: Cascade)
   assignedLeads Lead[]    @relation("AssignedUserLeads")
+
+  @@index([builderId])
 }
 
 // ─── LEADS ───────────────────────────────────────────────────────────────────
@@ -101,6 +103,11 @@ model Lead {
   @@index([createdAt])
   @@index([builderId, createdAt])
   @@index([portalToken])
+  @@index([status])
+  @@index([scoreTier])
+  @@index([status, createdAt])
+  @@index([assignedToId])
+  @@index([builderId, status])
 }
 
 // ─── REVIEW PLATFORMS ────────────────────────────────────────────────────────
@@ -115,6 +122,8 @@ model ReviewPlatform {
   profileUrl   String
   reviewsGoal  Int      // Target number of reviews
   createdAt    DateTime @default(now())
+
+  @@index([builderId])
 }
 
 // ─── REVIEW REQUESTS ─────────────────────────────────────────────────────────
@@ -135,6 +144,10 @@ model ReviewRequest {
   sentAt      DateTime @default(now())
   
   lead        Lead?    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([builderId])
+  @@index([leadId])
+  @@index([builderId, createdAt])
 }
 
 // ─── ACTIVITY TIMELINE ───────────────────────────────────────────────────────
@@ -175,6 +188,7 @@ model Appointment {
   @@index([leadId])
   @@index([createdAt])
   @@index([builderId, createdAt])
+  @@index([builderId, dateTime])
 }
 
 // ─── MESSAGES ────────────────────────────────────────────────────────────────
@@ -188,9 +202,15 @@ model Message {
   content   String
   channel   String   @default("portal")  // "portal" | "sms"
   isRead    Boolean  @default(false)
+  isSimulated Boolean @default(false) // True if this was generated via the Simulate Lead feature
   createdAt DateTime @default(now())
   
   lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([builderId])
+  @@index([leadId])
+  @@index([builderId, leadId])
+  @@index([createdAt])
 }
 
 // ─── INTEGRATIONS ────────────────────────────────────────────────────────────
@@ -224,6 +244,9 @@ model PublicReview {
   status      String   @default("Unanswered") // "Unanswered" | "Answered"
   replyText   String?  @db.Text
   createdAt   DateTime @default(now())
+
+  @@index([builderId])
+  @@index([builderId, createdAt])
 }
 
 // ─── PLATFORM SETTINGS ───────────────────────────────────────────────────────

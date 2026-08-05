@@ -1,3 +1,4 @@
+import { RoutePending } from "@/components/dashboard/RoutePending";
 import { createFileRoute, useLoaderData, useRouter } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { useTheme } from "@/components/ThemeProvider";
@@ -32,7 +33,7 @@ export const Route = createFileRoute("/settings")({
       throw redirect({ to: '/' })
     }
   },
-  loader: async () => {
+  loader: () => {
     // FIX-6: SSR bypass — mirrors the pattern used in index.tsx and admin routes.
     // Without this, the server runs requireAuth() during SSR without the client's
     // x-active-role header, causing getSessionFromCookie() to return null when
@@ -51,24 +52,26 @@ export const Route = createFileRoute("/settings")({
     }
 
     const activeRole = typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? undefined) : undefined;
-    const [integrationsStatus, builderProfile, qualRules, notifSettings, webhookUrl, billingProfile] = await Promise.all([
+    return Promise.all([
       getIntegrationsStatus(),
       getBuilderProfile({ data: { activeRole } }),
       getQualificationRules(),
       getNotificationSettings(),
       getWebhookUrl(),
       getBillingProfile(),
-    ]);
-    return {
+    ]).then(([integrationsStatus, builderProfile, qualRules, notifSettings, webhookUrl, billingProfile]) => ({
       integrationsStatus: integrationsStatus || {},
       builderProfile: builderProfile || {},
       qualRules: qualRules || {},
       notifSettings: notifSettings || {},
       webhookUrl: webhookUrl || '',
       billingProfile: billingProfile || { adSpendBalance: 0, paymentMethod: "None", plan: "trial" },
-    };
+    }));
   },
   head: () => ({ meta: [{ title: "Settings — WeaverFrame" }, { name: "description", content: "Configure your account, qualification rules, and integrations." }] }),
+  staleTime: 60_000, // 60s — fresh data, instant revisits within a minute
+  pendingMs: 0,
+  pendingComponent: () => <RoutePending title="Loading Settings..." type="settings" />,
   component: SettingsPage,
 });
 
