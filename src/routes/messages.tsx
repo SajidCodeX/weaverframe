@@ -291,7 +291,12 @@ function MessagesPage() {
     }
   }, [conversationsList, selectedLeadId]);
 
-  // Fetch messages when selected lead changes
+  const conversationsListRef = useRef(conversationsList);
+  useEffect(() => {
+    conversationsListRef.current = conversationsList;
+  }, [conversationsList]);
+
+  // Fetch messages ONLY when selected lead changes
   useEffect(() => {
     if (!selectedLeadId) {
       setActiveChat(null);
@@ -302,11 +307,12 @@ function MessagesPage() {
     const fetchChat = async () => {
       const activeRole = sessionStorage.getItem('active_role') ?? undefined;
       const cachedMessages = (window as any)._messagesCache?.get(selectedLeadId);
+      const isNewLeadSelected = loadedLeadIdRef.current !== selectedLeadId;
 
-      if (loadedLeadIdRef.current !== selectedLeadId) {
+      if (isNewLeadSelected) {
         if (cachedMessages) {
           // Instant load from cache
-          const lead = conversationsList.find(c => c.leadId === selectedLeadId);
+          const lead = conversationsListRef.current.find(c => c.leadId === selectedLeadId);
           setActiveChat({ lead, messages: cachedMessages });
           setIsLoadingChat(false);
         } else {
@@ -316,7 +322,7 @@ function MessagesPage() {
       }
 
       try {
-        const lead = conversationsList.find(c => c.leadId === selectedLeadId);
+        const lead = conversationsListRef.current.find(c => c.leadId === selectedLeadId);
         const { messages } = await getMessagesForLead({ data: { leadId: selectedLeadId, activeRole } });
 
         // Update cache
@@ -327,13 +333,15 @@ function MessagesPage() {
 
         if (isMounted) {
           setActiveChat({ lead, messages });
-          loadedLeadIdRef.current = selectedLeadId;
-          setIsLoadingChat(false);
-          // Position at bottom instantly on lead switch
-          setIsUserScrolledUp(false);
-          isUserScrolledUpRef.current = false;
-          setNewMessagesCount(0);
-          setTimeout(() => scrollToBottom(true, "instant"), 30);
+          if (isNewLeadSelected) {
+            loadedLeadIdRef.current = selectedLeadId;
+            setIsLoadingChat(false);
+            // Position at bottom ONLY when switching to a NEW lead
+            setIsUserScrolledUp(false);
+            isUserScrolledUpRef.current = false;
+            setNewMessagesCount(0);
+            setTimeout(() => scrollToBottom(true, "instant"), 30);
+          }
         }
       } catch (error) {
         console.error(error);
@@ -344,7 +352,7 @@ function MessagesPage() {
     };
     fetchChat();
     return () => { isMounted = false; };
-  }, [selectedLeadId, conversationsList]);
+  }, [selectedLeadId]);
 
   // Real-time Live WhatsApp Polling: Refresh active chat & thread list every 2.5s
   useEffect(() => {
@@ -1013,7 +1021,7 @@ function MessagesPage() {
               <div
                 ref={chatContainerRef}
                 onScroll={handleChatScroll}
-                className="flex-1 overflow-y-auto p-6 space-y-4 min-h-0 bg-[#060606]/30 relative scroll-smooth custom-scrollbar"
+                className="flex-1 overflow-y-auto p-6 space-y-4 min-h-0 bg-[#060606]/30 relative custom-scrollbar"
               >
                 {activeChat.messages.length > 0 ? (
                   activeChat.messages.map((msg, index) => {
