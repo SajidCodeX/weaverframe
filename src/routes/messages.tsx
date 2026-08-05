@@ -1259,7 +1259,7 @@ function MessagesPage() {
               </div>
 
               {/* MESSAGE COMPOSER FOOTER INPUT */}
-              <div className="p-4 border-t border-border bg-[#0B0B0C]/80 backdrop-blur-md relative">
+              <div className="p-4 border-t border-border bg-[#0B0B0C]/80 backdrop-blur-md relative z-30">
                 {isUserScrolledUp && (
                   <button
                     type="button"
@@ -1267,7 +1267,7 @@ function MessagesPage() {
                       e.preventDefault();
                       scrollToBottom(true, "smooth");
                     }}
-                    className="absolute -top-20 left-1/2 -translate-x-1/2 z-40 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#141418]/95 border border-primary/50 text-primary shadow-2xl hover:bg-primary hover:text-black hover:scale-105 active:scale-95 transition-all group backdrop-blur-md cursor-pointer animate-in fade-in slide-in-from-bottom-2 duration-200"
+                    className="absolute -top-16 left-1/2 -translate-x-1/2 z-50 pointer-events-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#141418]/95 border border-primary/50 text-primary shadow-2xl hover:bg-primary hover:text-black hover:scale-105 active:scale-95 transition-all group backdrop-blur-md cursor-pointer animate-in fade-in slide-in-from-bottom-2 duration-200"
                     title="Scroll to latest messages"
                   >
                     <ChevronDown className="size-4 transition-transform group-hover:translate-y-0.5" />
