@@ -1056,8 +1056,46 @@ Do not output any introductory or conversational text outside of the raw JSON ob
     { role: 'user' as const, content: userMessage }
   ];
 
-  // Call Groq Completion
-  const rawResponse = await generateGroqCompletion({ data: { messages: formattedMessages } });
+  // Call Groq API directly (avoids server-fn-to-server-fn HTTP overhead which breaks in portal context)
+  const GROQ_API_KEY = process.env.GROQ_API_KEY;
+  let rawResponse = "";
+
+  if (!GROQ_API_KEY || GROQ_API_KEY.trim() === "") {
+    // Fallback mock if no API key
+    const lastUserMsg = userMessage.toLowerCase();
+    if (lastUserMsg.includes("meet") || lastUserMsg.includes("schedule") || lastUserMsg.includes("slot")) {
+      rawResponse = JSON.stringify({ replyText: "That slot works great — I've reserved it for you! What location works best for you?", intent: "HOT", bookingDetails: null });
+    } else {
+      rawResponse = JSON.stringify({ replyText: "Thank you for reaching out! Our custom homes in Austin start at $500K. Would you like to schedule a walkthrough?", intent: "WARM", bookingDetails: null });
+    }
+  } else {
+    try {
+      const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${GROQ_API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: "llama-3.3-70b-versatile",
+          messages: formattedMessages,
+          temperature: 0.1,
+          max_tokens: 1024,
+          top_p: 1,
+          stream: false
+        })
+      });
+      if (!groqResponse.ok) {
+        const errText = await groqResponse.text();
+        throw new Error(`Groq API ${groqResponse.status}: ${errText}`);
+      }
+      const groqData = await groqResponse.json();
+      rawResponse = groqData.choices?.[0]?.message?.content || "";
+    } catch (groqError) {
+      console.error("Groq API error in generateAiReplyCore:", groqError);
+      throw groqError;
+    }
+  }
 
   let replyText = "";
   let intent: 'HOT' | 'COLD' | 'WARM' = 'WARM';
