@@ -15,6 +15,10 @@ function ClientPortalPage() {
   
   const [newMessageText, setNewMessageText] = useState("");
   const [isSending, setIsSending] = useState(false);
+  
+  // Optimistic UI states
+  const [optimisticMessages, setOptimisticMessages] = useState<typeof messages>([]);
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const { token } = Route.useParams();
@@ -22,7 +26,7 @@ function ClientPortalPage() {
   // Scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length]);
+  }, [messages.length, optimisticMessages.length, isSending]);
 
   // Polling for new messages every 5 seconds
   useEffect(() => {
@@ -36,38 +40,56 @@ function ClientPortalPage() {
     e.preventDefault();
     if (!newMessageText.trim() || isSending) return;
 
+    const currentText = newMessageText.trim();
+    
+    // Add optimistic message instantly
+    const optMsg = {
+      id: `opt-${Date.now()}`,
+      content: currentText,
+      sender: 'lead',
+      createdAt: new Date().toISOString(),
+    } as any; // Cast as any since it's a mock
+    
+    setOptimisticMessages(prev => [...prev, optMsg]);
+    setNewMessageText("");
     setIsSending(true);
+
     try {
       await sendPortalMessage({
         data: {
           token,
-          content: newMessageText,
+          content: currentText,
         }
       });
-      setNewMessageText("");
       // Force refresh data
-      router.invalidate();
+      await router.invalidate();
     } catch (error) {
       console.error("Failed to send message:", error);
       alert("Failed to send message. Please try again.");
     } finally {
       setIsSending(false);
+      setOptimisticMessages([]); // Clear optimistic once real fetch occurs
     }
   };
+
+  // Combine real and optimistic messages
+  const displayMessages = [...messages, ...optimisticMessages];
 
   return (
     <div className="flex flex-col h-screen w-full bg-[#050608] text-white font-sans overflow-hidden">
       
       {/* HEADER */}
       <header className="flex items-center gap-3 px-4 py-3 bg-[#0a0a0c] border-b border-white/5 z-20 shrink-0">
-        <div className="size-10 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30">
-          <Home className="size-5 text-primary" />
+        <div className="flex items-center justify-center w-10 h-10 rounded-full bg-primary/20 text-primary">
+          <Home className="w-5 h-5" />
         </div>
-        <div className="flex-1 min-w-0">
-          <h1 className="text-sm font-bold truncate">{builder?.companyName || "Builder Portal"}</h1>
-          <p className="text-[11px] text-muted-foreground truncate">
-            Client: {lead.name}
-          </p>
+        <div className="flex flex-col">
+          <span className="font-semibold text-[15px]">{builder.companyName}</span>
+          <div className="flex items-center gap-1.5 text-xs text-white/50">
+             {/* Online Green Dot */}
+            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+            <span>Online</span>
+          </div>
         </div>
       </header>
 
@@ -97,7 +119,7 @@ function ClientPortalPage() {
             </span>
           </div>
 
-          {messages.map((msg) => {
+          {displayMessages.map((msg) => {
             const isLead = msg.sender === 'lead';
             
             return (
@@ -120,6 +142,17 @@ function ClientPortalPage() {
               </div>
             );
           })}
+
+          {/* Typing Indicator */}
+          {isSending && (
+            <div className="flex flex-col items-start w-full group animate-in slide-in-from-bottom-2 duration-150">
+              <div className="relative p-3 rounded-2xl text-[13px] bg-[#151720] border border-white/10 text-white rounded-tl-none opacity-100 shadow-xl flex items-center gap-1.5 h-10 w-16">
+                <span className="w-1.5 h-1.5 rounded-full bg-white/40 animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                <span className="w-1.5 h-1.5 rounded-full bg-white/40 animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                <span className="w-1.5 h-1.5 rounded-full bg-white/40 animate-bounce" style={{ animationDelay: '300ms' }}></span>
+              </div>
+            </div>
+          )}
           <div ref={messagesEndRef} />
         </div>
       </div>

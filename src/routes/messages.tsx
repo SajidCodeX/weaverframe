@@ -557,9 +557,25 @@ function MessagesPage() {
     if (e) e.preventDefault();
     if (!selectedLeadId || !newMessageText.trim() || isSending) return;
 
-    setIsSending(true);
-    const originalText = newMessageText;
+    const originalText = newMessageText.trim();
     setNewMessageText("");
+    setIsSending(true);
+
+    const tempId = `opt-${Date.now()}`;
+    const optimisticMessage = {
+      id: tempId,
+      sender: "user" as const,
+      content: originalText,
+      createdAt: new Date().toISOString(),
+      isRead: true
+    };
+
+    // Optimsitic UI Update INSTANTLY
+    setActiveChat(prev => {
+      if (!prev) return null;
+      return { ...prev, messages: [...prev.messages, optimisticMessage] };
+    });
+    setTimeout(scrollToBottom, 20);
 
     try {
       const res = await sendMessage({
@@ -569,33 +585,32 @@ function MessagesPage() {
         }
       });
 
-      // Update state optimistically with the user message
+      // Update state with actual DB response (replace temp message)
       setActiveChat(prev => {
         if (!prev) return null;
-        const updatedMsgs = [
-          ...prev.messages,
-          {
+        const updatedMsgs = prev.messages.map(m => m.id === tempId ? {
             id: res.userMessage.id,
             sender: "user" as const,
             content: res.userMessage.content,
             createdAt: new Date().toISOString(),
             isRead: true
-          }
-        ];
+        } : m);
 
         if ((window as any)._messagesCache) {
           (window as any)._messagesCache.set(selectedLeadId, updatedMsgs);
         }
 
-        return {
-          ...prev,
-          messages: updatedMsgs
-        };
+        return { ...prev, messages: updatedMsgs };
       });
 
       await router.invalidate();
     } catch (err) {
       console.error("Failed to send message:", err);
+      // Rollback optimistic update
+      setActiveChat(prev => {
+        if (!prev) return null;
+        return { ...prev, messages: prev.messages.filter(m => m.id !== tempId) };
+      });
       setNewMessageText(originalText);
       toast.error("Failed to send message. Please try again.");
     } finally {
@@ -972,12 +987,10 @@ function MessagesPage() {
                   <div>
                     <h3 className="font-semibold text-xs text-foreground tracking-tight flex items-center gap-2">
                       {selectedThread.leadName}
-                      <span className={`inline-block size-2 rounded-full ${selectedThread.isOnline ? "bg-success" : "bg-neutral-600"}`} />
+                      <span className="inline-block size-2 rounded-full bg-green-500 animate-pulse" />
                     </h3>
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
-                      {selectedThread.isOnline ? (
-                        <span className="text-success">Active now</span>
-                      ) : null}
+                    <div className="flex items-center gap-1.5 text-xs mt-0.5">
+                      <span className="text-green-500 font-medium">Online (Portal)</span>
                     </div>
                   </div>
                 </div>
@@ -1319,6 +1332,17 @@ function MessagesPage() {
                       <p className="text-[11px] text-muted-foreground mt-1 max-w-xs leading-relaxed">
                         Send a message to kick off direct communication. All follow-ups will log and track instantly.
                       </p>
+                    </div>
+                  )}
+
+                  {/* Typing Indicator for simulated replies */}
+                  {isSimulating && (
+                    <div className="flex flex-col items-start w-full group animate-in slide-in-from-bottom-2 duration-150 mt-2 mb-2">
+                      <div className="relative p-3 rounded-2xl text-[13px] bg-[#151720] border border-white/10 text-white rounded-tl-none opacity-100 shadow-xl flex items-center gap-1.5 h-10 w-16">
+                        <span className="w-1.5 h-1.5 rounded-full bg-white/40 animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                        <span className="w-1.5 h-1.5 rounded-full bg-white/40 animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                        <span className="w-1.5 h-1.5 rounded-full bg-white/40 animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                      </div>
                     </div>
                   )}
 
