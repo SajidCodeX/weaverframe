@@ -17,6 +17,8 @@ function ClientPortalPage() {
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  const { token } = Route.useParams();
+
   // Scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -38,7 +40,7 @@ function ClientPortalPage() {
     try {
       await sendPortalMessage({
         data: {
-          token: Route.useParams().token,
+          token,
           content: newMessageText,
         }
       });
