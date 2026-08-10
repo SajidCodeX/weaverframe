@@ -107,7 +107,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   notFoundComponent: NotFoundComponent,
   errorComponent: ErrorComponent,
   beforeLoad: async ({ location }) => {
-    if (location.pathname === '/login' || location.pathname.startsWith('/api') || location.pathname.startsWith('/invite')) {
+    if (location.pathname === '/login' || location.pathname.startsWith('/api') || location.pathname.startsWith('/invite') || location.pathname.startsWith('/portal')) {
       return { session: null };  
     }
 

@@ -12,7 +12,8 @@ import {
   setLeadAiToggle,
   getIntegrationsStatus,
   summarizeConversation,
-  simulateLeadMessage
+  simulateLeadMessage,
+  generatePortalToken
 } from "@/lib/dashboard";
 import {
   MessageSquare,
@@ -292,6 +293,28 @@ function MessagesPage() {
     isUserScrolledUpRef.current = isFarFromBottom;
     if (!isFarFromBottom) {
       setNewMessagesCount(0);
+    }
+  };
+
+  const handleCopyPortalLink = async () => {
+    if (!activeChat) return;
+    try {
+      let token = selectedThread?.portalToken || activeChat.lead.portalToken;
+      if (!token) {
+        const activeRole = sessionStorage.getItem('active_role') ?? undefined;
+        // activeChat.lead has id from DB but might just be the mapped thread which has leadId
+        const targetLeadId = selectedThread?.leadId || activeChat.lead.id || activeChat.lead.leadId;
+        token = await generatePortalToken({ data: { leadId: targetLeadId, activeRole } });
+        if (selectedThread) selectedThread.portalToken = token;
+      }
+      const link = `${window.location.origin}/portal/${token}`;
+      await navigator.clipboard.writeText(link);
+      toast.success("Client portal link copied!", {
+        description: "Anyone with this link can chat with you as this lead."
+      });
+    } catch (e) {
+      toast.error("Failed to copy link");
+      console.error(e);
     }
   };
 
@@ -967,6 +990,13 @@ function MessagesPage() {
                         <Mail className="size-3.5" />
                       </a>
                     )}
+                    <button
+                      onClick={handleCopyPortalLink}
+                      className="p-2 bg-secondary border border-border rounded-md hover:bg-secondary/80 hover:text-white transition-colors"
+                      title="Copy Portal Link"
+                    >
+                      <ExternalLink className="size-3.5" />
+                    </button>
                   </div>
 
                   <div className="w-px h-6 bg-border" />

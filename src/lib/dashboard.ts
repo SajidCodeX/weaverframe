@@ -1439,6 +1439,24 @@ export const cancelAppointment = createServerFn({ method: 'POST' })
     }
   })
 
+export const generatePortalToken = createServerFn({ method: 'POST' })
+  .inputValidator((data: { leadId: string; activeRole?: string | null }) => data)
+  .handler(async ({ data }) => {
+    const { getTenantDb, requireAuth } = await import('./server-utils.server');
+    const session = await requireAuth(data?.activeRole ?? undefined);
+    const db = await getTenantDb(session);
+    
+    // Generate a random 32 char hex string
+    const token = Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+    
+    await db.lead.update({
+      where: { id: data.leadId },
+      data: { portalToken: token }
+    });
+    
+    return token;
+  });
+
 export const getConversations = createServerFn({ method: 'POST' })
   .inputValidator((data: { activeRole?: string | null } | undefined) => data)
   .handler(async ({ data }) => {
@@ -1489,6 +1507,7 @@ export const getConversations = createServerFn({ method: 'POST' })
         lastMessageTime: lastMsg ? lastMsg.createdAt.toISOString() : l.createdAt.toISOString(),
         unreadCount,
         isOnline: !!isRecentlyActive,
+        portalToken: l.portalToken,
       }
     })
 

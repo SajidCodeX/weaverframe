@@ -3,14 +3,14 @@ import { getPortalData, sendPortalMessage } from "@/lib/portal";
 import { useState, useRef, useEffect } from "react";
 import { Send, Loader2, Home, User, Sparkles } from "lucide-react";
 
-export const Route = createFileRoute("/portal/$leadId")({
-  loader: ({ params }) => getPortalData({ data: { leadId: params.leadId } }),
+export const Route = createFileRoute("/portal/$token")({
+  loader: ({ params }) => getPortalData({ data: { token: params.token } }),
   head: () => ({ meta: [{ title: "Client Portal" }] }),
   component: ClientPortalPage,
 });
 
 function ClientPortalPage() {
-  const { lead, builder, messages } = useLoaderData({ from: "/portal/$leadId" });
+  const { lead, builder, messages } = useLoaderData({ from: "/portal/$token" });
   const router = useRouter();
   
   const [newMessageText, setNewMessageText] = useState("");
@@ -38,7 +38,7 @@ function ClientPortalPage() {
     try {
       await sendPortalMessage({
         data: {
-          leadId: lead.id,
+          token: Route.useParams().token,
           content: newMessageText,
         }
       });
@@ -64,7 +64,7 @@ function ClientPortalPage() {
         <div className="flex-1 min-w-0">
           <h1 className="text-sm font-bold truncate">{builder?.companyName || "Builder Portal"}</h1>
           <p className="text-[11px] text-muted-foreground truncate">
-            Client: {lead.firstName} {lead.lastName}
+            Client: {lead.name}
           </p>
         </div>
       </header>

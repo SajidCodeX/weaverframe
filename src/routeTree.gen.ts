@@ -21,7 +21,7 @@ import { Route as AppointmentsRouteImport } from './routes/appointments'
 import { Route as AiActivityRouteImport } from './routes/ai-activity'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
-import { Route as PortalLeadIdRouteImport } from './routes/portal.$leadId'
+import { Route as PortalTokenRouteImport } from './routes/portal.$token'
 import { Route as InviteTokenRouteImport } from './routes/invite.$token'
 import { Route as ApiRateRouteImport } from './routes/api.rate'
 import { Route as AdminUsersRouteImport } from './routes/admin/users'
@@ -90,9 +90,9 @@ const AdminIndexRoute = AdminIndexRouteImport.update({
   path: '/admin/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const PortalLeadIdRoute = PortalLeadIdRouteImport.update({
-  id: '/portal/$leadId',
-  path: '/portal/$leadId',
+const PortalTokenRoute = PortalTokenRouteImport.update({
+  id: '/portal/$token',
+  path: '/portal/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const InviteTokenRoute = InviteTokenRouteImport.update({
@@ -149,7 +149,7 @@ export interface FileRoutesByFullPath {
   '/admin/users': typeof AdminUsersRoute
   '/api/rate': typeof ApiRateRoute
   '/invite/$token': typeof InviteTokenRoute
-  '/portal/$leadId': typeof PortalLeadIdRoute
+  '/portal/$token': typeof PortalTokenRoute
   '/admin/': typeof AdminIndexRoute
   '/api/cron/sync-leads': typeof ApiCronSyncLeadsRoute
 }
@@ -171,7 +171,7 @@ export interface FileRoutesByTo {
   '/admin/users': typeof AdminUsersRoute
   '/api/rate': typeof ApiRateRoute
   '/invite/$token': typeof InviteTokenRoute
-  '/portal/$leadId': typeof PortalLeadIdRoute
+  '/portal/$token': typeof PortalTokenRoute
   '/admin': typeof AdminIndexRoute
   '/api/cron/sync-leads': typeof ApiCronSyncLeadsRoute
 }
@@ -194,7 +194,7 @@ export interface FileRoutesById {
   '/admin/users': typeof AdminUsersRoute
   '/api/rate': typeof ApiRateRoute
   '/invite/$token': typeof InviteTokenRoute
-  '/portal/$leadId': typeof PortalLeadIdRoute
+  '/portal/$token': typeof PortalTokenRoute
   '/admin/': typeof AdminIndexRoute
   '/api/cron/sync-leads': typeof ApiCronSyncLeadsRoute
 }
@@ -218,7 +218,7 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/api/rate'
     | '/invite/$token'
-    | '/portal/$leadId'
+    | '/portal/$token'
     | '/admin/'
     | '/api/cron/sync-leads'
   fileRoutesByTo: FileRoutesByTo
@@ -240,7 +240,7 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/api/rate'
     | '/invite/$token'
-    | '/portal/$leadId'
+    | '/portal/$token'
     | '/admin'
     | '/api/cron/sync-leads'
   id:
@@ -262,7 +262,7 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/api/rate'
     | '/invite/$token'
-    | '/portal/$leadId'
+    | '/portal/$token'
     | '/admin/'
     | '/api/cron/sync-leads'
   fileRoutesById: FileRoutesById
@@ -285,7 +285,7 @@ export interface RootRouteChildren {
   AdminUsersRoute: typeof AdminUsersRoute
   ApiRateRoute: typeof ApiRateRoute
   InviteTokenRoute: typeof InviteTokenRoute
-  PortalLeadIdRoute: typeof PortalLeadIdRoute
+  PortalTokenRoute: typeof PortalTokenRoute
   AdminIndexRoute: typeof AdminIndexRoute
   ApiCronSyncLeadsRoute: typeof ApiCronSyncLeadsRoute
 }
@@ -376,11 +376,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/portal/$leadId': {
-      id: '/portal/$leadId'
-      path: '/portal/$leadId'
-      fullPath: '/portal/$leadId'
-      preLoaderRoute: typeof PortalLeadIdRouteImport
+    '/portal/$token': {
+      id: '/portal/$token'
+      path: '/portal/$token'
+      fullPath: '/portal/$token'
+      preLoaderRoute: typeof PortalTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/invite/$token': {
@@ -453,7 +453,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminUsersRoute: AdminUsersRoute,
   ApiRateRoute: ApiRateRoute,
   InviteTokenRoute: InviteTokenRoute,
-  PortalLeadIdRoute: PortalLeadIdRoute,
+  PortalTokenRoute: PortalTokenRoute,
   AdminIndexRoute: AdminIndexRoute,
   ApiCronSyncLeadsRoute: ApiCronSyncLeadsRoute,
 }
