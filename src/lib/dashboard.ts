@@ -961,6 +961,18 @@ export async function generateAiReplyCore(
   const builderPhone = builder?.phone || "our main line";
   const builderEmail = builder?.email || "our contact email";
 
+  const settingsObj = builder?.settings ? JSON.parse(builder.settings) : {};
+  const builderProfile = settingsObj.builder_profile || {};
+  const timezone = builderProfile.timezone || "Asia/Kolkata";
+  const aiContext = builderProfile.aiContext || "";
+
+  // Format current date/time in the builder's timezone
+  const now = new Date();
+  const currentLocalTimeStr = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true
+  }).format(now);
+
   // Fetch lead to personalize prompt
   const lead = await db.lead.findUnique({ where: { id: leadId } });
   const leadName = lead ? lead.name : "Client";
@@ -984,6 +996,12 @@ export async function generateAiReplyCore(
 
   const systemPrompt = `You are Alex, the premium AI Concierge for ${companyName}. Your supervisor is ${contactName}. 
 Your persona is knowledgeable, highly professional, polite, and responsive. You text like a smart, natural human sales executive via SMS.
+
+CURRENT DATE & TIME: ${currentLocalTimeStr} (Timezone: ${timezone})
+All your calendar reasoning must be based on this current time.
+
+BUILDER KNOWLEDGE BASE & POLICIES:
+${aiContext ? aiContext : "No specific policies provided. Use standard best practices for custom home builders."}
 
 CRITICAL CONVERSATION & GREETING RULES:
 - DO NOT start your message with greetings like "Hello [Name]", "Hi [Name]", "Hey [Name]", or "Good morning" if replying in an ongoing, continuous chat thread. In a continuous back-and-forth text conversation, respond DIRECTLY to the lead's question or statement without repeating "Hello/Hi", exactly like a human texting on WhatsApp or SMS.
@@ -1016,7 +1034,7 @@ You must respond ONLY with a valid JSON object matching this TypeScript type:
 {
   "replyText": string, // The SMS reply text to send to the client
   "intent": "HOT" | "COLD" | "WARM", // The classified intent of the client's reply
-  "bookingDetails": { "isoDateTime": string, "type": string } | null // ONLY set this if you are CONFIRMING a specific date and time for a meeting/call/site visit. Use ISO 8601 format for isoDateTime. Set to null otherwise.
+  "bookingDetails": { "isoDateTime": string, "type": string } | null // ONLY set this if you are CONFIRMING a specific date and time for a meeting/call/site visit. Use ISO 8601 format for isoDateTime mapped exactly to the UTC equivalent of the requested local time in the builder's timezone (${timezone}). Set to null otherwise.
 }
 
 Example of when to set bookingDetails:
@@ -2233,6 +2251,8 @@ export const getBuilderProfile = createServerFn({ method: 'POST' })
     targetZipCodes: savedProfile.targetZipCodes || "78704, 78703, 78731, 78613, 78641",
     avgHomePrice: savedProfile.avgHomePrice || "$700,000",
     homesPerYear: savedProfile.homesPerYear || "42",
+    timezone: savedProfile.timezone || "Asia/Kolkata",
+    aiContext: savedProfile.aiContext || "",
   };
 })
 

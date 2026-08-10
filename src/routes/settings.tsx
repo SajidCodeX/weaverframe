@@ -174,6 +174,8 @@ function SettingsPage() {
     targetZipCodes: loadedProfile.targetZipCodes || "78704, 78703, 78731, 78613, 78641",
     avgHomePrice: loadedProfile.avgHomePrice || "$700,000",
     homesPerYear: loadedProfile.homesPerYear || "42",
+    timezone: loadedProfile.timezone || "Asia/Kolkata",
+    aiContext: loadedProfile.aiContext || "",
   });
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileSaved, setProfileSaved] = useState(false);
@@ -465,6 +467,42 @@ function SettingsPage() {
               <div className="grid grid-cols-2 gap-4">
                 <Row label="Avg home price"><Input value={profileForm.avgHomePrice} onChange={e => setProfileForm(p => ({ ...p, avgHomePrice: e.target.value }))} /></Row>
                 <Row label="Homes built / year"><Input value={profileForm.homesPerYear} onChange={e => setProfileForm(p => ({ ...p, homesPerYear: e.target.value }))} /></Row>
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-border">
+                <h4 className="text-sm font-semibold text-foreground mb-4">AI Concierge Preferences</h4>
+                <Row label="Timezone">
+                  <CustomSelect
+                    options={[
+                      { value: "America/New_York", label: "Eastern Time (EST/EDT)" },
+                      { value: "America/Chicago", label: "Central Time (CST/CDT)" },
+                      { value: "America/Denver", label: "Mountain Time (MST/MDT)" },
+                      { value: "America/Los_Angeles", label: "Pacific Time (PST/PDT)" },
+                      { value: "Europe/London", label: "London (GMT/BST)" },
+                      { value: "Asia/Kolkata", label: "India Standard Time (IST)" },
+                    ]}
+                    value={profileForm.timezone}
+                    onChange={(val) => setProfileForm(p => ({ ...p, timezone: val }))}
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Used by the AI to convert meeting requests into correct UTC times for your calendar.
+                  </p>
+                </Row>
+                
+                <div className="mt-4 flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-foreground uppercase tracking-widest">
+                    AI Knowledge Base / Builder Defaults
+                  </label>
+                  <textarea
+                    value={profileForm.aiContext}
+                    onChange={e => setProfileForm(p => ({ ...p, aiContext: e.target.value }))}
+                    placeholder="e.g. Default meeting location: Lakeway Model Home, 123 Lake Dr. Office hours: Mon-Sat 9am-6pm. We do not build outside of Travis County."
+                    className="w-full bg-[#0c0d12] border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-primary transition-colors text-white resize-y min-h-[100px]"
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    Provide default operating hours, meeting locations, or policies. The AI will use this context when answering leads and booking appointments.
+                  </p>
+                </div>
               </div>
               <Save onClick={handleSaveProfile} isSaving={isSavingProfile} saved={profileSaved} />
 
