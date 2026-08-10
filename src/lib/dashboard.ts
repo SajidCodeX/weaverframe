@@ -1015,8 +1015,13 @@ Your goal is to perform a 2-part task:
 You must respond ONLY with a valid JSON object matching this TypeScript type:
 {
   "replyText": string, // The SMS reply text to send to the client
-  "intent": "HOT" | "COLD" | "WARM" // The classified intent of the client's reply
+  "intent": "HOT" | "COLD" | "WARM", // The classified intent of the client's reply
+  "bookingDetails": { "isoDateTime": string, "type": string } | null // ONLY set this if you are CONFIRMING a specific date and time for a meeting/call/site visit. Use ISO 8601 format for isoDateTime. Set to null otherwise.
 }
+
+Example of when to set bookingDetails:
+- Lead says: "Yes, August 15th at 4 PM works!" and you confirm it → set bookingDetails: { "isoDateTime": "2026-08-15T16:00:00.000Z", "type": "Site visit" }
+- Lead is just asking about pricing or general info → set bookingDetails: null
 
 Lead Context:
 - Client Name: ${leadName}
@@ -1038,6 +1043,7 @@ Do not output any introductory or conversational text outside of the raw JSON ob
 
   let replyText = "";
   let intent: 'HOT' | 'COLD' | 'WARM' = 'WARM';
+  let bookingDetails: { isoDateTime: string; type: string } | null = null;
 
   try {
     const rawJsonMatch = rawResponse.match(/\{[\s\S]*\}/);
@@ -1045,10 +1051,12 @@ Do not output any introductory or conversational text outside of the raw JSON ob
       const parsed = JSON.parse(rawJsonMatch[0]);
       replyText = parsed.replyText || parsed.reply || rawResponse;
       intent = parsed.intent || 'WARM';
+      bookingDetails = parsed.bookingDetails || null;
     } else {
       const parsed = JSON.parse(rawResponse);
       replyText = parsed.replyText || parsed.reply || rawResponse;
       intent = parsed.intent || 'WARM';
+      bookingDetails = parsed.bookingDetails || null;
     }
   } catch (e) {
     console.warn("Failed to parse structured JSON from Alex AI. Performing fallback parsing:", e);
@@ -1112,6 +1120,35 @@ Do not output any introductory or conversational text outside of the raw JSON ob
         scoreTier: dbScoreTier
       }
     });
+
+    // AUTO-BOOK APPOINTMENT: If AI confirmed a specific slot, create it in the database
+    if (bookingDetails && bookingDetails.isoDateTime) {
+      try {
+        const bookingDate = new Date(bookingDetails.isoDateTime);
+        if (!isNaN(bookingDate.getTime())) {
+          await db.appointment.create({
+            data: {
+              builderId,
+              leadId,
+              type: bookingDetails.type || 'Site visit',
+              dateTime: bookingDate,
+              location: 'TBD — Confirmed via AI Portal Chat',
+              status: 'Pending',
+              notes: `Auto-booked by AI Concierge via client portal conversation.`
+            }
+          });
+          await db.activity.create({
+            data: {
+              builderId,
+              leadId,
+              action: `📅 AI Concierge auto-booked a ${bookingDetails.type || 'Site visit'} on ${bookingDate.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })} via client portal.`
+            }
+          });
+        }
+      } catch (bookingErr) {
+        console.error('Failed to auto-create appointment from AI confirmation:', bookingErr);
+      }
+    }
   }
 
   return { replyText };
