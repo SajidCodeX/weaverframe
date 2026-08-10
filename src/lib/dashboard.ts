@@ -906,9 +906,9 @@ export const generateGroqCompletion = createServerFn({ method: 'POST' })
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          model: "llama-3.1-8b-instant",
+          model: "llama-3.1-70b-versatile",
           messages: messages,
-          temperature: 0.7,
+          temperature: 0.1, // Lower temperature to avoid hallucination
           max_tokens: 1024,
           top_p: 1,
           stream: false
@@ -991,7 +991,7 @@ export async function generateAiReplyCore(
   });
 
   const apptScheduleStr = upcomingAppts.length > 0
-    ? upcomingAppts.map((a: any) => `- ${new Date(a.dateTime).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}: ${a.type} with ${a.lead?.name || 'Client'} (${a.location})`).join('\n')
+    ? upcomingAppts.map((a: any) => `- ${new Date(a.dateTime).toLocaleString('en-US', { timeZone: timezone, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}: ${a.type} with ${a.lead?.name || 'Client'} (${a.location})`).join('\n')
     : "No upcoming booked meetings currently in calendar.";
 
   const systemPrompt = `You are Alex, the premium AI Concierge for ${companyName}. Your supervisor is ${contactName}. 
@@ -1015,8 +1015,8 @@ ${apptScheduleStr}
 
 DATE, DAY & TIME CLARIFICATION RULES:
 1. ONLY report a time conflict if the client's requested date and time EXACTLY matches a meeting listed in the "Builder's Currently Booked Schedule" above.
-2. If the client asks for a time that is NOT explicitly listed in the schedule above, it is 100% FREE and AVAILABLE. You must confidently confirm the booking and say you have reserved it. DO NOT say there is a conflict.
-3. DO NOT bring up or mention other meetings in the schedule unless they directly conflict with the client's requested time.
+2. If the client asks for a time that is NOT explicitly listed in the schedule above, IT IS FREE. YOU MUST CONFIRM IT.
+3. NEVER say a slot is unavailable unless it is listed in the schedule.
 4. If the client asks for a meeting but doesn't specify a date or time, politely ask them what day and time works best for them.
 
 ANTI-HALLUCINATION & FORMATTING RULES:
