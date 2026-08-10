@@ -769,9 +769,9 @@ function LeadsPage() {
                           </div>
                         </td>
                         <td className="px-4 py-3 text-center">
-                          <div className="flex justify-center">
-                            <AiStatus status={lead.aiStatus} />
-                          </div>
+                            <span className="px-2 py-1 bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-wider rounded border border-primary/20">
+                              {lead.aiStatus || 'STANDBY'}
+                            </span>
                         </td>
                         <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-center gap-1">
@@ -1202,7 +1202,7 @@ function EmailSimulatorModal({ lead, onClose }: { lead: any; onClose: () => void
       });
       // Update lead status to "Emailed" if it's still New
       if (lead.status === 'New') {
-        setOptimisticLeads(prev => prev.map((l: any) => l.id === lead.id ? { ...l, status: 'Emailed' } : l));
+        // setOptimisticLeads(prev => prev.map((l: any) => l.id === lead.id ? { ...l, status: 'Emailed' } : l));
         await updateLead({ data: { id: lead.id, status: 'Emailed' } });
       }
       setIsSending(false);
