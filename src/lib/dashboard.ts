@@ -966,11 +966,12 @@ export async function generateAiReplyCore(
   const leadName = lead ? lead.name : "Client";
   const leadCounty = lead ? lead.county : "your area";
 
-  // Fetch upcoming active appointments for this builder to check calendar availability
+  // Fetch FUTURE active appointments for this builder to check calendar availability
   const upcomingAppts = await db.appointment.findMany({
     where: {
       builderId,
-      status: { in: ['Confirmed', 'Pending'] }
+      status: { in: ['Confirmed', 'Pending'] },
+      dateTime: { gte: new Date() }  // Only include future appointments — past ones are irrelevant
     },
     include: { lead: true },
     orderBy: { dateTime: 'asc' },
