@@ -937,32 +937,49 @@ export const simulateAIChatReply = createServerFn({ method: 'POST' })
     const db = await getTenantDb();
 
     try {
-      // Fetch builder details for personalization
-      const builder = await db.builder.findUnique({ where: { id: session.builderId || '' } });
-      const companyName = builder?.companyName || "your local custom builder";
-      const contactName = builder?.contactName || "the team";
+      const builderId = session.builderId || '';
+      const replyData = await generateAiReplyCore(db, leadId, builderId, userMessage, chatHistory, data.isSimulated);
+      return replyData;
+    } catch (error) {
+      console.error("Error in simulateAIChatReply:", error);
+      throw error;
+    }
+  });
 
-      // Fetch lead to personalize prompt
-      const lead = await db.lead.findUnique({ where: { id: leadId } });
-      const leadName = lead ? lead.name : "Client";
-      const leadCounty = lead ? lead.county : "your area";
+export async function generateAiReplyCore(
+  db: any,
+  leadId: string,
+  builderId: string,
+  userMessage: string,
+  chatHistory: Array<{ role: 'user' | 'assistant'; content: string }>,
+  isSimulated = false
+) {
+  // Fetch builder details for personalization
+  const builder = await db.builder.findUnique({ where: { id: builderId } });
+  const companyName = builder?.companyName || "your local custom builder";
+  const contactName = builder?.contactName || "the team";
 
-      // Fetch upcoming active appointments for this builder to check calendar availability
-      const upcomingAppts = await db.appointment.findMany({
-        where: {
-          builderId: session.builderId || '',
-          status: { in: ['Confirmed', 'Pending'] }
-        },
-        include: { lead: true },
-        orderBy: { dateTime: 'asc' },
-        take: 10
-      });
+  // Fetch lead to personalize prompt
+  const lead = await db.lead.findUnique({ where: { id: leadId } });
+  const leadName = lead ? lead.name : "Client";
+  const leadCounty = lead ? lead.county : "your area";
 
-      const apptScheduleStr = upcomingAppts.length > 0
-        ? upcomingAppts.map(a => `- ${new Date(a.dateTime).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}: ${a.type} with ${a.lead?.name || 'Client'} (${a.location})`).join('\n')
-        : "No upcoming booked meetings currently in calendar.";
+  // Fetch upcoming active appointments for this builder to check calendar availability
+  const upcomingAppts = await db.appointment.findMany({
+    where: {
+      builderId,
+      status: { in: ['Confirmed', 'Pending'] }
+    },
+    include: { lead: true },
+    orderBy: { dateTime: 'asc' },
+    take: 10
+  });
 
-      const systemPrompt = `You are Alex, the premium AI Concierge for ${companyName}. Your supervisor is ${contactName}. 
+  const apptScheduleStr = upcomingAppts.length > 0
+    ? upcomingAppts.map((a: any) => `- ${new Date(a.dateTime).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}: ${a.type} with ${a.lead?.name || 'Client'} (${a.location})`).join('\n')
+    : "No upcoming booked meetings currently in calendar.";
+
+  const systemPrompt = `You are Alex, the premium AI Concierge for ${companyName}. Your supervisor is ${contactName}. 
 Your persona is knowledgeable, highly professional, polite, and responsive. You text like a smart, natural human sales executive.
 
 CRITICAL CONVERSATION & GREETING RULES:
@@ -1003,99 +1020,95 @@ Lead Context:
 
 Do not output any introductory or conversational text outside of the raw JSON object.`;
 
-      const formattedMessages = [
-        { role: 'system' as const, content: systemPrompt },
-        ...chatHistory,
-        { role: 'user' as const, content: userMessage }
-      ];
+  const formattedMessages = [
+    { role: 'system' as const, content: systemPrompt },
+    ...chatHistory,
+    { role: 'user' as const, content: userMessage }
+  ];
 
-      // Call Groq Completion
-      const rawResponse = await generateGroqCompletion({ data: { messages: formattedMessages } });
+  // Call Groq Completion
+  const rawResponse = await generateGroqCompletion({ data: { messages: formattedMessages } });
 
-      let replyText = "";
-      let intent: 'HOT' | 'COLD' | 'WARM' = 'WARM';
+  let replyText = "";
+  let intent: 'HOT' | 'COLD' | 'WARM' = 'WARM';
 
-      try {
-        const rawJsonMatch = rawResponse.match(/\{[\s\S]*\}/);
-        if (rawJsonMatch) {
-          const parsed = JSON.parse(rawJsonMatch[0]);
-          replyText = parsed.replyText || parsed.reply || rawResponse;
-          intent = parsed.intent || 'WARM';
-        } else {
-          const parsed = JSON.parse(rawResponse);
-          replyText = parsed.replyText || parsed.reply || rawResponse;
-          intent = parsed.intent || 'WARM';
-        }
-      } catch (e) {
-        console.warn("Failed to parse structured JSON from Alex AI. Performing fallback parsing:", e);
-        replyText = rawResponse;
-
-        // Safety Heuristic Matcher
-        const lowerMsg = userMessage.toLowerCase();
-        if (lowerMsg.includes("yes") || lowerMsg.includes("start") || lowerMsg.includes("months") || lowerMsg.includes("soon") || lowerMsg.includes("tour")) {
-          intent = 'HOT';
-        } else if (lowerMsg.includes("no") || lowerMsg.includes("myself") || lowerMsg.includes("hired") || lowerMsg.includes("stop")) {
-          intent = 'COLD';
-        } else {
-          intent = 'WARM';
-        }
-      }
-
-      // Strip redundant repetitive greetings (e.g. "Hello Aman,", "Hi Aman,", "Aman,") in continuous conversation
-      if (chatHistory.length > 0 && replyText) {
-        const firstName = leadName ? leadName.split(' ')[0] : '';
-        const greetingRegex = new RegExp(`^(Hello|Hi|Hey|Good morning|Good afternoon|${firstName})\\s*([A-Za-z0-9]+)?\\s*[,!.:-]\\s*`, 'i');
-        replyText = replyText.replace(greetingRegex, '').trim();
-        if (replyText.length > 0) {
-          replyText = replyText.charAt(0).toUpperCase() + replyText.slice(1);
-        }
-      }
-
-      // Determine DB updates based on intent
-      let dbStatus = "Replied";
-      let dbScoreTier = "Warm";
-      let activityText = "";
-
-      if (intent === 'HOT') {
-        dbStatus = "Qualified";
-        dbScoreTier = "Hot";
-        activityText = `🟢 AI marked Lead as Qualified & Hot (High intent to build).`;
-      } else if (intent === 'COLD') {
-        dbStatus = "Closed Lost";
-        dbScoreTier = "Cold";
-        activityText = `🔴 AI marked Lead as Disqualified & Cold (Competitor hired / Self-build).`;
-      } else {
-        dbStatus = "Appointment";
-        dbScoreTier = "Warm";
-        activityText = `🟡 AI marked Lead as Nurturing & Warm (Budget / Planning phase).`;
-      }
-
-      // Save Activity in database
-      if (!data.isSimulated) {
-        await db.activity.create({
-          data: {
-            builderId: session.builderId || '',
-            leadId,
-            action: activityText
-          }
-        });
-
-        // Update Lead Status & Score Tier in database
-        await db.lead.update({
-          where: { id: leadId },
-          data: {
-            status: dbStatus,
-            scoreTier: dbScoreTier
-          }
-        });
-      }
-
-      return { replyText };
-    } catch (error) {
-      console.error("Error in simulateAIChatReply:", error);
-      throw error;
+  try {
+    const rawJsonMatch = rawResponse.match(/\{[\s\S]*\}/);
+    if (rawJsonMatch) {
+      const parsed = JSON.parse(rawJsonMatch[0]);
+      replyText = parsed.replyText || parsed.reply || rawResponse;
+      intent = parsed.intent || 'WARM';
+    } else {
+      const parsed = JSON.parse(rawResponse);
+      replyText = parsed.replyText || parsed.reply || rawResponse;
+      intent = parsed.intent || 'WARM';
     }
-  })
+  } catch (e) {
+    console.warn("Failed to parse structured JSON from Alex AI. Performing fallback parsing:", e);
+    replyText = rawResponse;
+
+    // Safety Heuristic Matcher
+    const lowerMsg = userMessage.toLowerCase();
+    if (lowerMsg.includes("yes") || lowerMsg.includes("start") || lowerMsg.includes("months") || lowerMsg.includes("soon") || lowerMsg.includes("tour")) {
+      intent = 'HOT';
+    } else if (lowerMsg.includes("no") || lowerMsg.includes("myself") || lowerMsg.includes("hired") || lowerMsg.includes("stop")) {
+      intent = 'COLD';
+    } else {
+      intent = 'WARM';
+    }
+  }
+
+  // Strip redundant repetitive greetings (e.g. "Hello Aman,", "Hi Aman,", "Aman,") in continuous conversation
+  if (chatHistory.length > 0 && replyText) {
+    const firstName = leadName ? leadName.split(' ')[0] : '';
+    const greetingRegex = new RegExp(`^(Hello|Hi|Hey|Good morning|Good afternoon|${firstName})\\s*([A-Za-z0-9]+)?\\s*[,!.:-]\\s*`, 'i');
+    replyText = replyText.replace(greetingRegex, '').trim();
+    if (replyText.length > 0) {
+      replyText = replyText.charAt(0).toUpperCase() + replyText.slice(1);
+    }
+  }
+
+  // Determine DB updates based on intent
+  let dbStatus = "Replied";
+  let dbScoreTier = "Warm";
+  let activityText = "";
+
+  if (intent === 'HOT') {
+    dbStatus = "Qualified";
+    dbScoreTier = "Hot";
+    activityText = `🟢 AI marked Lead as Qualified & Hot (High intent to build).`;
+  } else if (intent === 'COLD') {
+    dbStatus = "Closed Lost";
+    dbScoreTier = "Cold";
+    activityText = `🔴 AI marked Lead as Disqualified & Cold (Competitor hired / Self-build).`;
+  } else {
+    dbStatus = "Appointment";
+    dbScoreTier = "Warm";
+    activityText = `🟡 AI marked Lead as Nurturing & Warm (Budget / Planning phase).`;
+  }
+
+  // Save Activity in database
+  if (!isSimulated) {
+    await db.activity.create({
+      data: {
+        builderId,
+        leadId,
+        action: activityText
+      }
+    });
+
+    // Update Lead Status & Score Tier in database
+    await db.lead.update({
+      where: { id: leadId },
+      data: {
+        status: dbStatus,
+        scoreTier: dbScoreTier
+      }
+    });
+  }
+
+  return { replyText };
+}
 
 export const summarizeConversation = createServerFn({ method: 'POST' })
   .inputValidator((data: { leadId: string }) => data)
@@ -2115,7 +2128,7 @@ export const exportLeadsToCsv = createServerFn({ method: 'POST' })
 // We reuse the Integration table with reserved platformId keys so no new
 // Prisma migration is required.
 
-async function readSettingJson(platformId: string): Promise<Record<string, any>> {
+export async function readSettingJson(platformId: string): Promise<Record<string, any>> {
   const { getTenantDb, requireAuth } = await import('./server-utils.server');
   const session = await requireAuth()
   const db = await getTenantDb()

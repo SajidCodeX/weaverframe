@@ -76,5 +76,70 @@ export const sendPortalMessage = createServerFn({ method: 'POST' })
       }
     });
 
+    // --- AI CONCIERGE INTEGRATION ---
+    try {
+      const builder = await db.builder.findUnique({
+        where: { id: lead.builderId },
+        select: { settings: true }
+      });
+      
+      let aiToggleMap: Record<string, boolean> = {};
+      if (builder?.settings) {
+        try {
+          const allSettings = JSON.parse(builder.settings);
+          aiToggleMap = allSettings['ai_toggle_map'] || {};
+        } catch (e) {
+          console.warn("Failed to parse builder settings", e);
+        }
+      }
+
+      // Check if AI is active for this lead (default true)
+      const isAiActive = aiToggleMap[lead.id] !== false;
+
+      if (isAiActive) {
+        // We need to dynamically import the core AI logic to avoid circular deps or pulling in auth
+        const { generateAiReplyCore } = await import('./dashboard');
+        
+        // Fetch chat history for context (up to 10 previous messages)
+        const history = await db.message.findMany({
+          where: { leadId: lead.id, builderId: lead.builderId },
+          orderBy: { createdAt: 'asc' },
+          take: 10
+        });
+
+        const formattedHistory = history.map((m: any) => ({
+          role: (m.sender === 'user' || m.sender === 'system') ? 'assistant' : 'user' as any,
+          content: m.content
+        }));
+
+        // Generate response (this also updates the lead intent/status in DB)
+        const aiResponse = await generateAiReplyCore(
+          db,
+          lead.id,
+          lead.builderId,
+          data.content,
+          formattedHistory,
+          false // not simulated
+        );
+
+        if (aiResponse && aiResponse.replyText) {
+          // Save the AI response as a 'system' message
+          await db.message.create({
+            data: {
+              builderId: lead.builderId,
+              leadId: lead.id,
+              sender: 'system',
+              content: aiResponse.replyText,
+              isRead: false,
+              channel: 'portal'
+            }
+          });
+        }
+      }
+    } catch (aiError) {
+      console.error("AI Concierge failed to reply:", aiError);
+      // We don't throw here so that the original user message is still delivered
+    }
+
     return newMessage;
   });
