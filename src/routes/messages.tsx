@@ -34,9 +34,17 @@ import {
   ChevronRight,
   ChevronDown,
   ExternalLink,
-  BrainCircuit
+  BrainCircuit,
+  MoreVertical
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 
 export const Route = createFileRoute("/messages")({
   loader: async ({ context }) => {
@@ -1015,64 +1023,72 @@ function MessagesPage() {
                   <div className="w-px h-6 bg-border" />
 
                   {/* Header action shortcuts */}
-                  <div className="flex items-center gap-2">
-                    {/* Premium AI Concierge Pill Toggle */}
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        if (!selectedLeadId) return;
-                        const nextVal = !isAiActive;
-                        setAiToggleMap(prev => ({ ...prev, [selectedLeadId]: nextVal }));
-                        try {
-                          await setLeadAiToggle({ data: { leadId: selectedLeadId, active: nextVal } });
-                        } catch (err) {
-                          console.error("Failed to persist AI toggle state:", err);
-                          setAiToggleMap(prev => ({ ...prev, [selectedLeadId]: isAiActive }));
-                        }
-                      }}
-                      className={`px-3 py-1.5 text-[11px] font-semibold rounded-md border flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer ${isAiActive
-                        ? "bg-white/10 text-success border-success/30 hover:bg-white/15"
-                        : "bg-white/[0.02] text-muted-foreground border-white/[0.05] hover:text-white"
-                        }`}
-                      title={isAiActive ? "Pause AI Concierge Automated replies" : "Activate AI Concierge Automated replies"}
-                    >
-                      <Sparkles className={`size-3.5 ${isAiActive ? "text-success animate-pulse" : "text-muted-foreground"}`} />
-                      {isAiActive ? "AI Concierge: Active" : "AI Concierge: Paused"}
-                    </button>
-
-                    <button
-                      onClick={() => setIsPortfolioModalOpen(true)}
-                      disabled={isSending}
-                      className="px-3 py-1.5 bg-secondary text-white text-[11px] font-medium rounded-md border border-border hover:bg-secondary/80 flex items-center gap-1.5 transition-colors disabled:opacity-50"
-                    >
-                      <FileText className="size-3.5 text-muted-foreground" /> Portfolios
-                    </button>
-
-                    <button
-                      onClick={handleSummarizeChat}
-                      disabled={isSummarizing || !activeChat || activeChat.messages.length === 0}
-                      className="px-3 py-1.5 bg-secondary text-primary text-[11px] font-medium rounded-md border border-primary/20 hover:bg-secondary/80 flex items-center gap-1.5 transition-colors disabled:opacity-50"
-                    >
-                      {isSummarizing ? <Loader2 className="size-3.5 animate-spin" /> : <BrainCircuit className="size-3.5" />}
-                      Summarize Chat
-                    </button>
-
-                    {canSimulate && (
-                      <button
-                        onClick={() => setIsSimulateOpen(true)}
-                        className="px-3 py-1.5 bg-secondary text-primary text-[11px] font-medium rounded-md border border-primary/20 hover:bg-secondary/80 flex items-center gap-1.5 transition-colors"
-                      >
-                        <MessageSquare className="size-3.5" /> Simulate Reply
+                  {/* Header action shortcuts */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button className="p-1.5 rounded-md hover:bg-white/5 transition-colors text-muted-foreground hover:text-white">
+                        <MoreVertical className="size-4.5" />
                       </button>
-                    )}
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56 bg-[#0a0a0c] border border-border">
+                      <DropdownMenuItem
+                        onClick={async (e) => {
+                          e.preventDefault();
+                          if (!selectedLeadId) return;
+                          const nextVal = !isAiActive;
+                          setAiToggleMap(prev => ({ ...prev, [selectedLeadId]: nextVal }));
+                          try {
+                            await setLeadAiToggle({ data: { leadId: selectedLeadId, active: nextVal } });
+                          } catch (err) {
+                            console.error("Failed to persist AI toggle state:", err);
+                            setAiToggleMap(prev => ({ ...prev, [selectedLeadId]: isAiActive }));
+                          }
+                        }}
+                        className="flex items-center gap-2 cursor-pointer hover:bg-white/5 focus:bg-white/5"
+                      >
+                        <Sparkles className={`size-4 ${isAiActive ? "text-success animate-pulse" : "text-muted-foreground"}`} />
+                        <span>{isAiActive ? "Pause AI Concierge" : "Activate AI Concierge"}</span>
+                      </DropdownMenuItem>
 
-                    <button
-                      onClick={() => setIsSchedulingOpen(true)}
-                      className="px-3 py-1.5 bg-white text-black text-[11px] font-semibold rounded-md hover:bg-white/95 flex items-center gap-1.5 transition-colors"
-                    >
-                      <Calendar className="size-3.5 text-black" /> Schedule Site Visit
-                    </button>
-                  </div>
+                      <DropdownMenuItem
+                        onClick={() => setIsPortfolioModalOpen(true)}
+                        disabled={isSending}
+                        className="flex items-center gap-2 cursor-pointer hover:bg-white/5 focus:bg-white/5"
+                      >
+                        <FileText className="size-4 text-muted-foreground" />
+                        <span>Portfolios</span>
+                      </DropdownMenuItem>
+
+                      <DropdownMenuItem
+                        onClick={handleSummarizeChat}
+                        disabled={isSummarizing || !activeChat || activeChat.messages.length === 0}
+                        className="flex items-center gap-2 cursor-pointer hover:bg-white/5 focus:bg-white/5"
+                      >
+                        {isSummarizing ? <Loader2 className="size-4 animate-spin text-muted-foreground" /> : <BrainCircuit className="size-4 text-muted-foreground" />}
+                        <span>Summarize Chat</span>
+                      </DropdownMenuItem>
+
+                      {canSimulate && (
+                        <DropdownMenuItem
+                          onClick={() => setIsSimulateOpen(true)}
+                          className="flex items-center gap-2 cursor-pointer hover:bg-white/5 focus:bg-white/5"
+                        >
+                          <MessageSquare className="size-4 text-muted-foreground" />
+                          <span>Simulate Reply</span>
+                        </DropdownMenuItem>
+                      )}
+
+                      <DropdownMenuSeparator className="bg-border" />
+
+                      <DropdownMenuItem
+                        onClick={() => setIsSchedulingOpen(true)}
+                        className="flex items-center gap-2 cursor-pointer text-primary focus:bg-primary/10 focus:text-primary hover:bg-primary/10 hover:text-primary"
+                      >
+                        <Calendar className="size-4" />
+                        <span>Schedule Site Visit</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
 
