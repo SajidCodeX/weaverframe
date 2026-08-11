@@ -1608,8 +1608,9 @@ export const getConversations = createServerFn({ method: 'POST' })
       const lastMsg = l.messages[0]
       const unreadCount = l._count.messages
       
-      const isRecentlyActive = lastMsg && lastMsg.sender === 'lead' && 
-          (new Date().getTime() - new Date(lastMsg.createdAt).getTime()) < 1000 * 60 * 30;
+      // Check if lead polled the portal within the last 30 seconds
+      const isRecentlyActive = l.portalVisitedAt && 
+          (new Date().getTime() - new Date(l.portalVisitedAt).getTime()) < 1000 * 30;
 
       return {
         leadId: l.id,

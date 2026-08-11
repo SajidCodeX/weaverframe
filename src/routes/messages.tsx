@@ -995,10 +995,16 @@ function MessagesPage() {
                   <div>
                     <h3 className="font-semibold text-xs text-foreground tracking-tight flex items-center gap-2">
                       {selectedThread.leadName}
-                      <span className="inline-block size-2 rounded-full bg-green-500 animate-pulse" />
+                      {selectedThread.isOnline && (
+                        <span className="inline-block size-2 rounded-full bg-green-500 animate-pulse" title="Lead is actively viewing the portal" />
+                      )}
                     </h3>
-                    <div className="flex items-center gap-1.5 text-xs mt-0.5">
-                      <span className="text-green-500 font-medium">Online (Portal)</span>
+                    <div className="flex items-center gap-1.5 text-xs mt-0.5 h-4">
+                      {selectedThread.isOnline ? (
+                        <span className="text-green-500 font-medium">Online (Portal)</span>
+                      ) : (
+                        <span className="text-muted-foreground">Offline</span>
+                      )}
                     </div>
                   </div>
                 </div>

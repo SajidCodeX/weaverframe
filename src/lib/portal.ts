@@ -19,13 +19,12 @@ export const getPortalData = createServerFn({ method: 'GET' })
       throw new Error("Lead not found or invalid link");
     }
 
-    // Mark as visited if first time
-    if (!lead.portalVisitedAt) {
-      await db.lead.update({
-        where: { id: lead.id },
-        data: { portalVisitedAt: new Date() }
-      });
-    }
+    // Update last visited timestamp to track "Online" status accurately
+    // The client polls this endpoint every 5 seconds, so this gives us real-time presence
+    await db.lead.update({
+      where: { id: lead.id },
+      data: { portalVisitedAt: new Date() }
+    });
 
     // Fetch messages for this lead, ordered chronologically
     const messages = await db.message.findMany({
@@ -100,14 +99,15 @@ export const sendPortalMessage = createServerFn({ method: 'POST' })
         // We need to dynamically import the core AI logic to avoid circular deps or pulling in auth
         const { generateAiReplyCore } = await import('./dashboard');
         
-        // Fetch chat history for context (up to 10 previous messages)
+        // Fetch chat history for context (up to 15 previous messages to retain context)
         const history = await db.message.findMany({
           where: { leadId: lead.id, builderId: lead.builderId },
-          orderBy: { createdAt: 'asc' },
-          take: 10
+          orderBy: { createdAt: 'desc' }, // Get most recent
+          take: 15
         });
 
-        const formattedHistory = history.map((m: any) => ({
+        // Reverse to chronological order
+        const formattedHistory = history.reverse().map((m: any) => ({
           role: (m.sender === 'user' || m.sender === 'system') ? 'assistant' : 'user' as any,
           content: m.content
         }));
