@@ -17,7 +17,7 @@ function BuildingWireframe() {
     }
   });
 
-  const emerald = new THREE.Color("#10b981");
+  const amber = new THREE.Color("#f59e0b");
   const blue = new THREE.Color("#3b82f6");
   const white = new THREE.Color("#ffffff");
 
@@ -26,7 +26,7 @@ function BuildingWireframe() {
       {/* Main Body */}
       <mesh position={[0, 0.8, 0]}>
         <boxGeometry args={[2.4, 1.6, 1.6]} />
-        <meshStandardMaterial color={emerald} wireframe transparent opacity={0.6} />
+        <meshStandardMaterial color={amber} wireframe transparent opacity={0.6} />
       </mesh>
 
       {/* Roof */}
@@ -49,7 +49,7 @@ function BuildingWireframe() {
       {/* Ground Deck */}
       <mesh position={[0, -0.2, 0]}>
         <boxGeometry args={[4.2, 0.1, 2.4]} />
-        <meshStandardMaterial color={emerald} wireframe transparent opacity={0.3} />
+        <meshStandardMaterial color={amber} wireframe transparent opacity={0.3} />
       </mesh>
 
       {/* Door */}
@@ -61,12 +61,12 @@ function BuildingWireframe() {
       {/* Window Left */}
       <mesh position={[-0.7, 0.9, 0.81]}>
         <boxGeometry args={[0.45, 0.45, 0.02]} />
-        <meshStandardMaterial color={emerald} wireframe transparent opacity={0.7} />
+        <meshStandardMaterial color={amber} wireframe transparent opacity={0.7} />
       </mesh>
       {/* Window Right */}
       <mesh position={[0.7, 0.9, 0.81]}>
         <boxGeometry args={[0.45, 0.45, 0.02]} />
-        <meshStandardMaterial color={emerald} wireframe transparent opacity={0.7} />
+        <meshStandardMaterial color={amber} wireframe transparent opacity={0.7} />
       </mesh>
 
       {/* Floating node spheres at corners */}
@@ -75,7 +75,7 @@ function BuildingWireframe() {
       ].map((pos, i) => (
         <mesh key={i} position={pos as [number, number, number]}>
           <sphereGeometry args={[0.05, 8, 8]} />
-          <meshStandardMaterial color={emerald} emissive={emerald} emissiveIntensity={2} />
+          <meshStandardMaterial color={amber} emissive={amber} emissiveIntensity={2} />
         </mesh>
       ))}
     </group>
@@ -115,7 +115,7 @@ function WelcomePage() {
     <div className="h-screen bg-[#020202] text-white font-sans relative overflow-x-hidden overflow-y-auto">
 
       {/* Ambient top glow */}
-      <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[900px] h-[400px] bg-emerald-500/8 blur-[130px] rounded-full pointer-events-none z-0" />
+      <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[900px] h-[400px] bg-amber-500/8 blur-[130px] rounded-full pointer-events-none z-0" />
       {/* Subtle grid */}
       <div className="fixed inset-0 bg-[radial-gradient(rgba(255,255,255,0.025)_1px,transparent_1px)] bg-[size:36px_36px] [mask-image:radial-gradient(ellipse_60%_60%_at_center,black,transparent)] pointer-events-none z-0" />
 
@@ -123,7 +123,7 @@ function WelcomePage() {
       <nav className="absolute top-0 left-0 right-0 z-50 py-6">
         <div className="max-w-[1400px] mx-auto px-8 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Layers className="size-6 text-emerald-400" />
+            <Layers className="size-6 text-amber-400" />
             <span className="text-xl font-black tracking-widest uppercase">WeaverFrame</span>
           </div>
           <div className="hidden md:flex items-center gap-8 text-sm font-medium text-white/60">
@@ -133,7 +133,7 @@ function WelcomePage() {
           </div>
           <div className="flex items-center gap-5">
             <Link to="/login" className="text-sm font-bold text-white/70 hover:text-white transition-colors hidden sm:block">Sign In</Link>
-            <a href="mailto:contact@weaverframe.com" className="px-5 py-2.5 rounded-full text-sm font-bold bg-emerald-500 text-black hover:bg-emerald-400 transition-colors shadow-[0_0_20px_rgba(16,185,129,0.4)]">Book a Demo</a>
+            <a href="mailto:contact@weaverframe.com" className="px-5 py-2.5 rounded-full text-sm font-bold bg-amber-500 text-black hover:bg-amber-400 transition-colors shadow-[0_0_20px_rgba(16,185,129,0.4)]">Book a Demo</a>
           </div>
         </div>
       </nav>
@@ -146,7 +146,7 @@ function WelcomePage() {
           <div className="space-y-8 z-20">
             <motion.div
               initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }}
-              className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-400"
+              className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/25 text-amber-400"
             >
               <Sparkles className="size-3.5" />
               <span className="text-xs font-bold tracking-[0.15em] uppercase">Purpose-Built for Custom Builders</span>
@@ -157,7 +157,7 @@ function WelcomePage() {
               className="text-5xl md:text-7xl font-black tracking-tighter leading-[1.0]"
             >
               Build Homes.<br />
-              <span className="bg-gradient-to-r from-emerald-400 via-teal-300 to-blue-400 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-amber-400 via-teal-300 to-blue-400 bg-clip-text text-transparent">
                 We Build the Pipeline.
               </span>
             </motion.h1>
@@ -186,7 +186,7 @@ function WelcomePage() {
           >
             <Suspense fallback={
               <div className="w-full h-full flex items-center justify-center">
-                <div className="size-10 rounded-full border-t-2 border-emerald-500 animate-spin" />
+                <div className="size-10 rounded-full border-t-2 border-amber-500 animate-spin" />
               </div>
             }>
               <Scene3D />
@@ -194,7 +194,7 @@ function WelcomePage() {
 
             {/* Context label */}
             <div className="absolute bottom-8 right-4 px-4 py-2.5 rounded-2xl bg-black/60 border border-white/10 flex items-center gap-3 shadow-2xl backdrop-blur-md">
-              <Building2 className="size-5 text-emerald-400" />
+              <Building2 className="size-5 text-amber-400" />
               <div>
                 <div className="text-[10px] uppercase tracking-widest text-white/40 font-bold">Project Type</div>
                 <div className="text-sm font-semibold">Custom Luxury Estate</div>
@@ -214,7 +214,7 @@ function WelcomePage() {
           <div className="text-center mb-20">
             <motion.p
               initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: false, amount: 0.5 }}
-              className="text-[10px] font-black uppercase tracking-[0.45em] text-emerald-400 mb-3"
+              className="text-[10px] font-black uppercase tracking-[0.45em] text-amber-400 mb-3"
             >
               How It Works
             </motion.p>
@@ -233,7 +233,7 @@ function WelcomePage() {
             {[
               {
                 num: "01",
-                color: "emerald",
+                color: "amber",
                 icon: Zap,
                 title: "Lead Arrives",
                 body: "A prospect inquires about your project via WhatsApp, SMS, or your portal. WeaverFrame captures it instantly, 24/7.",
@@ -319,7 +319,7 @@ function WelcomePage() {
         <div className="max-w-[1200px] mx-auto px-8">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             {[
-              { num: "30s", label: "Avg. AI Response Time", color: "emerald", icon: Zap, desc: "From inquiry to personalized reply in under 30 seconds, 24/7." },
+              { num: "30s", label: "Avg. AI Response Time", color: "amber", icon: Zap, desc: "From inquiry to personalized reply in under 30 seconds, 24/7." },
               { num: "92%", label: "Lead Retention Rate", color: "blue", icon: Users, desc: "Autonomous follow-ups keep your pipeline warm for months." },
               { num: "24/7", label: "Concierge Always On", color: "purple", icon: Bot, desc: "Site visits booked automatically while you focus on building." },
             ].map(({ num, label, color, icon: Icon, desc }, i) => (
@@ -353,7 +353,7 @@ function WelcomePage() {
 
         {/* Section Header */}
         <div className="max-w-[1300px] mx-auto px-8 text-center pb-20">
-          <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: false, amount: 0.25 }} className="text-xs font-black uppercase tracking-[0.3em] text-emerald-400 mb-4">Platform Capabilities</motion.p>
+          <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: false, amount: 0.25 }} className="text-xs font-black uppercase tracking-[0.3em] text-amber-400 mb-4">Platform Capabilities</motion.p>
           <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: false, amount: 0.25 }} className="text-5xl md:text-6xl font-black tracking-tighter">
             The AI Operating System<br />for Home Builders.
           </motion.h2>
@@ -361,15 +361,15 @@ function WelcomePage() {
 
         {/* FEATURE 1 — Full bleed section */}
         <div className="relative overflow-hidden py-20 border-y border-white/5">
-          <div className="absolute inset-0 bg-gradient-to-r from-emerald-950/40 via-transparent to-transparent" />
-          <div className="absolute top-0 left-0 w-96 h-96 bg-emerald-500/8 rounded-full blur-[100px]" />
+          <div className="absolute inset-0 bg-gradient-to-r from-amber-950/40 via-transparent to-transparent" />
+          <div className="absolute top-0 left-0 w-96 h-96 bg-amber-500/8 rounded-full blur-[100px]" />
           <div className="max-w-[1300px] mx-auto px-8 flex flex-col lg:flex-row items-center gap-16 relative z-10">
             <motion.div initial={{ opacity: 0, x: -40 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: false, amount: 0.25 }} transition={{ duration: 0.7 }} className="flex-1 space-y-6">
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold tracking-widest uppercase">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold tracking-widest uppercase">
                 <Bot className="size-3.5" /> AI Concierge
               </div>
               <h3 className="text-4xl md:text-5xl font-black tracking-tighter leading-tight">
-                Never Miss a Lead.<br /><span className="text-emerald-400">Ever Again.</span>
+                Never Miss a Lead.<br /><span className="text-amber-400">Ever Again.</span>
               </h3>
               <p className="text-lg text-white/45 leading-relaxed font-light max-w-lg">
                 Llama 3.3 70B answers objections, handles pricing questions, and books site visits autonomously — 24 hours a day, 7 days a week.
@@ -377,8 +377,8 @@ function WelcomePage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
                 {["Zero Hallucinations", "Strict Timezone Enforcement", "Voice-Matched Brand Tone", "Multi-language Support"].map(item => (
                   <div key={item} className="flex items-center gap-2.5 text-sm text-white/60">
-                    <div className="size-5 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shrink-0">
-                      <CheckCircle2 className="size-3 text-emerald-400" />
+                    <div className="size-5 rounded-full bg-amber-500/15 border border-amber-500/30 flex items-center justify-center shrink-0">
+                      <CheckCircle2 className="size-3 text-amber-400" />
                     </div>
                     {item}
                   </div>
@@ -392,15 +392,15 @@ function WelcomePage() {
                 {/* Mockup Header */}
                 <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="size-8 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
-                      <Bot className="size-4 text-emerald-400" />
+                    <div className="size-8 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center">
+                      <Bot className="size-4 text-amber-400" />
                     </div>
                     <div>
                       <div className="text-xs font-bold">WeaverFrame AI</div>
-                      <div className="flex items-center gap-1"><div className="size-1.5 rounded-full bg-emerald-400 animate-pulse" /><span className="text-[10px] text-white/40">Online · Apex Homes</span></div>
+                      <div className="flex items-center gap-1"><div className="size-1.5 rounded-full bg-amber-400 animate-pulse" /><span className="text-[10px] text-white/40">Online · Apex Homes</span></div>
                     </div>
                   </div>
-                  <div className="flex gap-1.5"><div className="size-2.5 rounded-full bg-white/10" /><div className="size-2.5 rounded-full bg-white/10" /><div className="size-2.5 rounded-full bg-emerald-500/50" /></div>
+                  <div className="flex gap-1.5"><div className="size-2.5 rounded-full bg-white/10" /><div className="size-2.5 rounded-full bg-white/10" /><div className="size-2.5 rounded-full bg-amber-500/50" /></div>
                 </div>
                 {/* Messages */}
                 <div className="p-6 space-y-4 min-h-[280px]">
@@ -411,11 +411,11 @@ function WelcomePage() {
                     </div>
                   </div>
                   <div className="flex items-end gap-3 flex-row-reverse">
-                    <div className="size-7 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center shrink-0">
-                      <Bot className="size-3.5 text-emerald-400" />
+                    <div className="size-7 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0">
+                      <Bot className="size-3.5 text-amber-400" />
                     </div>
-                    <div className="bg-emerald-500/8 border border-emerald-500/15 rounded-2xl rounded-br-sm px-4 py-3 text-sm text-emerald-50/90 max-w-[80%] shadow-lg">
-                      <span className="text-emerald-400 font-bold text-xs block mb-1">WeaverFrame AI · just now</span>
+                    <div className="bg-amber-500/8 border border-amber-500/15 rounded-2xl rounded-br-sm px-4 py-3 text-sm text-amber-50/90 max-w-[80%] shadow-lg">
+                      <span className="text-amber-400 font-bold text-xs block mb-1">WeaverFrame AI · just now</span>
                       Our 4BHK luxury villas start from ₹2.4 Cr. I'd love to arrange a private site visit for you. Are you available this Saturday at 11 AM?
                     </div>
                   </div>
@@ -424,11 +424,11 @@ function WelcomePage() {
                     <div className="bg-white/5 border border-white/8 rounded-2xl rounded-bl-sm px-4 py-3 text-sm text-white/70 max-w-[80%]">Yes, Saturday works for me!</div>
                   </div>
                   <div className="flex items-end gap-3 flex-row-reverse">
-                    <div className="size-7 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center shrink-0">
-                      <Bot className="size-3.5 text-emerald-400" />
+                    <div className="size-7 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0">
+                      <Bot className="size-3.5 text-amber-400" />
                     </div>
-                    <div className="bg-emerald-500/8 border border-emerald-500/15 rounded-2xl rounded-br-sm px-4 py-3 text-sm text-emerald-50/90 max-w-[80%]">
-                      <span className="text-emerald-400 font-bold text-xs block mb-1">WeaverFrame AI · just now</span>
+                    <div className="bg-amber-500/8 border border-amber-500/15 rounded-2xl rounded-br-sm px-4 py-3 text-sm text-amber-50/90 max-w-[80%]">
+                      <span className="text-amber-400 font-bold text-xs block mb-1">WeaverFrame AI · just now</span>
                       ✅ Booked! Your site visit is confirmed for Saturday, 11:00 AM. You'll receive a confirmation SMS shortly.
                     </div>
                   </div>
@@ -437,7 +437,7 @@ function WelcomePage() {
                   <div className="flex-1 rounded-xl bg-white/4 border border-white/8 px-4 py-2.5 text-sm text-white/25">Type a message...</div>
                 </div>
                 {/* Bottom glow */}
-                <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-emerald-500/5 to-transparent" />
+                <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-amber-500/5 to-transparent" />
               </div>
             </motion.div>
           </div>
@@ -475,10 +475,10 @@ function WelcomePage() {
               <div className="relative rounded-3xl bg-[#060606] border border-white/8 overflow-hidden shadow-[0_0_80px_rgba(0,0,0,0.8)] p-6 space-y-3">
                 <div className="flex items-center justify-between mb-2">
                   <div className="text-xs font-black uppercase tracking-widest text-white/30">Agency Admin</div>
-                  <div className="flex items-center gap-2 text-[10px] text-emerald-400 font-bold"><div className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />All Systems Live</div>
+                  <div className="flex items-center gap-2 text-[10px] text-amber-400 font-bold"><div className="size-1.5 rounded-full bg-amber-400 animate-pulse" />All Systems Live</div>
                 </div>
                 {[
-                  { name: "Apex Homes", leads: 142, revenue: "₹2.1Cr", status: "Active", color: "emerald" },
+                  { name: "Apex Homes", leads: 142, revenue: "₹2.1Cr", status: "Active", color: "amber" },
                   { name: "Nova Estates", leads: 89, revenue: "₹1.4Cr", status: "Active", color: "blue" },
                   { name: "Prime Struct", leads: 63, revenue: "₹0.9Cr", status: "Active", color: "purple" },
                   { name: "Elevate Build", leads: 31, revenue: "₹0.5Cr", status: "Setup", color: "yellow" },
@@ -517,9 +517,9 @@ function WelcomePage() {
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_60%_at_50%_0%,rgba(16,185,129,0.05),transparent)] pointer-events-none" />
         <div className="max-w-[1100px] mx-auto px-8 relative z-10">
           <div className="text-center mb-20">
-            <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: false, amount: 0.25 }} className="text-xs font-black uppercase tracking-[0.3em] text-emerald-400 mb-3">Pricing</motion.p>
+            <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: false, amount: 0.25 }} className="text-xs font-black uppercase tracking-[0.3em] text-amber-400 mb-3">Pricing</motion.p>
             <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: false, amount: 0.25 }} className="text-5xl font-black tracking-tighter mb-3">
-              Transparent. Scalable. <span className="text-emerald-400">Profitable.</span>
+              Transparent. Scalable. <span className="text-amber-400">Profitable.</span>
             </motion.h2>
             <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: false, amount: 0.25 }} className="text-lg text-white/40 font-light">An AI concierge that pays for itself on the very first converted lead.</motion.p>
           </div>
@@ -555,20 +555,20 @@ function WelcomePage() {
             {/* Pro */}
             <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: false, amount: 0.25 }} transition={{ duration: 0.6, delay: 0.1 }}
               whileHover={{ scale: 1.02 }}
-              className="rounded-3xl bg-gradient-to-b from-emerald-500/8 to-transparent border border-emerald-500/25 p-9 flex flex-col relative overflow-hidden hover:border-emerald-500/40 hover:shadow-[0_0_60px_rgba(16,185,129,0.12)] transition-all duration-500 cursor-default"
+              className="rounded-3xl bg-gradient-to-b from-amber-500/8 to-transparent border border-amber-500/25 p-9 flex flex-col relative overflow-hidden hover:border-amber-500/40 hover:shadow-[0_0_60px_rgba(16,185,129,0.12)] transition-all duration-500 cursor-default"
             >
               {/* Top gradient line */}
-              <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent via-emerald-400 to-transparent" />
+              <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent via-amber-400 to-transparent" />
               {/* Glow */}
-              <div className="absolute -top-20 left-1/2 -translate-x-1/2 w-40 h-40 bg-emerald-500/15 rounded-full blur-3xl" />
+              <div className="absolute -top-20 left-1/2 -translate-x-1/2 w-40 h-40 bg-amber-500/15 rounded-full blur-3xl" />
 
               <div className="flex items-center justify-between mb-5 relative z-10">
-                <div className="text-xs font-black uppercase tracking-[0.2em] text-emerald-400">Agency Pro</div>
-                <span className="text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/20">Most Popular</span>
+                <div className="text-xs font-black uppercase tracking-[0.2em] text-amber-400">Agency Pro</div>
+                <span className="text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/20">Most Popular</span>
               </div>
-              <div className="text-5xl font-black text-emerald-300 mb-1 relative z-10">₹49,999</div>
-              <div className="text-sm text-emerald-400/40 font-light mb-8 relative z-10">per month + GST</div>
-              <div className="text-xs text-emerald-400/40 uppercase tracking-widest font-bold mb-4 border-b border-emerald-500/10 pb-4 relative z-10">Everything in Starter, plus</div>
+              <div className="text-5xl font-black text-amber-300 mb-1 relative z-10">₹49,999</div>
+              <div className="text-sm text-amber-400/40 font-light mb-8 relative z-10">per month + GST</div>
+              <div className="text-xs text-amber-400/40 uppercase tracking-widest font-bold mb-4 border-b border-amber-500/10 pb-4 relative z-10">Everything in Starter, plus</div>
               <ul className="space-y-3 mb-10 flex-1 relative z-10">
                 {[
                   "Up to 10 Builder Sub-accounts",
@@ -579,11 +579,11 @@ function WelcomePage() {
                   "24/7 Dedicated Support",
                 ].map(f => (
                   <li key={f} className="flex items-center gap-3 text-sm text-white/70">
-                    <CheckCircle2 className="size-4 text-emerald-400 shrink-0" />{f}
+                    <CheckCircle2 className="size-4 text-amber-400 shrink-0" />{f}
                   </li>
                 ))}
               </ul>
-              <a href="mailto:contact@weaverframe.com" className="w-full py-4 rounded-2xl bg-emerald-500 text-black font-black text-sm hover:bg-emerald-400 transition-all text-center block shadow-[0_4px_30px_rgba(16,185,129,0.4)] relative z-10">
+              <a href="mailto:contact@weaverframe.com" className="w-full py-4 rounded-2xl bg-amber-500 text-black font-black text-sm hover:bg-amber-400 transition-all text-center block shadow-[0_4px_30px_rgba(16,185,129,0.4)] relative z-10">
                 Deploy Agency Pro →
               </a>
             </motion.div>
@@ -595,9 +595,9 @@ function WelcomePage() {
       <div className="relative overflow-hidden border-t border-white/5 z-10">
         {/* Mesh gradient */}
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_100%,rgba(16,185,129,0.1),transparent)]" />
-        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-emerald-500/8 rounded-full blur-[80px]" />
+        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-amber-500/8 rounded-full blur-[80px]" />
         <div className="max-w-[900px] mx-auto px-8 py-32 text-center relative z-10 space-y-8">
-          <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: false, amount: 0.25 }} className="text-xs font-black uppercase tracking-[0.3em] text-emerald-400">Get Started</motion.p>
+          <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: false, amount: 0.25 }} className="text-xs font-black uppercase tracking-[0.3em] text-amber-400">Get Started</motion.p>
           <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: false, amount: 0.25 }} className="text-5xl md:text-6xl font-black tracking-tighter leading-tight">
             Ready to build a 7-figure<br />agency pipeline?
           </motion.h2>
@@ -613,7 +613,7 @@ function WelcomePage() {
         </div>
         {/* Footer bar */}
         <div className="border-t border-white/5 py-8 flex flex-col md:flex-row items-center justify-between max-w-[1400px] mx-auto px-8 text-sm text-white/20 relative z-10">
-          <div className="flex items-center gap-2 font-black"><Layers className="size-4 text-emerald-400" /> WeaverFrame © {new Date().getFullYear()}</div>
+          <div className="flex items-center gap-2 font-black"><Layers className="size-4 text-amber-400" /> WeaverFrame © {new Date().getFullYear()}</div>
           <div className="flex gap-8 mt-4 md:mt-0 font-medium">
             <a href="#" className="hover:text-white/50 transition-colors">Privacy</a>
             <a href="#" className="hover:text-white/50 transition-colors">Terms</a>
