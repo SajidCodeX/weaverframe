@@ -228,9 +228,7 @@ function WelcomePage() {
           </div>
 
           {/* Steps */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 relative">
-            {/* Connecting line (desktop only) */}
-            <div className="hidden md:block absolute top-10 left-[calc(16.66%+16px)] right-[calc(16.66%+16px)] h-px bg-gradient-to-r from-emerald-500/30 via-blue-500/30 to-purple-500/30" />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 relative">
 
             {[
               {
@@ -247,7 +245,7 @@ function WelcomePage() {
                 icon: Bot,
                 title: "AI Takes Over",
                 body: "Our 70B AI Concierge responds within 30 seconds. It handles objections, shares pricing, and books a site visit on your calendar.",
-                badge: "< 30s Response",
+                badge: "30s Response",
               },
               {
                 num: "03",
@@ -264,43 +262,55 @@ function WelcomePage() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: false, amount: 0.3 }}
                 transition={{ duration: 0.6, delay: i * 0.15 }}
-                className="relative group"
+                className="relative"
               >
+                {/* Arrow connector */}
+                {i < 2 && (
+                  <div className="hidden md:flex absolute -right-4 top-1/2 -translate-y-1/2 z-20 size-8 rounded-full bg-[#020202] border border-white/8 items-center justify-center shadow-lg">
+                    <ArrowRight className="size-3.5 text-white/25" />
+                  </div>
+                )}
+
                 {/* Card */}
-                <div className={`rounded-3xl bg-gradient-to-b from-white/[0.04] to-transparent border border-white/8 p-8 h-full flex flex-col gap-5 hover:border-${color}-500/25 transition-all duration-500`}>
-                  {/* Step number + icon row */}
-                  <div className="flex items-center justify-between">
-                    <span className={`text-5xl font-black text-${color}-500/20 leading-none`}>{num}</span>
-                    <div className={`size-12 rounded-2xl bg-${color}-500/10 border border-${color}-500/20 flex items-center justify-center group-hover:scale-110 transition-transform duration-300`}>
-                      <Icon className={`size-6 text-${color}-400`} />
+                <div className={`rounded-3xl p-8 flex flex-col gap-6 group
+                  bg-gradient-to-b from-white/[0.05] to-white/[0.01]
+                  border border-white/8 hover:border-${color}-500/30
+                  hover:shadow-[0_0_40px_rgba(0,0,0,0.4)]
+                  transition-all duration-500`}
+                >
+                  {/* Top row: step num + icon */}
+                  <div className="flex items-start justify-between">
+                    <span className={`text-6xl font-black leading-none text-${color}-500/15 group-hover:text-${color}-500/25 transition-colors duration-500`}>
+                      {num}
+                    </span>
+                    <div className={`size-14 rounded-2xl flex items-center justify-center shrink-0
+                      bg-${color}-500/10 border border-${color}-500/20
+                      group-hover:scale-110 group-hover:bg-${color}-500/15 transition-all duration-300`}
+                    >
+                      <Icon className={`size-7 text-${color}-400`} />
                     </div>
                   </div>
 
                   {/* Badge */}
-                  <div className={`self-start px-3 py-1 rounded-full bg-${color}-500/10 border border-${color}-500/20 text-[10px] font-black uppercase tracking-widest text-${color}-400`}>
+                  <div className={`self-start px-3 py-1.5 rounded-full
+                    bg-${color}-500/8 border border-${color}-500/15
+                    text-[10px] font-black uppercase tracking-[0.2em] text-${color}-400`}
+                  >
                     {badge}
                   </div>
 
-                  <div>
-                    <h3 className="text-xl font-black mb-2">{title}</h3>
+                  {/* Text */}
+                  <div className="space-y-2">
+                    <h3 className="text-xl font-black leading-snug">{title}</h3>
                     <p className="text-sm text-white/40 leading-relaxed font-light">{body}</p>
                   </div>
                 </div>
-
-                {/* Arrow between cards (desktop) */}
-                {i < 2 && (
-                  <div className="hidden md:flex absolute top-10 -right-3 z-10 size-6 rounded-full bg-[#020202] border border-white/10 items-center justify-center">
-                    <ArrowRight className="size-3 text-white/30" />
-                  </div>
-                )}
               </motion.div>
             ))}
           </div>
-        </div>
-      </div>
-
 
       {/* ── STATS (Glassmorphism Cards) ── */}
+
       <div className="py-28 relative z-10">
         {/* Radial background */}
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_50%,rgba(16,185,129,0.06),transparent)] pointer-events-none" />
