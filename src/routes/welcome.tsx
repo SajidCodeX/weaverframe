@@ -1,270 +1,373 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { ArrowRight, Bot, Calendar, Layers, Shield, Sparkles, Star, Users, Zap } from "lucide-react";
+import { useEffect, useState, useRef } from "react";
+import { motion, useMotionValue, useSpring, useTransform, AnimatePresence } from "framer-motion";
+import { ArrowRight, Bot, Calendar, Layers, Shield, Sparkles, Star, Users, Zap, MessageSquare, LineChart, ChevronRight } from "lucide-react";
 
 export const Route = createFileRoute("/welcome")({
   head: () => ({
     meta: [
-      { title: "WeaverFrame | Premium AI for Custom Home Builders" },
-      { name: "description", content: "The ultimate AI Concierge and CRM for premium home builders." }
+      { title: "WeaverFrame | The Ultimate AI CRM for Builders" },
+      { name: "description", content: "Premium AI Concierge and dashboard for custom home builders." }
     ]
   }),
   component: WelcomePage,
 });
 
 function WelcomePage() {
-  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [isScrolled, setIsScrolled] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Framer Motion 3D Mouse Tracking
+  const mouseX = useMotionValue(0);
+  const mouseY = useMotionValue(0);
+
+  // Smooth springs for rotation
+  const rotateX = useSpring(useTransform(mouseY, [-0.5, 0.5], [15, -15]), { damping: 30, stiffness: 100 });
+  const rotateY = useSpring(useTransform(mouseX, [-0.5, 0.5], [-15, 15]), { damping: 30, stiffness: 100 });
+  
+  // Parallax for floating elements
+  const floatX = useSpring(useTransform(mouseX, [-0.5, 0.5], [-30, 30]), { damping: 25, stiffness: 80 });
+  const floatY = useSpring(useTransform(mouseY, [-0.5, 0.5], [-30, 30]), { damping: 25, stiffness: 80 });
+  const floatXReverse = useSpring(useTransform(mouseX, [-0.5, 0.5], [30, -30]), { damping: 25, stiffness: 80 });
+  const floatYReverse = useSpring(useTransform(mouseY, [-0.5, 0.5], [30, -30]), { damping: 25, stiffness: 80 });
 
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      const x = (e.clientX / window.innerWidth - 0.5) * 20; // -10 to 10
-      const y = (e.clientY / window.innerHeight - 0.5) * 20; // -10 to 10
-      setMousePosition({ x, y });
-    };
-
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 50);
-    };
-
-    window.addEventListener("mousemove", handleMouseMove);
+    const handleScroll = () => setIsScrolled(window.scrollY > 50);
     window.addEventListener("scroll", handleScroll);
-    return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("scroll", handleScroll);
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const rect = document.body.getBoundingClientRect();
+      // Normalize mouse coordinates between -0.5 and 0.5
+      const x = (e.clientX - rect.left) / rect.width - 0.5;
+      const y = (e.clientY - rect.top) / rect.height - 0.5;
+      mouseX.set(x);
+      mouseY.set(y);
     };
-  }, []);
+    
+    window.addEventListener("mousemove", handleMouseMove);
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("mousemove", handleMouseMove);
+    };
+  }, [mouseX, mouseY]);
 
   return (
-    <div className="h-screen bg-[#030303] text-white overflow-x-hidden overflow-y-auto selection:bg-emerald-500/30 font-sans relative">
+    <div ref={containerRef} className="h-screen bg-[#020202] text-white overflow-x-hidden overflow-y-auto selection:bg-emerald-500/30 font-sans relative perspective-[2000px]">
       
-      {/* ── AMBIENT 3D BACKGROUND GLOWS ── */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
-        <div 
-          className="absolute top-[-20%] left-[-10%] w-[50vw] h-[50vw] rounded-full bg-emerald-500/10 blur-[120px] mix-blend-screen animate-pulse" 
-          style={{ transform: `translate3d(${mousePosition.x * 2}px, ${mousePosition.y * 2}px, 0)` }}
+      {/* ── TOP-NOTCH AMBIENT BACKGROUND ── */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0 flex items-center justify-center">
+        {/* Deep background glow */}
+        <div className="absolute top-[20%] w-[80vw] h-[80vw] max-w-[1000px] max-h-[1000px] rounded-full bg-emerald-900/20 blur-[180px] mix-blend-screen opacity-50" />
+        
+        {/* Dynamic mouse-following spotlight */}
+        <motion.div 
+          className="absolute w-[600px] h-[600px] rounded-full bg-emerald-500/15 blur-[120px] mix-blend-screen"
+          style={{ 
+            x: useSpring(useTransform(mouseX, [-0.5, 0.5], [-400, 400]), { damping: 40 }),
+            y: useSpring(useTransform(mouseY, [-0.5, 0.5], [-400, 400]), { damping: 40 }),
+          }}
         />
+
+        {/* 3D Perspective Grid */}
         <div 
-          className="absolute bottom-[-20%] right-[-10%] w-[60vw] h-[60vw] rounded-full bg-blue-600/10 blur-[150px] mix-blend-screen"
-          style={{ transform: `translate3d(${mousePosition.x * -2}px, ${mousePosition.y * -2}px, 0)` }}
+          className="absolute bottom-[-20%] left-[-50%] right-[-50%] h-[60vh] bg-[linear-gradient(rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:60px_60px] [mask-image:linear-gradient(to_bottom,transparent,black)]"
+          style={{ transform: "perspective(1000px) rotateX(70deg) translateZ(0)", transformOrigin: "bottom" }}
         />
-        {/* Subtle grid overlay for tech feel */}
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:64px_64px] [mask-image:radial-gradient(ellipse_at_center,black_40%,transparent_80%)]" />
       </div>
 
-      {/* ── NAVIGATION ── */}
-      <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${isScrolled ? "bg-[#030303]/80 backdrop-blur-xl border-b border-white/5 py-4" : "bg-transparent py-6"}`}>
+      {/* ── ULTRA-PREMIUM NAVIGATION ── */}
+      <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${isScrolled ? "bg-[#020202]/70 backdrop-blur-2xl border-b border-white/5 py-3 shadow-[0_4px_30px_rgba(0,0,0,0.5)]" : "bg-transparent py-6"}`}>
         <div className="max-w-[1400px] mx-auto px-8 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="size-10 rounded-xl bg-gradient-to-br from-[#1a1a1a] to-[#0a0a0a] border border-white/10 shadow-[0_0_20px_rgba(255,255,255,0.05)] flex items-center justify-center">
-              <Layers className="size-5 text-white" />
+          <div className="flex items-center gap-3 cursor-pointer group">
+            <div className="size-10 rounded-xl bg-gradient-to-br from-[#222] to-[#050505] border border-white/10 shadow-[0_0_20px_rgba(16,185,129,0.1)] flex items-center justify-center group-hover:border-emerald-500/50 transition-colors">
+              <Layers className="size-5 text-white group-hover:text-emerald-400 transition-colors" />
             </div>
-            <span className="font-display text-xl font-bold tracking-[0.1em] uppercase text-white">WeaverFrame</span>
+            <span className="font-display text-xl font-extrabold tracking-widest uppercase text-white">WeaverFrame</span>
           </div>
           
-          <div className="flex items-center gap-6">
-            <a href="#features" className="text-sm font-medium text-white/60 hover:text-white transition-colors hidden md:block">Features</a>
+          <div className="hidden md:flex items-center gap-8 px-6 py-2 rounded-full border border-white/5 bg-white/[0.02] backdrop-blur-md">
+            <a href="#features" className="text-sm font-medium text-white/70 hover:text-white transition-colors">Platform</a>
+            <a href="#ai" className="text-sm font-medium text-white/70 hover:text-white transition-colors">AI Concierge</a>
+            <a href="#pricing" className="text-sm font-medium text-white/70 hover:text-white transition-colors">Pricing</a>
+          </div>
+
+          <div className="flex items-center gap-4">
             <Link 
               to="/login"
-              className="px-6 py-2.5 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all"
+              className="text-sm font-medium text-white/70 hover:text-white transition-colors hidden sm:block"
             >
-              Client Login
+              Sign In
             </Link>
             <a 
               href="mailto:contact@weaverframe.com"
-              className="px-6 py-2.5 rounded-lg text-sm font-bold bg-white text-black hover:bg-white/90 hover:scale-105 transition-all shadow-[0_0_20px_rgba(255,255,255,0.2)]"
+              className="group relative px-6 py-2.5 rounded-full text-sm font-bold overflow-hidden"
             >
-              Get Started
+              <div className="absolute inset-0 bg-gradient-to-r from-emerald-500 to-teal-400 opacity-90 group-hover:opacity-100 transition-opacity" />
+              <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay" />
+              <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite]" />
+              <span className="relative z-10 flex items-center gap-2 text-black">
+                Book a Demo <ArrowRight className="size-4 group-hover:translate-x-1 transition-transform" />
+              </span>
             </a>
           </div>
         </div>
       </nav>
 
-      {/* ── HERO SECTION (3D PARALLAX) ── */}
-      <main className="relative z-10 pt-40 pb-32 overflow-hidden flex items-center justify-center min-h-[90vh]">
-        <div className="max-w-[1400px] mx-auto px-8 w-full flex flex-col lg:flex-row items-center gap-16" style={{ perspective: "1500px" }}>
+      {/* ── 3D HERO SECTION ── */}
+      <main className="relative z-10 pt-40 pb-32 flex flex-col items-center justify-center min-h-screen">
+        <div className="max-w-[1400px] mx-auto px-8 w-full flex flex-col xl:flex-row items-center gap-20">
           
-          {/* Left Content */}
-          <div className="flex-1 space-y-8 z-20">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold uppercase tracking-widest backdrop-blur-md">
-              <Sparkles className="size-3.5 animate-pulse" />
-              Llama 3.3 70B Powered
-            </div>
+          {/* Left: Typography & CTA */}
+          <div className="flex-1 space-y-8 z-20 text-center xl:text-left">
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, ease: "easeOut" }}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#111] border border-white/10 shadow-[0_0_20px_rgba(255,255,255,0.05)] backdrop-blur-xl"
+            >
+              <span className="flex size-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-sm font-medium text-white/80">Llama 3.3 70B Engine Active</span>
+            </motion.div>
             
-            <h1 className="text-5xl md:text-7xl font-display font-extrabold tracking-tight leading-[1.1] text-transparent bg-clip-text bg-gradient-to-b from-white via-white/90 to-white/40">
-              The AI Concierge <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">For Premium Builders.</span>
-            </h1>
+            <motion.h1 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, ease: "easeOut", delay: 0.1 }}
+              className="text-6xl md:text-8xl font-display font-extrabold tracking-tighter leading-[1.05]"
+            >
+              The Next Era of <br />
+              <span className="text-transparent bg-clip-text bg-gradient-to-br from-white via-white to-white/30">
+                Home Building.
+              </span>
+            </motion.h1>
             
-            <p className="text-lg md:text-xl text-white/60 max-w-xl leading-relaxed font-light">
-              Stop losing leads after hours. WeaverFrame's intelligent SMS agent engages clients, schedules site visits, and manages your pipeline while you sleep.
-            </p>
+            <motion.p 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }}
+              className="text-xl md:text-2xl text-white/50 max-w-2xl mx-auto xl:mx-0 leading-relaxed font-light"
+            >
+              WeaverFrame is the hyper-premium CRM that autonomously nurtures leads, books site visits, and closes deals—all driven by advanced AI.
+            </motion.p>
             
-            <div className="flex items-center gap-4 pt-4">
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, ease: "easeOut", delay: 0.3 }}
+              className="flex flex-col sm:flex-row items-center gap-6 pt-4 justify-center xl:justify-start"
+            >
               <a 
                 href="mailto:contact@weaverframe.com"
-                className="group relative px-8 py-4 bg-emerald-500 text-black font-bold rounded-xl overflow-hidden shadow-[0_0_40px_rgba(16,185,129,0.3)] hover:shadow-[0_0_60px_rgba(16,185,129,0.5)] transition-all"
+                className="group relative px-10 py-5 bg-white text-black font-bold rounded-2xl overflow-hidden shadow-[0_0_40px_rgba(255,255,255,0.1)] hover:shadow-[0_0_60px_rgba(255,255,255,0.25)] transition-all hover:scale-105 duration-300"
               >
-                <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite]" />
-                <span className="flex items-center gap-2 relative z-10">
-                  Request Agency Access <ArrowRight className="size-4 group-hover:translate-x-1 transition-transform" />
+                <span className="flex items-center gap-3 text-lg">
+                  Deploy for your Agency <ChevronRight className="size-5 group-hover:translate-x-1 transition-transform" />
                 </span>
               </a>
-              <div className="flex items-center gap-3 text-sm text-white/50 font-medium ml-4">
-                <Shield className="size-4 text-emerald-500" /> Enterprise Grade
+              <div className="flex items-center gap-3 text-white/40">
+                <Shield className="size-5 text-emerald-500/70" />
+                <span className="text-sm font-medium">Bank-grade Security</span>
               </div>
-            </div>
+            </motion.div>
           </div>
 
-          {/* Right 3D Dashboard Mockup */}
-          <div 
-            className="flex-1 relative w-full h-[500px] hidden lg:block"
-            style={{ transformStyle: "preserve-3d" }}
-          >
-            <div 
-              className="absolute inset-0 transition-transform duration-200 ease-out"
-              style={{
-                transform: `rotateY(${-mousePosition.x}deg) rotateX(${mousePosition.y}deg)`,
-              }}
+          {/* Right: The 3D Glass Masterpiece */}
+          <div className="flex-1 w-full max-w-[700px] aspect-square relative perspective-[2000px]">
+            <motion.div 
+              className="w-full h-full relative"
+              style={{ rotateX, rotateY, transformStyle: "preserve-3d" }}
             >
-              {/* Main App Window */}
-              <div className="absolute inset-0 rounded-2xl bg-[#0a0a0c]/90 border border-white/10 shadow-[0_0_100px_rgba(0,0,0,0.8),inset_0_1px_1px_rgba(255,255,255,0.1)] backdrop-blur-2xl overflow-hidden flex flex-col">
-                <div className="h-10 border-b border-white/10 flex items-center px-4 gap-2 bg-white/[0.02]">
-                  <div className="flex gap-1.5">
-                    <div className="size-3 rounded-full bg-red-500/80" />
-                    <div className="size-3 rounded-full bg-yellow-500/80" />
-                    <div className="size-3 rounded-full bg-green-500/80" />
+              
+              {/* Back Glow */}
+              <div 
+                className="absolute inset-10 rounded-full bg-emerald-500/30 blur-[100px]"
+                style={{ transform: "translateZ(-100px)" }}
+              />
+
+              {/* Main Dashboard Panel */}
+              <div 
+                className="absolute inset-0 rounded-3xl bg-gradient-to-br from-white/10 to-white/[0.02] border border-white/20 shadow-[0_20px_80px_rgba(0,0,0,0.8),inset_0_1px_1px_rgba(255,255,255,0.3)] backdrop-blur-3xl overflow-hidden flex flex-col"
+                style={{ transform: "translateZ(0px)" }}
+              >
+                {/* Mac OS Style Header */}
+                <div className="h-12 border-b border-white/10 flex items-center px-6 gap-2 bg-black/20">
+                  <div className="flex gap-2">
+                    <div className="size-3.5 rounded-full bg-white/20" />
+                    <div className="size-3.5 rounded-full bg-white/20" />
+                    <div className="size-3.5 rounded-full bg-white/20" />
                   </div>
-                  <div className="ml-auto flex items-center gap-2 px-3 py-1 rounded bg-white/5 border border-white/5 text-[10px] text-white/40 font-mono">
-                    <Bot className="size-3" /> AI Active
+                  <div className="mx-auto px-4 py-1.5 rounded-md bg-black/40 border border-white/5 flex items-center gap-2">
+                    <Bot className="size-3.5 text-emerald-400" />
+                    <span className="text-xs font-mono text-white/70">AI Agent Active</span>
                   </div>
+                  <div className="w-10" />
                 </div>
-                <div className="flex-1 flex p-4 gap-4">
-                  {/* Fake Sidebar */}
-                  <div className="w-16 rounded-xl border border-white/5 bg-white/[0.02] flex flex-col items-center py-4 gap-4">
-                    <div className="size-8 rounded-lg bg-emerald-500/20 text-emerald-500 flex items-center justify-center mb-4"><Layers className="size-4" /></div>
-                    <div className="size-8 rounded-lg bg-white/5" />
-                    <div className="size-8 rounded-lg bg-white/5" />
-                    <div className="size-8 rounded-lg bg-white/5" />
-                  </div>
-                  {/* Fake Chat Interface */}
-                  <div className="flex-1 rounded-xl border border-white/5 bg-white/[0.01] flex flex-col">
-                    <div className="h-14 border-b border-white/5 flex items-center px-4 gap-3">
-                      <div className="size-8 rounded-full bg-blue-500/20" />
-                      <div>
-                        <div className="w-24 h-2.5 rounded bg-white/20 mb-1.5" />
-                        <div className="w-16 h-2 rounded bg-green-500/50" />
-                      </div>
+
+                {/* Dashboard Content */}
+                <div className="flex-1 p-6 flex gap-6">
+                  {/* Sidebar */}
+                  <div className="w-48 rounded-2xl bg-black/20 border border-white/5 p-4 flex flex-col gap-4">
+                    <div className="h-10 rounded-xl bg-white/10 border border-white/10 flex items-center px-3 gap-3">
+                      <Users className="size-4 text-white/70" />
+                      <div className="h-2 w-16 bg-white/30 rounded-full" />
                     </div>
-                    <div className="flex-1 p-4 space-y-4">
-                      <div className="flex gap-3">
-                        <div className="size-6 rounded-full bg-blue-500/20 shrink-0" />
-                        <div className="bg-white/5 border border-white/10 rounded-2xl rounded-tl-sm px-4 py-2.5 w-2/3 h-12" />
+                    <div className="h-10 rounded-xl bg-white/5 flex items-center px-3 gap-3">
+                      <MessageSquare className="size-4 text-white/40" />
+                      <div className="h-2 w-12 bg-white/20 rounded-full" />
+                    </div>
+                    <div className="h-10 rounded-xl bg-white/5 flex items-center px-3 gap-3">
+                      <Calendar className="size-4 text-white/40" />
+                      <div className="h-2 w-20 bg-white/20 rounded-full" />
+                    </div>
+                  </div>
+
+                  {/* Main Chat/Graph Area */}
+                  <div className="flex-1 flex flex-col gap-6">
+                    {/* Graph Card */}
+                    <div className="h-32 rounded-2xl bg-gradient-to-br from-emerald-500/10 to-transparent border border-emerald-500/20 p-5 flex flex-col justify-between relative overflow-hidden">
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/20 blur-[40px] rounded-full" />
+                      <div className="flex items-center gap-3">
+                        <LineChart className="size-5 text-emerald-400" />
+                        <span className="text-sm font-bold text-white">Conversion Rate</span>
                       </div>
-                      <div className="flex gap-3 flex-row-reverse">
-                        <div className="size-6 rounded-full bg-emerald-500/20 shrink-0" />
-                        <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl rounded-tr-sm px-4 py-2.5 w-1/2 h-16" />
+                      <div className="text-3xl font-display font-bold text-white">42.8% <span className="text-sm text-emerald-400">+12%</span></div>
+                    </div>
+
+                    {/* Chat UI */}
+                    <div className="flex-1 rounded-2xl bg-black/20 border border-white/5 p-5 flex flex-col gap-4">
+                      <div className="flex gap-3 w-4/5">
+                        <div className="size-8 rounded-full bg-blue-500/20 shrink-0" />
+                        <div className="h-12 rounded-2xl rounded-tl-sm bg-white/10 w-full" />
+                      </div>
+                      <div className="flex gap-3 w-4/5 self-end flex-row-reverse">
+                        <div className="size-8 rounded-full bg-emerald-500/20 shrink-0 flex items-center justify-center border border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.2)]">
+                          <Bot className="size-4 text-emerald-400" />
+                        </div>
+                        <div className="h-16 rounded-2xl rounded-tr-sm bg-emerald-500/10 border border-emerald-500/20 w-full" />
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
-              
-              {/* Floating 3D Elements */}
-              <div 
-                className="absolute -right-12 top-24 p-4 rounded-xl bg-[#111]/90 border border-white/10 shadow-2xl backdrop-blur-xl flex items-center gap-3"
-                style={{ transform: "translateZ(80px)" }}
+
+              {/* Floating Element: Booking Confirmed (Pops out in Z space) */}
+              <motion.div 
+                className="absolute -right-16 top-32 p-5 rounded-2xl bg-[#0a0a0c]/90 border border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.6),inset_0_1px_1px_rgba(255,255,255,0.2)] backdrop-blur-xl flex items-center gap-4"
+                style={{ transform: "translateZ(100px)", x: floatX, y: floatY }}
               >
-                <div className="size-10 rounded-full bg-emerald-500/20 flex items-center justify-center">
-                  <Calendar className="size-5 text-emerald-400" />
+                <div className="size-12 rounded-full bg-emerald-500/20 flex items-center justify-center border border-emerald-500/30">
+                  <Calendar className="size-6 text-emerald-400" />
                 </div>
                 <div>
-                  <div className="text-xs text-white/50 mb-0.5">Auto-Booked</div>
-                  <div className="text-sm font-bold">Site Visit Confirmed</div>
+                  <div className="text-xs font-mono text-emerald-400 mb-1">AUTO-BOOKED</div>
+                  <div className="text-base font-bold text-white">Site Visit Confirmed</div>
                 </div>
-              </div>
+              </motion.div>
 
-              <div 
-                className="absolute -left-8 bottom-32 p-4 rounded-xl bg-[#111]/90 border border-white/10 shadow-2xl backdrop-blur-xl flex flex-col gap-2"
-                style={{ transform: "translateZ(120px)" }}
+              {/* Floating Element: Lead Score (Pops out further) */}
+              <motion.div 
+                className="absolute -left-12 bottom-40 p-5 rounded-2xl bg-[#0a0a0c]/90 border border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.6),inset_0_1px_1px_rgba(255,255,255,0.2)] backdrop-blur-xl flex flex-col gap-3 w-56"
+                style={{ transform: "translateZ(140px)", x: floatXReverse, y: floatYReverse }}
               >
-                <div className="flex items-center gap-2">
-                  <Star className="size-4 text-yellow-500" />
-                  <div className="text-xs font-bold uppercase tracking-widest text-white/80">Hot Lead Detected</div>
+                <div className="flex items-center gap-3">
+                  <div className="size-10 rounded-full bg-yellow-500/20 flex items-center justify-center border border-yellow-500/30">
+                    <Star className="size-5 text-yellow-400" />
+                  </div>
+                  <div className="text-sm font-bold text-white">Hot Lead</div>
                 </div>
-                <div className="w-40 h-1.5 rounded-full bg-white/10 overflow-hidden">
-                  <div className="h-full bg-gradient-to-r from-yellow-500 to-red-500 w-[85%]" />
+                <div className="w-full h-2 rounded-full bg-white/10 overflow-hidden">
+                  <div className="h-full bg-gradient-to-r from-yellow-500 to-red-500 w-[92%] shadow-[0_0_10px_rgba(239,68,68,0.5)]" />
                 </div>
-              </div>
+              </motion.div>
 
-            </div>
+            </motion.div>
           </div>
           
         </div>
       </main>
 
-      {/* ── FEATURES GRID ── */}
-      <section id="features" className="py-32 relative z-10 bg-black/50 border-t border-white/5">
-        <div className="max-w-[1400px] mx-auto px-8">
-          <div className="text-center mb-20 space-y-4">
-            <h2 className="text-4xl md:text-5xl font-display font-bold">Engineered for <span className="text-emerald-400">Excellence.</span></h2>
-            <p className="text-white/50 max-w-2xl mx-auto text-lg">Not just a CRM. A complete operating system for custom home builders with AI embedded at the core.</p>
+      {/* ── HIGH-END FEATURES GRID ── */}
+      <section id="features" className="py-32 relative z-10 bg-[#050505]">
+        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.03] mix-blend-overlay" />
+        <div className="max-w-[1400px] mx-auto px-8 relative z-10">
+          <div className="text-center mb-24 space-y-6">
+            <h2 className="text-5xl md:text-6xl font-display font-bold">Uncompromising <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-400">Power.</span></h2>
+            <p className="text-white/50 max-w-2xl mx-auto text-xl font-light">The only platform engineered specifically for agencies managing elite custom home builders.</p>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {/* Feature 1 */}
-            <div className="group p-8 rounded-2xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] hover:border-emerald-500/30 transition-all duration-500 hover:-translate-y-2 cursor-default">
-              <div className="size-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                <Bot className="size-6 text-emerald-400" />
+            <div className="group relative p-1 rounded-3xl bg-gradient-to-b from-white/10 to-transparent hover:from-emerald-500/50 transition-all duration-700">
+              <div className="absolute inset-0 bg-emerald-500/20 blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+              <div className="relative h-full p-8 rounded-[23px] bg-[#0a0a0a] border border-white/5 overflow-hidden">
+                <div className="size-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-8 group-hover:scale-110 group-hover:bg-emerald-500/10 group-hover:border-emerald-500/30 transition-all duration-500">
+                  <Bot className="size-7 text-white group-hover:text-emerald-400 transition-colors" />
+                </div>
+                <h3 className="text-2xl font-bold mb-4">70B Parameter AI</h3>
+                <p className="text-white/50 leading-relaxed text-lg font-light">Fine-tuned Llama 3.3 70B logic converses naturally, handles objections, and perfectly manages your scheduling without hallucinations.</p>
               </div>
-              <h3 className="text-xl font-bold mb-3">70B Parameter AI</h3>
-              <p className="text-white/50 leading-relaxed">Our concierge uses advanced Llama 3.3 70B logic to converse naturally, answer complex questions, and never hallucinate your calendar.</p>
             </div>
 
             {/* Feature 2 */}
-            <div className="group p-8 rounded-2xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] hover:border-blue-500/30 transition-all duration-500 hover:-translate-y-2 cursor-default">
-              <div className="size-12 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                <Users className="size-6 text-blue-400" />
+            <div className="group relative p-1 rounded-3xl bg-gradient-to-b from-white/10 to-transparent hover:from-blue-500/50 transition-all duration-700">
+              <div className="absolute inset-0 bg-blue-500/20 blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+              <div className="relative h-full p-8 rounded-[23px] bg-[#0a0a0a] border border-white/5 overflow-hidden">
+                <div className="size-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-8 group-hover:scale-110 group-hover:bg-blue-500/10 group-hover:border-blue-500/30 transition-all duration-500">
+                  <Users className="size-7 text-white group-hover:text-blue-400 transition-colors" />
+                </div>
+                <h3 className="text-2xl font-bold mb-4">Multi-Tenant Architecture</h3>
+                <p className="text-white/50 leading-relaxed text-lg font-light">Built for scale. Agencies can seamlessly manage dozens of builder accounts from a single, unified super-admin dashboard.</p>
               </div>
-              <h3 className="text-xl font-bold mb-3">Multi-Tenant Agency</h3>
-              <p className="text-white/50 leading-relaxed">Built for agencies. Manage dozens of builders from a single super-admin dashboard with strict privacy boundaries.</p>
             </div>
 
             {/* Feature 3 */}
-            <div className="group p-8 rounded-2xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] hover:border-purple-500/30 transition-all duration-500 hover:-translate-y-2 cursor-default">
-              <div className="size-12 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                <Zap className="size-6 text-purple-400" />
+            <div className="group relative p-1 rounded-3xl bg-gradient-to-b from-white/10 to-transparent hover:from-purple-500/50 transition-all duration-700">
+              <div className="absolute inset-0 bg-purple-500/20 blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+              <div className="relative h-full p-8 rounded-[23px] bg-[#0a0a0a] border border-white/5 overflow-hidden">
+                <div className="size-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-8 group-hover:scale-110 group-hover:bg-purple-500/10 group-hover:border-purple-500/30 transition-all duration-500">
+                  <Zap className="size-7 text-white group-hover:text-purple-400 transition-colors" />
+                </div>
+                <h3 className="text-2xl font-bold mb-4">Real-Time Sync</h3>
+                <p className="text-white/50 leading-relaxed text-lg font-light">Experience instantaneous WhatsApp-style online indicators and live chat mirroring between the dashboard and client portals.</p>
               </div>
-              <h3 className="text-xl font-bold mb-3">Real-Time Portal</h3>
-              <p className="text-white/50 leading-relaxed">Track exactly when clients are viewing their portal. See WhatsApp-style "Online" indicators instantly on your dashboard.</p>
             </div>
           </div>
         </div>
       </section>
 
       {/* ── FOOTER CTA ── */}
-      <footer className="py-24 relative z-10 border-t border-white/10 bg-[#050505] overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent to-emerald-900/20 pointer-events-none" />
-        <div className="max-w-[800px] mx-auto px-8 text-center space-y-8 relative z-10">
-          <h2 className="text-4xl md:text-5xl font-display font-bold">Ready to scale your agency?</h2>
-          <p className="text-xl text-white/50 font-light">Deploy WeaverFrame for your builders today and watch conversion rates soar.</p>
+      <footer className="py-32 relative z-10 border-t border-white/5 bg-[#020202] overflow-hidden">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-emerald-500/10 blur-[150px] rounded-full pointer-events-none" />
+        
+        <div className="max-w-[800px] mx-auto px-8 text-center space-y-10 relative z-10">
+          <h2 className="text-5xl md:text-7xl font-display font-extrabold tracking-tight">Step into the <br/><span className="text-emerald-400">Future.</span></h2>
+          <p className="text-xl text-white/50 font-light max-w-xl mx-auto">Equip your agency with the world's most advanced AI platform for custom home builders.</p>
           <a 
             href="mailto:contact@weaverframe.com"
-            className="inline-flex items-center gap-2 px-10 py-5 bg-white text-black font-bold rounded-xl text-lg hover:bg-emerald-400 transition-colors duration-300"
+            className="inline-flex items-center gap-3 px-12 py-6 bg-white text-black font-bold rounded-full text-lg shadow-[0_0_40px_rgba(255,255,255,0.2)] hover:shadow-[0_0_60px_rgba(255,255,255,0.4)] hover:scale-105 transition-all duration-300"
           >
-            Contact Sales <ArrowRight className="size-5" />
+            Contact Enterprise Sales <ArrowRight className="size-5" />
           </a>
         </div>
         
-        <div className="mt-24 pt-8 border-t border-white/5 text-center text-sm text-white/30">
-          © {new Date().getFullYear()} WeaverFrame. Crafted with precision.
+        <div className="mt-32 pt-8 border-t border-white/5 flex flex-col md:flex-row items-center justify-between max-w-[1400px] mx-auto px-8 text-sm text-white/30 font-medium">
+          <div className="flex items-center gap-2 mb-4 md:mb-0">
+            <Layers className="size-4" /> WeaverFrame © {new Date().getFullYear()}
+          </div>
+          <div className="flex gap-6">
+            <a href="#" className="hover:text-white transition-colors">Privacy Policy</a>
+            <a href="#" className="hover:text-white transition-colors">Terms of Service</a>
+          </div>
         </div>
       </footer>
 
-      {/* Keyframes for animations */}
+      {/* CSS Utilities */}
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes shimmer {
           100% { transform: translateX(100%); }
+        }
+        .perspective-\\[2000px\\] {
+          perspective: 2000px;
         }
       `}} />
     </div>
