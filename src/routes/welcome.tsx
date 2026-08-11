@@ -155,6 +155,42 @@ function WelcomePage() {
         </motion.div>
       </div>
 
+      {/* ── SOCIAL PROOF BAR ── */}
+      <div className="relative z-20 border-y border-white/5 bg-[#020202]/50 backdrop-blur-xl py-16">
+        <div className="max-w-[1400px] mx-auto px-8">
+          <p className="text-center text-sm text-white/30 uppercase tracking-[0.3em] font-mono mb-10 font-semibold">
+            Trusted by Elite Custom Home Builders
+          </p>
+          <div className="flex flex-wrap justify-center items-center gap-12 md:gap-24 opacity-40 grayscale hover:grayscale-0 hover:opacity-100 transition-all duration-700">
+            <div className="flex items-center gap-3 font-display text-2xl font-bold tracking-tight hover:text-emerald-400 transition-colors cursor-default"><Layers className="size-8"/> Apex Homes</div>
+            <div className="flex items-center gap-3 font-display text-2xl font-bold tracking-tight hover:text-blue-400 transition-colors cursor-default"><Bot className="size-8"/> Elevate Build</div>
+            <div className="flex items-center gap-3 font-display text-2xl font-bold tracking-tight hover:text-purple-400 transition-colors cursor-default"><Zap className="size-8"/> Nova Estates</div>
+            <div className="flex items-center gap-3 font-display text-2xl font-bold tracking-tight hover:text-teal-400 transition-colors cursor-default"><Shield className="size-8"/> Prime Struct</div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── QUICK STATS ── */}
+      <div className="relative z-20 bg-[#020202] py-24">
+        <div className="max-w-[1200px] mx-auto px-8 grid grid-cols-1 md:grid-cols-3 gap-12">
+          <div className="text-center space-y-2">
+            <div className="text-5xl md:text-7xl font-display font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-white/20">30s</div>
+            <div className="text-emerald-400 font-mono text-sm tracking-widest uppercase">Avg Response Time</div>
+            <p className="text-white/40 text-sm mt-4 font-light">Never lose a lead to slow replies. WeaverFrame engages instantly.</p>
+          </div>
+          <div className="text-center space-y-2">
+            <div className="text-5xl md:text-7xl font-display font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-white/20">92%</div>
+            <div className="text-blue-400 font-mono text-sm tracking-widest uppercase">Lead Retention</div>
+            <p className="text-white/40 text-sm mt-4 font-light">Autonomously follow up and keep prospects warm for months.</p>
+          </div>
+          <div className="text-center space-y-2">
+            <div className="text-5xl md:text-7xl font-display font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-white/20">24/7</div>
+            <div className="text-purple-400 font-mono text-sm tracking-widest uppercase">Concierge Active</div>
+            <p className="text-white/40 text-sm mt-4 font-light">Book site visits while you sleep, completely hands-free.</p>
+          </div>
+        </div>
+      </div>
+
       {/* ── 3D STACKING FEATURES SCROLL ── */}
       {/* Container is 300vh tall to allow scrolling through the 3 cards */}
       <div className="h-[300vh] relative z-20">
