@@ -107,7 +107,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   notFoundComponent: NotFoundComponent,
   errorComponent: ErrorComponent,
   beforeLoad: async ({ location }) => {
-    if (location.pathname === '/login' || location.pathname.startsWith('/api') || location.pathname.startsWith('/invite') || location.pathname.startsWith('/portal')) {
+    if (location.pathname === '/welcome' || location.pathname === '/login' || location.pathname.startsWith('/api') || location.pathname.startsWith('/invite') || location.pathname.startsWith('/portal')) {
       return { session: null };  
     }
 
@@ -146,6 +146,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     const session = await getSessionFn({ data: { activeRole } });
     if (!session) {
       _clientSession = null;
+      
+      // If unauthenticated user hits the root domain, show them the marketing landing page
+      if (location.pathname === '/') {
+        throw redirect({ to: '/welcome' });
+      }
+      
       throw redirect({
         to: '/login',
         search: { redirect: location.href },
