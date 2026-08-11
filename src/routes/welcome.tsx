@@ -308,6 +308,8 @@ function WelcomePage() {
               </motion.div>
             ))}
           </div>
+        </div>
+      </div>
 
       {/* ── STATS (Glassmorphism Cards) ── */}
 
