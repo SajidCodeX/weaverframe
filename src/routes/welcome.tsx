@@ -1,9 +1,28 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import React, { Suspense } from "react";
+import React, { Suspense, Component, ErrorInfo, ReactNode } from "react";
 import { motion } from "framer-motion";
 import { ArrowRight, Bot, Calendar, Layers, Shield, Sparkles, Users, Zap, CheckCircle2, Building2 } from "lucide-react";
 
 const Spline = React.lazy(() => import('@splinetool/react-spline'));
+
+class ErrorBoundary extends Component<{children: ReactNode, fallback: ReactNode}, {hasError: boolean}> {
+  constructor(props: {children: ReactNode, fallback: ReactNode}) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError(_: Error) {
+    return { hasError: true };
+  }
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error("Spline Model Error:", error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback;
+    }
+    return this.props.children;
+  }
+}
 
 export const Route = createFileRoute("/welcome")({
   head: () => ({
@@ -93,15 +112,22 @@ function WelcomePage() {
           >
             {/* The WebGL Canvas */}
             <div className="absolute inset-0">
-              <Suspense fallback={
-                <div className="w-full h-full rounded-3xl border border-white/5 bg-white/[0.02] flex flex-col items-center justify-center gap-4">
-                  <div className="size-12 rounded-full border-t-2 border-emerald-500 animate-spin" />
-                  <div className="text-white/40 font-mono text-sm tracking-widest uppercase">Loading 3D Architecture Model...</div>
+              <ErrorBoundary fallback={
+                <div className="w-full h-full rounded-3xl border border-white/5 bg-white/[0.02] flex flex-col items-center justify-center p-8 text-center gap-4">
+                  <Building2 className="size-16 text-emerald-500/50" />
+                  <div className="text-white/50 text-sm">3D Architecture Model Unavailable (Private URL).<br/>Please provide a valid .splinecode export.</div>
                 </div>
               }>
-                {/* Real 3D Architecture/Room Model */}
-                <Spline scene="https://prod.spline.design/Q7L7WjFzGgBvFhR0/scene.splinecode" />
-              </Suspense>
+                <Suspense fallback={
+                  <div className="w-full h-full rounded-3xl border border-white/5 bg-white/[0.02] flex flex-col items-center justify-center gap-4">
+                    <div className="size-12 rounded-full border-t-2 border-emerald-500 animate-spin" />
+                    <div className="text-white/40 font-mono text-sm tracking-widest uppercase">Loading 3D Architecture Model...</div>
+                  </div>
+                }>
+                  {/* Real 3D Architecture/Room Model */}
+                  <Spline scene="https://prod.spline.design/Q7L7WjFzGgBvFhR0/scene.splinecode" />
+                </Suspense>
+              </ErrorBoundary>
             </div>
             {/* Floating glass label to ensure context */}
             <div className="absolute bottom-10 right-10 px-4 py-2 rounded-xl bg-black/50 backdrop-blur-md border border-white/10 flex items-center gap-3 shadow-2xl">
