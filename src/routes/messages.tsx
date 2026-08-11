@@ -150,6 +150,14 @@ function MessagesPage() {
     }
   }, [initialConversations]);
 
+  // Poll conversations every 15s so online status stays fresh (WhatsApp-style)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      router.invalidate();
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [router]);
+
   // Track selected lead & active conversation
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [activeChat, setActiveChat] = useState<{ lead: any; messages: any[] } | null>(null);
