@@ -1,7 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, Suspense } from "react";
 import { motion, useScroll, useTransform, useSpring, useMotionValue } from "framer-motion";
 import { ArrowRight, Bot, Calendar, Layers, Shield, Sparkles, Users, Zap, CheckCircle2 } from "lucide-react";
+
+const Spline = React.lazy(() => import('@splinetool/react-spline'));
 
 export const Route = createFileRoute("/welcome")({
   head: () => ({
@@ -143,15 +145,16 @@ function WelcomePage() {
             </motion.p>
           </div>
 
-          {/* Abstract 3D Hero Ring */}
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.8, rotateX: 60 }} animate={{ opacity: 1, scale: 1, rotateX: 70 }} transition={{ duration: 2, ease: "easeOut" }}
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] rounded-full border border-emerald-500/20 shadow-2xl -z-10"
-            style={{ transformStyle: "preserve-3d" }}
-          >
-            <div className="absolute inset-0 rounded-full border border-blue-500/20 rotate-45 scale-110" />
-            <div className="absolute inset-0 rounded-full border border-purple-500/20 -rotate-45 scale-125" />
-          </motion.div>
+          {/* Real WebGL 3D Hero Model */}
+          <div className="absolute inset-0 -z-10 flex items-center justify-center opacity-60">
+            <Suspense fallback={
+              <div className="w-[800px] h-[800px] rounded-full border border-emerald-500/10 animate-pulse flex items-center justify-center">
+                <div className="text-emerald-500/50 text-sm font-mono tracking-widest uppercase">Loading 3D Engine...</div>
+              </div>
+            }>
+              <Spline scene="https://prod.spline.design/6Wq1Q7YGyM-iab9i/scene.splinecode" />
+            </Suspense>
+          </div>
         </motion.div>
       </div>
 
