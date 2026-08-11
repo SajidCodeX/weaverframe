@@ -65,11 +65,12 @@ function WelcomePage() {
   return (
     <div ref={containerRef} className="h-screen bg-[#020202] text-white overflow-x-hidden overflow-y-auto selection:bg-emerald-500/30 font-sans relative">
       
-      {/* ── AMBIENT MOUSE GLOW ── */}
+      {/* ── AMBIENT MOUSE GLOW (Optimized) ── */}
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden flex items-center justify-center">
         <motion.div 
-          className="absolute w-[600px] h-[600px] rounded-full bg-emerald-500/10 blur-[120px] mix-blend-screen"
+          className="absolute w-[600px] h-[600px] rounded-full mix-blend-screen"
           style={{ 
+            background: 'radial-gradient(circle, rgba(16,185,129,0.15) 0%, rgba(16,185,129,0) 70%)',
             x: useSpring(useTransform(mouseX, [-0.5, 0.5], [-300, 300]), { damping: 40 }),
             y: useSpring(useTransform(mouseY, [-0.5, 0.5], [-300, 300]), { damping: 40 }),
           }}
@@ -118,7 +119,7 @@ function WelcomePage() {
           <div className="max-w-[1200px] mx-auto px-8 text-center space-y-8 flex flex-col items-center relative z-20">
             <motion.div 
               initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1, delay: 0.2 }}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-md"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10"
             >
               <Sparkles className="size-4 text-emerald-400 animate-pulse" />
               <span className="text-sm font-semibold tracking-wide text-white/90">Introducing The AI Operating System</span>
@@ -145,11 +146,11 @@ function WelcomePage() {
           {/* Abstract 3D Hero Ring */}
           <motion.div 
             initial={{ opacity: 0, scale: 0.8, rotateX: 60 }} animate={{ opacity: 1, scale: 1, rotateX: 70 }} transition={{ duration: 2, ease: "easeOut" }}
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] rounded-full border border-emerald-500/20 shadow-[0_0_100px_rgba(16,185,129,0.1),inset_0_0_100px_rgba(16,185,129,0.1)] -z-10"
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] rounded-full border border-emerald-500/20 shadow-2xl -z-10"
             style={{ transformStyle: "preserve-3d" }}
           >
-            <div className="absolute inset-0 rounded-full border border-blue-500/20 rotate-45 scale-110 shadow-[0_0_80px_rgba(59,130,246,0.1),inset_0_0_80px_rgba(59,130,246,0.1)]" />
-            <div className="absolute inset-0 rounded-full border border-purple-500/20 -rotate-45 scale-125 shadow-[0_0_60px_rgba(168,85,247,0.1),inset_0_0_60px_rgba(168,85,247,0.1)]" />
+            <div className="absolute inset-0 rounded-full border border-blue-500/20 rotate-45 scale-110" />
+            <div className="absolute inset-0 rounded-full border border-purple-500/20 -rotate-45 scale-125" />
           </motion.div>
         </motion.div>
       </div>
@@ -167,7 +168,7 @@ function WelcomePage() {
             
             {/* CARD 1 */}
             <motion.div 
-              className="absolute w-full h-full rounded-3xl bg-[#0a0a0c]/80 border border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.8),inset_0_1px_1px_rgba(255,255,255,0.2)] backdrop-blur-2xl p-12 flex flex-col justify-center origin-bottom"
+              className="absolute w-full h-full rounded-3xl bg-[#0a0a0c] border border-white/10 shadow-2xl p-12 flex flex-col justify-center origin-bottom will-change-transform"
               style={{ scale: card1Scale, y: card1Y, z: card1Z, opacity: card1Opacity }}
             >
               <div className="flex gap-12 items-center h-full">
@@ -196,7 +197,7 @@ function WelcomePage() {
 
             {/* CARD 2 */}
             <motion.div 
-              className="absolute w-full h-full rounded-3xl bg-[#0a0a0c]/80 border border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.8),inset_0_1px_1px_rgba(255,255,255,0.2)] backdrop-blur-2xl p-12 flex flex-col justify-center origin-bottom"
+              className="absolute w-full h-full rounded-3xl bg-[#0a0a0c] border border-white/10 shadow-2xl p-12 flex flex-col justify-center origin-bottom will-change-transform"
               style={{ scale: card2Scale, y: useTransform(() => card2Y.get() + card2YOffset.get()), z: card2Z, opacity: card2Opacity }}
             >
               <div className="flex gap-12 items-center h-full">
@@ -229,7 +230,7 @@ function WelcomePage() {
 
             {/* CARD 3 */}
             <motion.div 
-              className="absolute w-full h-full rounded-3xl bg-[#0a0a0c]/80 border border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.8),inset_0_1px_1px_rgba(255,255,255,0.2)] backdrop-blur-2xl p-12 flex flex-col justify-center origin-bottom"
+              className="absolute w-full h-full rounded-3xl bg-[#0a0a0c] border border-white/10 shadow-2xl p-12 flex flex-col justify-center origin-bottom will-change-transform"
               style={{ y: card3Y }}
             >
               <div className="flex gap-12 items-center h-full">
@@ -278,7 +279,7 @@ function WelcomePage() {
           </p>
           <a 
             href="mailto:contact@weaverframe.com"
-            className="group inline-flex items-center gap-4 px-12 py-6 bg-white text-black font-bold rounded-full text-xl shadow-[0_0_60px_rgba(255,255,255,0.2)] hover:shadow-[0_0_100px_rgba(255,255,255,0.4)] hover:scale-105 transition-all duration-300"
+            className="group inline-flex items-center gap-4 px-12 py-6 bg-white text-black font-bold rounded-full text-xl shadow-xl hover:scale-105 transition-all duration-300"
           >
             Contact Sales <ArrowRight className="size-6 group-hover:translate-x-2 transition-transform" />
           </a>
