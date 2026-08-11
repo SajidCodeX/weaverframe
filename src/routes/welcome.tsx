@@ -1,9 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import React, { Suspense, useRef } from "react";
-import { motion, useScroll, useTransform } from "framer-motion";
+import { motion, useScroll, useTransform, cubicBezier } from "framer-motion";
 import { ArrowRight, Box, Circle, Pyramid } from "lucide-react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { MeshDistortMaterial, Float, Environment } from "@react-three/drei";
+import { MeshDistortMaterial, Float, Environment, SoftShadows } from "@react-three/drei";
 import * as THREE from "three";
 
 import { CustomCursor } from "../components/CustomCursor";
@@ -45,7 +45,6 @@ function Scene3D() {
     <Canvas camera={{ position: [0, 0, 8], fov: 45 }}>
       <color attach="background" args={["#0a0a0a"]} />
       
-      {/* Dynamic Lighting for the Liquid Aura */}
       <ambientLight intensity={0.5} />
       <directionalLight position={[10, 10, 5]} intensity={2} color="#e5d9c5" />
       <directionalLight position={[-10, -10, -5]} intensity={1} color="#ffffff" />
@@ -59,7 +58,6 @@ function Scene3D() {
   );
 }
 
-
 // ── TEXT REVEAL COMPONENT ─────────────────────────────────────────────────────
 const RevealText = ({ children, delay = 0 }: { children: React.ReactNode, delay?: number }) => (
   <div className="overflow-hidden">
@@ -72,6 +70,28 @@ const RevealText = ({ children, delay = 0 }: { children: React.ReactNode, delay?
     </motion.div>
   </div>
 );
+
+// ── MARQUEE COMPONENT ─────────────────────────────────────────────────────────
+const Marquee = () => {
+  return (
+    <div className="w-full overflow-hidden bg-[#e5d9c5] text-[#0a0a0a] py-4 whitespace-nowrap flex items-center relative z-20 mix-blend-difference border-y border-white/10">
+      <motion.div 
+        animate={{ x: [0, -1000] }}
+        transition={{ repeat: Infinity, duration: 20, ease: "linear" }}
+        className="flex items-center space-x-12"
+      >
+        {[...Array(6)].map((_, i) => (
+          <React.Fragment key={i}>
+            <span className="text-sm font-bold tracking-[0.3em] uppercase">Autonomous Intelligence</span>
+            <span className="size-2 rounded-full bg-[#0a0a0a]" />
+            <span className="text-sm font-bold tracking-[0.3em] uppercase">Elite Custom Builders</span>
+            <span className="size-2 rounded-full bg-[#0a0a0a]" />
+          </React.Fragment>
+        ))}
+      </motion.div>
+    </div>
+  );
+}
 
 // ── PAGE ──────────────────────────────────────────────────────────────────────
 
@@ -87,7 +107,7 @@ export const Route = createFileRoute("/welcome")({
 
 function WelcomePage() {
   const { scrollYProgress } = useScroll();
-  const yParallax = useTransform(scrollYProgress, [0, 1], [0, 300]);
+  const yParallax = useTransform(scrollYProgress, [0, 1], [0, -150]);
 
   return (
     <div className="h-screen overflow-x-hidden overflow-y-auto relative bg-[#0a0a0a] text-[#f8f8f8] font-sans selection:bg-[#e5d9c5] selection:text-black cursor-none">
@@ -140,19 +160,32 @@ function WelcomePage() {
         </div>
       </section>
 
+      <Marquee />
+
       {/* ── ETHOS (MANIFESTO) ── */}
-      <section id="ethos" className="relative py-40 px-8 md:px-16 border-t border-white/[0.08] bg-[#0a0a0a]">
+      <section id="ethos" className="relative py-40 px-8 md:px-16 bg-[#0a0a0a]">
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-12 gap-12 relative z-10">
           <div className="md:col-span-4">
-            <h2 className="text-[11px] uppercase tracking-[0.3em] font-bold text-[#e5d9c5]">01 / The Ethos</h2>
+            <h2 className="text-[11px] uppercase tracking-[0.3em] font-bold text-[#e5d9c5] sticky top-40">01 / The Ethos</h2>
           </div>
-          <div className="md:col-span-8 overflow-hidden">
-            <motion.h3 
-              initial={{ y: "100%" }} whileInView={{ y: 0 }} viewport={{ once: false, amount: 0.3 }} transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
-              className="font-serif text-3xl md:text-5xl leading-tight text-white/90"
+          <div className="md:col-span-8">
+            <div className="overflow-hidden mb-12">
+              <motion.h3 
+                initial={{ y: "100%" }} whileInView={{ y: 0 }} viewport={{ once: false, amount: 0.3 }} transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
+                className="font-serif text-3xl md:text-5xl leading-tight text-white/90"
+              >
+                Exclusivity requires focus. We handle the noise so you can focus on the craftsmanship. WeaverFrame acts as your silent, 24/7 digital partner.
+              </motion.h3>
+            </div>
+            
+            {/* Rich Parallax Image Placeholder */}
+            <motion.div 
+              style={{ y: yParallax }}
+              className="w-full h-[500px] bg-[#111] mt-20 relative overflow-hidden flex items-center justify-center group"
             >
-              Exclusivity requires focus. We handle the noise so you can focus on the craftsmanship. WeaverFrame acts as your silent, 24/7 digital partner—intercepting leads, answering architectural queries, and curating your client pipeline with zero human intervention.
-            </motion.h3>
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(229,217,197,0.1),transparent)] opacity-50 group-hover:scale-110 transition-transform duration-1000" />
+              <div className="font-serif text-3xl italic text-white/20">The pursuit of perfection</div>
+            </motion.div>
           </div>
         </div>
       </section>
@@ -161,9 +194,9 @@ function WelcomePage() {
       <section className="border-t border-white/[0.08] py-20 px-8 md:px-16 relative z-10 bg-[#0a0a0a]">
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-16 md:gap-8 divide-y md:divide-y-0 md:divide-x divide-white/[0.08]">
           {[
-            { num: "< 30s", label: "Response Latency", desc: "Immediate, intelligent lead engagement round the clock." },
-            { num: "70B", label: "Parameter AI", desc: "Powered by the most advanced LLMs trained on real estate dynamics." },
-            { num: "0", label: "Human Effort", desc: "From first touch to booked site visit, entirely autonomous." }
+            { num: "< 30s", label: "Response Latency", desc: "Immediate, intelligent lead engagement round the clock. Never miss a high-net-worth inquiry again." },
+            { num: "70B", label: "Parameter AI", desc: "Powered by the most advanced LLMs trained specifically on luxury real estate dynamics and architectural nuance." },
+            { num: "100%", label: "Autonomous", desc: "From first touch to booked site visit on your calendar, entirely without human intervention." }
           ].map((stat, i) => (
             <div key={stat.label} className={`pt-8 md:pt-0 ${i !== 0 ? 'md:pl-16' : ''}`}>
               <div className="overflow-hidden mb-6">
@@ -184,60 +217,65 @@ function WelcomePage() {
         </div>
       </section>
 
-      {/* ── FEATURES (ASYMMETRIC) ── */}
+      {/* ── FEATURES (STICKY SCROLL) ── */}
       <section id="platform" className="border-t border-white/[0.08] py-40 px-8 md:px-16 bg-[#0a0a0a] relative z-10">
-        <div className="max-w-7xl mx-auto">
-          <div className="mb-32 overflow-hidden">
-            <motion.h2 initial={{ y: "100%" }} whileInView={{ y: 0 }} viewport={{ once: false, amount: 0.3 }} transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }} className="text-[11px] uppercase tracking-[0.3em] font-bold text-[#e5d9c5] mb-8">
-              02 / The Platform
-            </motion.h2>
-            <motion.div initial={{ y: "100%" }} whileInView={{ y: 0 }} viewport={{ once: false, amount: 0.3 }} transition={{ duration: 1, delay: 0.1, ease: [0.16, 1, 0.3, 1] }} className="font-serif text-5xl md:text-7xl leading-tight">
-              Quiet intelligence.<br />Absolute control.
-            </motion.div>
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row gap-20">
+          
+          {/* Sticky Left Column */}
+          <div className="md:w-1/3 md:sticky md:top-40 h-fit">
+            <div className="mb-32 overflow-hidden">
+              <motion.h2 initial={{ y: "100%" }} whileInView={{ y: 0 }} viewport={{ once: false, amount: 0.3 }} transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }} className="text-[11px] uppercase tracking-[0.3em] font-bold text-[#e5d9c5] mb-8">
+                02 / The Platform
+              </motion.h2>
+              <motion.div initial={{ y: "100%" }} whileInView={{ y: 0 }} viewport={{ once: false, amount: 0.3 }} transition={{ duration: 1, delay: 0.1, ease: [0.16, 1, 0.3, 1] }} className="font-serif text-5xl md:text-7xl leading-tight">
+                Quiet intelligence.<br />Absolute control.
+              </motion.div>
+            </div>
           </div>
 
-          <div className="space-y-40">
+          {/* Scrolling Right Column */}
+          <div className="md:w-2/3 space-y-40">
             {/* Feature 1 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-16 items-center">
-              <motion.div initial={{ opacity: 0, scale: 0.95 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: false, amount: 0.3 }} transition={{ duration: 1.5, ease: "easeOut" }} className="order-2 md:order-1">
-                <div className="w-full aspect-square md:aspect-[4/5] bg-[#111111] border border-white/[0.08] relative overflow-hidden flex items-center justify-center group">
-                  <div className="absolute inset-0 bg-gradient-to-br from-transparent to-[#e5d9c5]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-1000" />
-                  <div className="text-center space-y-6 z-10 mix-blend-difference opacity-80">
-                    <Circle className="size-16 mx-auto stroke-[0.5]" />
-                    <div className="font-serif text-2xl italic">Omnichannel Capture</div>
-                  </div>
+            <motion.div initial={{ opacity: 0, y: 50 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: false, amount: 0.2 }} transition={{ duration: 1 }} className="group">
+              <div className="w-full aspect-video bg-[#0f0f0f] border border-white/[0.05] relative overflow-hidden flex flex-col justify-end p-12 hover:border-white/10 transition-colors duration-700">
+                <div className="absolute inset-0 bg-gradient-to-t from-[#e5d9c5]/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+                <Circle className="size-12 text-[#e5d9c5] mb-auto stroke-1" />
+                <div className="relative z-10">
+                  <h3 className="font-serif text-4xl mb-4">Omnichannel Capture</h3>
+                  <p className="text-lg font-light text-white/50 leading-relaxed max-w-xl">
+                    Whether a client reaches out via WhatsApp, SMS, or your bespoke web portal, WeaverFrame unifies the conversation. The AI adopts your brand's unique tone, ensuring a deeply personal touch.
+                  </p>
                 </div>
-              </motion.div>
-              <div className="order-1 md:order-2 space-y-6 md:pl-16">
-                <div className="overflow-hidden">
-                  <motion.div initial={{ y: "100%" }} whileInView={{ y: 0 }} viewport={{ once: false, amount: 0.3 }} transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }} className="text-3xl font-serif">Seamless Integration</motion.div>
-                </div>
-                <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: false, amount: 0.3 }} transition={{ duration: 1, delay: 0.2 }} className="text-lg font-light text-white/50 leading-relaxed">
-                  Whether a client reaches out via WhatsApp, SMS, or your bespoke web portal, WeaverFrame unifies the conversation. The AI adopts your brand's unique tone, ensuring a deeply personal touch.
-                </motion.p>
               </div>
-            </div>
+            </motion.div>
 
             {/* Feature 2 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-16 items-center">
-              <div className="space-y-6 md:pr-16">
-                <div className="overflow-hidden">
-                  <motion.div initial={{ y: "100%" }} whileInView={{ y: 0 }} viewport={{ once: false, amount: 0.3 }} transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }} className="text-3xl font-serif">The AI Concierge</motion.div>
+            <motion.div initial={{ opacity: 0, y: 50 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: false, amount: 0.2 }} transition={{ duration: 1 }} className="group">
+              <div className="w-full aspect-video bg-[#0f0f0f] border border-white/[0.05] relative overflow-hidden flex flex-col justify-end p-12 hover:border-white/10 transition-colors duration-700">
+                <div className="absolute inset-0 bg-gradient-to-t from-[#e5d9c5]/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+                <Pyramid className="size-12 text-[#e5d9c5] mb-auto stroke-1" />
+                <div className="relative z-10">
+                  <h3 className="font-serif text-4xl mb-4">Autonomous Conversion</h3>
+                  <p className="text-lg font-light text-white/50 leading-relaxed max-w-xl">
+                    It doesn't just answer questions; it drives intent. By flawlessly handling objections and dynamically referencing your floor plans and pricing, the concierge converts casual inquiries into scheduled site visits.
+                  </p>
                 </div>
-                <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: false, amount: 0.3 }} transition={{ duration: 1, delay: 0.2 }} className="text-lg font-light text-white/50 leading-relaxed">
-                  It doesn't just answer questions; it drives intent. By flawlessly handling objections and dynamically referencing your floor plans and pricing, the concierge converts casual inquiries into scheduled site visits.
-                </motion.p>
               </div>
-              <motion.div initial={{ opacity: 0, scale: 0.95 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: false, amount: 0.3 }} transition={{ duration: 1.5, ease: "easeOut" }}>
-                <div className="w-full aspect-square md:aspect-[4/5] bg-[#111111] border border-white/[0.08] relative overflow-hidden flex items-center justify-center group">
-                  <div className="absolute inset-0 bg-gradient-to-bl from-transparent to-[#e5d9c5]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-1000" />
-                  <div className="text-center space-y-6 z-10 mix-blend-difference opacity-80">
-                    <Pyramid className="size-16 mx-auto stroke-[0.5]" />
-                    <div className="font-serif text-2xl italic">Autonomous Conversion</div>
-                  </div>
+            </motion.div>
+            
+            {/* Feature 3 */}
+            <motion.div initial={{ opacity: 0, y: 50 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: false, amount: 0.2 }} transition={{ duration: 1 }} className="group">
+              <div className="w-full aspect-video bg-[#0f0f0f] border border-white/[0.05] relative overflow-hidden flex flex-col justify-end p-12 hover:border-white/10 transition-colors duration-700">
+                <div className="absolute inset-0 bg-gradient-to-t from-[#e5d9c5]/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+                <Box className="size-12 text-[#e5d9c5] mb-auto stroke-1" />
+                <div className="relative z-10">
+                  <h3 className="font-serif text-4xl mb-4">Agency Command</h3>
+                  <p className="text-lg font-light text-white/50 leading-relaxed max-w-xl">
+                    Manage your entire portfolio of builders from a single, austere dashboard. With strict multi-tenant isolation, cross-builder analytics, and impersonation capabilities, you possess total operational oversight.
+                  </p>
                 </div>
-              </motion.div>
-            </div>
+              </div>
+            </motion.div>
           </div>
         </div>
       </section>
