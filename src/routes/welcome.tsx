@@ -206,7 +206,15 @@ function WelcomePage() {
 
       {/* ── SOCIAL PROOF (Marquee) ── */}
       <div className="relative z-10 border-y border-white/5 py-12 overflow-hidden">
-        <p className="text-center text-[10px] text-white/20 uppercase tracking-[0.4em] font-bold mb-10">Trusted by Elite Custom Home Builders Across India</p>
+        <div className="flex items-center justify-center gap-6 mb-10">
+          <div className="h-px flex-1 max-w-[120px] bg-gradient-to-r from-transparent to-white/10" />
+          <div className="flex items-center gap-2">
+            <div className="size-1 rounded-full bg-emerald-500" />
+            <span className="text-[10px] text-white/25 font-black uppercase tracking-[0.5em]">Growing Network</span>
+            <div className="size-1 rounded-full bg-emerald-500" />
+          </div>
+          <div className="h-px flex-1 max-w-[120px] bg-gradient-to-l from-transparent to-white/10" />
+        </div>
         <div className="flex gap-20 animate-marquee whitespace-nowrap">
           {[...Array(2)].map((_, ri) =>
             [
@@ -241,7 +249,7 @@ function WelcomePage() {
                 key={num}
                 initial={{ opacity: 0, y: 30 }}
                 whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
+                viewport={{ once: false, amount: 0.25 }}
                 transition={{ duration: 0.6, delay: i * 0.12 }}
                 whileHover={{ scale: 1.02, y: -4 }}
                 className={`relative rounded-3xl p-8 border overflow-hidden cursor-default group
@@ -267,8 +275,8 @@ function WelcomePage() {
 
         {/* Section Header */}
         <div className="max-w-[1300px] mx-auto px-8 text-center pb-20">
-          <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} className="text-xs font-black uppercase tracking-[0.3em] text-emerald-400 mb-4">Platform Capabilities</motion.p>
-          <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-5xl md:text-6xl font-black tracking-tighter">
+          <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: false, amount: 0.25 }} className="text-xs font-black uppercase tracking-[0.3em] text-emerald-400 mb-4">Platform Capabilities</motion.p>
+          <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: false, amount: 0.25 }} className="text-5xl md:text-6xl font-black tracking-tighter">
             The AI Operating System<br />for Home Builders.
           </motion.h2>
         </div>
@@ -278,7 +286,7 @@ function WelcomePage() {
           <div className="absolute inset-0 bg-gradient-to-r from-emerald-950/40 via-transparent to-transparent" />
           <div className="absolute top-0 left-0 w-96 h-96 bg-emerald-500/8 rounded-full blur-[100px]" />
           <div className="max-w-[1300px] mx-auto px-8 flex flex-col lg:flex-row items-center gap-16 relative z-10">
-            <motion.div initial={{ opacity: 0, x: -40 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }} className="flex-1 space-y-6">
+            <motion.div initial={{ opacity: 0, x: -40 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: false, amount: 0.25 }} transition={{ duration: 0.7 }} className="flex-1 space-y-6">
               <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold tracking-widest uppercase">
                 <Bot className="size-3.5" /> AI Concierge
               </div>
@@ -301,7 +309,7 @@ function WelcomePage() {
             </motion.div>
 
             {/* AI Chat Mockup */}
-            <motion.div initial={{ opacity: 0, x: 40 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }} className="flex-1 w-full">
+            <motion.div initial={{ opacity: 0, x: 40 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: false, amount: 0.25 }} transition={{ duration: 0.7 }} className="flex-1 w-full">
               <div className="relative rounded-3xl bg-[#060606] border border-white/8 overflow-hidden shadow-[0_0_80px_rgba(0,0,0,0.8)]">
                 {/* Mockup Header */}
                 <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
@@ -362,7 +370,7 @@ function WelcomePage() {
           <div className="absolute inset-0 bg-gradient-to-l from-blue-950/40 via-transparent to-transparent" />
           <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/8 rounded-full blur-[100px]" />
           <div className="max-w-[1300px] mx-auto px-8 flex flex-col lg:flex-row-reverse items-center gap-16 relative z-10">
-            <motion.div initial={{ opacity: 0, x: 40 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }} className="flex-1 space-y-6">
+            <motion.div initial={{ opacity: 0, x: 40 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: false, amount: 0.25 }} transition={{ duration: 0.7 }} className="flex-1 space-y-6">
               <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-bold tracking-widest uppercase">
                 <Shield className="size-3.5" /> Agency Control
               </div>
@@ -385,7 +393,7 @@ function WelcomePage() {
             </motion.div>
 
             {/* Agency Dashboard Mockup */}
-            <motion.div initial={{ opacity: 0, x: -40 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }} className="flex-1 w-full">
+            <motion.div initial={{ opacity: 0, x: -40 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: false, amount: 0.25 }} transition={{ duration: 0.7 }} className="flex-1 w-full">
               <div className="relative rounded-3xl bg-[#060606] border border-white/8 overflow-hidden shadow-[0_0_80px_rgba(0,0,0,0.8)] p-6 space-y-3">
                 <div className="flex items-center justify-between mb-2">
                   <div className="text-xs font-black uppercase tracking-widest text-white/30">Agency Admin</div>
@@ -401,7 +409,7 @@ function WelcomePage() {
                     key={name}
                     initial={{ opacity: 0, x: -20 }}
                     whileInView={{ opacity: 1, x: 0 }}
-                    viewport={{ once: true }}
+                    viewport={{ once: false, amount: 0.25 }}
                     transition={{ delay: i * 0.1 }}
                     className={`rounded-2xl bg-white/[0.03] border border-white/6 px-5 py-3.5 flex items-center justify-between hover:bg-white/[0.06] hover:border-${color}-500/20 transition-all duration-300 cursor-default group`}
                   >
@@ -431,16 +439,16 @@ function WelcomePage() {
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_60%_at_50%_0%,rgba(16,185,129,0.05),transparent)] pointer-events-none" />
         <div className="max-w-[1100px] mx-auto px-8 relative z-10">
           <div className="text-center mb-20">
-            <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} className="text-xs font-black uppercase tracking-[0.3em] text-emerald-400 mb-3">Pricing</motion.p>
-            <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-5xl font-black tracking-tighter mb-3">
+            <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: false, amount: 0.25 }} className="text-xs font-black uppercase tracking-[0.3em] text-emerald-400 mb-3">Pricing</motion.p>
+            <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: false, amount: 0.25 }} className="text-5xl font-black tracking-tighter mb-3">
               Transparent. Scalable. <span className="text-emerald-400">Profitable.</span>
             </motion.h2>
-            <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} className="text-lg text-white/40 font-light">An AI concierge that pays for itself on the very first converted lead.</motion.p>
+            <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: false, amount: 0.25 }} className="text-lg text-white/40 font-light">An AI concierge that pays for itself on the very first converted lead.</motion.p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
             {/* Starter */}
-            <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6 }}
+            <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: false, amount: 0.25 }} transition={{ duration: 0.6 }}
               whileHover={{ scale: 1.02 }}
               className="rounded-3xl bg-gradient-to-b from-white/[0.04] to-transparent border border-white/8 p-9 flex flex-col hover:border-white/15 transition-all duration-500 cursor-default"
             >
@@ -467,7 +475,7 @@ function WelcomePage() {
             </motion.div>
 
             {/* Pro */}
-            <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6, delay: 0.1 }}
+            <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: false, amount: 0.25 }} transition={{ duration: 0.6, delay: 0.1 }}
               whileHover={{ scale: 1.02 }}
               className="rounded-3xl bg-gradient-to-b from-emerald-500/8 to-transparent border border-emerald-500/25 p-9 flex flex-col relative overflow-hidden hover:border-emerald-500/40 hover:shadow-[0_0_60px_rgba(16,185,129,0.12)] transition-all duration-500 cursor-default"
             >
@@ -511,12 +519,12 @@ function WelcomePage() {
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_100%,rgba(16,185,129,0.1),transparent)]" />
         <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-emerald-500/8 rounded-full blur-[80px]" />
         <div className="max-w-[900px] mx-auto px-8 py-32 text-center relative z-10 space-y-8">
-          <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} className="text-xs font-black uppercase tracking-[0.3em] text-emerald-400">Get Started</motion.p>
-          <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-5xl md:text-6xl font-black tracking-tighter leading-tight">
+          <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: false, amount: 0.25 }} className="text-xs font-black uppercase tracking-[0.3em] text-emerald-400">Get Started</motion.p>
+          <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: false, amount: 0.25 }} className="text-5xl md:text-6xl font-black tracking-tighter leading-tight">
             Ready to build a 7-figure<br />agency pipeline?
           </motion.h2>
-          <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} className="text-xl text-white/40 font-light">Join the most exclusive AI platform for custom home builders. First 10 agencies get 2 months free.</motion.p>
-          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
+          <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: false, amount: 0.25 }} className="text-xl text-white/40 font-light">Join the most exclusive AI platform for custom home builders. First 10 agencies get 2 months free.</motion.p>
+          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: false, amount: 0.25 }} className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
             <a href="mailto:contact@weaverframe.com" className="inline-flex items-center gap-3 px-10 py-5 bg-white text-black font-black rounded-full hover:scale-105 hover:shadow-[0_0_60px_rgba(255,255,255,0.2)] transition-all duration-300">
               Contact Enterprise Sales <ArrowRight className="size-5" />
             </a>
