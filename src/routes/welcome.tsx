@@ -36,7 +36,7 @@ function WelcomePage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#030303] text-white overflow-x-hidden selection:bg-emerald-500/30 font-sans relative">
+    <div className="h-screen bg-[#030303] text-white overflow-x-hidden overflow-y-auto selection:bg-emerald-500/30 font-sans relative">
       
       {/* ── AMBIENT 3D BACKGROUND GLOWS ── */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
