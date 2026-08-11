@@ -107,7 +107,7 @@ function WelcomePage() {
   const yParallax = useTransform(scrollYProgress, [0, 1], [0, 300]);
 
   return (
-    <div className="bg-[#0a0a0a] text-[#f8f8f8] font-sans selection:bg-[#e5d9c5] selection:text-black">
+    <div className="h-screen overflow-x-hidden overflow-y-auto relative bg-[#0a0a0a] text-[#f8f8f8] font-sans selection:bg-[#e5d9c5] selection:text-black">
       
       {/* ── HEADER ── */}
       <header className="fixed top-0 w-full z-50 mix-blend-difference border-b border-white/[0.08] px-8 py-6 flex items-center justify-between">
