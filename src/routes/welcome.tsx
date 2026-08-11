@@ -16,8 +16,8 @@ export const Route = createFileRoute("/welcome")({
 function WelcomePage() {
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Global Scroll Progress
-  const { scrollYProgress } = useScroll({ target: containerRef });
+  // Global Scroll Progress (tracked on the scrollable container)
+  const { scrollYProgress } = useScroll({ container: containerRef });
   const smoothScroll = useSpring(scrollYProgress, { damping: 20, stiffness: 100, mass: 0.5 });
 
   // Mouse Tracking for ambient glows
@@ -63,7 +63,7 @@ function WelcomePage() {
   const footerOpacity = useTransform(smoothScroll, [0.8, 0.95], [0, 1]);
 
   return (
-    <div ref={containerRef} className="bg-[#020202] text-white overflow-x-hidden selection:bg-emerald-500/30 font-sans relative">
+    <div ref={containerRef} className="h-screen bg-[#020202] text-white overflow-x-hidden overflow-y-auto selection:bg-emerald-500/30 font-sans relative">
       
       {/* ── AMBIENT MOUSE GLOW ── */}
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden flex items-center justify-center">
@@ -85,13 +85,26 @@ function WelcomePage() {
             <Layers className="size-6 text-white" />
             <span className="font-display text-xl font-bold tracking-widest uppercase text-white">WeaverFrame</span>
           </div>
+          
+          <div className="hidden md:flex items-center gap-8">
+            <a href="#features" className="text-sm font-medium text-white/70 hover:text-white transition-colors">Platform</a>
+            <a href="#ai" className="text-sm font-medium text-white/70 hover:text-white transition-colors">AI Concierge</a>
+            <a href="#pricing" className="text-sm font-medium text-white/70 hover:text-white transition-colors">Pricing</a>
+          </div>
+
           <div className="flex items-center gap-6">
             <Link 
               to="/login"
-              className="text-sm font-bold text-white hover:text-emerald-400 transition-colors uppercase tracking-widest"
+              className="text-sm font-bold text-white hover:text-emerald-400 transition-colors uppercase tracking-widest hidden sm:block"
             >
               Sign In
             </Link>
+            <a 
+              href="mailto:contact@weaverframe.com"
+              className="px-6 py-2.5 rounded-full text-sm font-bold bg-white text-black hover:bg-white/90 transition-all"
+            >
+              Book a Demo
+            </a>
           </div>
         </div>
       </nav>
