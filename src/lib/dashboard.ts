@@ -1039,8 +1039,10 @@ You must respond ONLY with a valid JSON object matching this TypeScript type:
 }
 
 Example of when to set bookingDetails:
-- Lead says: "Yes, August 15th at 4 PM works!" and you confirm it → set bookingDetails: { "isoDateTime": "2026-08-15T16:00:00.000Z", "type": "Site visit" }
+- Lead says: "Yes, August 15th at 4 PM works!" and builder is in America/Chicago (UTC-5) → convert 4 PM local to UTC: set bookingDetails: { "isoDateTime": "2026-08-15T21:00:00.000Z", "type": "Site visit" }
+- Lead says: "November 11th at 11 AM" and builder is in America/Chicago (UTC-5) → set bookingDetails: { "isoDateTime": "2026-11-11T17:00:00.000Z", "type": "Site visit" }
 - Lead is just asking about pricing or general info → set bookingDetails: null
+- IMPORTANT: isoDateTime must always be the UTC equivalent. Subtract the timezone offset from the local time. America/Chicago is UTC-6 (CST) or UTC-5 (CDT). Asia/Kolkata is UTC+5:30.
 
 Lead Context:
 - Client Name: ${leadName}
