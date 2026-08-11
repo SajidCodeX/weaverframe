@@ -204,35 +204,101 @@ function WelcomePage() {
         </div>
       </section>
 
-      {/* ── SOCIAL PROOF (Marquee) ── */}
-      <div className="relative z-10 border-y border-white/5 py-12 overflow-hidden">
-        <div className="flex items-center justify-center gap-6 mb-10">
-          <div className="h-px flex-1 max-w-[120px] bg-gradient-to-r from-transparent to-white/10" />
-          <div className="flex items-center gap-2">
-            <div className="size-1 rounded-full bg-emerald-500" />
-            <span className="text-[10px] text-white/25 font-black uppercase tracking-[0.5em]">Growing Network</span>
-            <div className="size-1 rounded-full bg-emerald-500" />
+
+      {/* ── HOW IT WORKS ── */}
+      <div className="relative z-10 border-y border-white/5 py-24 overflow-hidden">
+        {/* Subtle radial glow */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_60%_at_50%_50%,rgba(16,185,129,0.04),transparent)] pointer-events-none" />
+
+        <div className="max-w-[1200px] mx-auto px-8 relative z-10">
+          <div className="text-center mb-20">
+            <motion.p
+              initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: false, amount: 0.5 }}
+              className="text-[10px] font-black uppercase tracking-[0.45em] text-emerald-400 mb-3"
+            >
+              How It Works
+            </motion.p>
+            <motion.h2
+              initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: false, amount: 0.5 }} transition={{ delay: 0.1 }}
+              className="text-4xl md:text-5xl font-black tracking-tighter"
+            >
+              From inquiry to signed deal.<br />
+              <span className="text-white/30">Zero effort from you.</span>
+            </motion.h2>
           </div>
-          <div className="h-px flex-1 max-w-[120px] bg-gradient-to-l from-transparent to-white/10" />
-        </div>
-        <div className="flex gap-20 animate-marquee whitespace-nowrap">
-          {[...Array(2)].map((_, ri) =>
-            [
-              { Icon: Layers, name: "Apex Homes" },
-              { Icon: Bot, name: "Elevate Build" },
-              { Icon: Zap, name: "Nova Estates" },
-              { Icon: Shield, name: "Prime Struct" },
-              { Icon: Building2, name: "Horizon Builders" },
-              { Icon: Users, name: "CrestLine Homes" },
-            ].map(({ Icon, name }, i) => (
-              <div key={`${ri}-${i}`} className="inline-flex items-center gap-3 text-white/20 hover:text-white/60 transition-colors duration-500 cursor-default flex-shrink-0">
-                <Icon className="size-5" />
-                <span className="text-lg font-black tracking-tight">{name}</span>
-              </div>
-            ))
-          )}
+
+          {/* Steps */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 relative">
+            {/* Connecting line (desktop only) */}
+            <div className="hidden md:block absolute top-10 left-[calc(16.66%+16px)] right-[calc(16.66%+16px)] h-px bg-gradient-to-r from-emerald-500/30 via-blue-500/30 to-purple-500/30" />
+
+            {[
+              {
+                num: "01",
+                color: "emerald",
+                icon: Zap,
+                title: "Lead Arrives",
+                body: "A prospect inquires about your project via WhatsApp, SMS, or your portal. WeaverFrame captures it instantly, 24/7.",
+                badge: "Any Channel",
+              },
+              {
+                num: "02",
+                color: "blue",
+                icon: Bot,
+                title: "AI Takes Over",
+                body: "Our 70B AI Concierge responds within 30 seconds. It handles objections, shares pricing, and books a site visit on your calendar.",
+                badge: "< 30s Response",
+              },
+              {
+                num: "03",
+                color: "purple",
+                icon: Building2,
+                title: "You Close the Deal",
+                body: "Show up to a pre-qualified, site-visit-ready prospect. No cold follow-ups, no chasing. Just walk in and convert.",
+                badge: "Higher Close Rate",
+              },
+            ].map(({ num, color, icon: Icon, title, body, badge }, i) => (
+              <motion.div
+                key={num}
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: false, amount: 0.3 }}
+                transition={{ duration: 0.6, delay: i * 0.15 }}
+                className="relative group"
+              >
+                {/* Card */}
+                <div className={`rounded-3xl bg-gradient-to-b from-white/[0.04] to-transparent border border-white/8 p-8 h-full flex flex-col gap-5 hover:border-${color}-500/25 transition-all duration-500`}>
+                  {/* Step number + icon row */}
+                  <div className="flex items-center justify-between">
+                    <span className={`text-5xl font-black text-${color}-500/20 leading-none`}>{num}</span>
+                    <div className={`size-12 rounded-2xl bg-${color}-500/10 border border-${color}-500/20 flex items-center justify-center group-hover:scale-110 transition-transform duration-300`}>
+                      <Icon className={`size-6 text-${color}-400`} />
+                    </div>
+                  </div>
+
+                  {/* Badge */}
+                  <div className={`self-start px-3 py-1 rounded-full bg-${color}-500/10 border border-${color}-500/20 text-[10px] font-black uppercase tracking-widest text-${color}-400`}>
+                    {badge}
+                  </div>
+
+                  <div>
+                    <h3 className="text-xl font-black mb-2">{title}</h3>
+                    <p className="text-sm text-white/40 leading-relaxed font-light">{body}</p>
+                  </div>
+                </div>
+
+                {/* Arrow between cards (desktop) */}
+                {i < 2 && (
+                  <div className="hidden md:flex absolute top-10 -right-3 z-10 size-6 rounded-full bg-[#020202] border border-white/10 items-center justify-center">
+                    <ArrowRight className="size-3 text-white/30" />
+                  </div>
+                )}
+              </motion.div>
+            ))}
+          </div>
         </div>
       </div>
+
 
       {/* ── STATS (Glassmorphism Cards) ── */}
       <div className="py-28 relative z-10">
