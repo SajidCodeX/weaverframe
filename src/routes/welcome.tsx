@@ -112,7 +112,7 @@ export const Route = createFileRoute("/welcome")({
 
 function WelcomePage() {
   return (
-    <div className="min-h-screen bg-[#020202] text-white font-sans relative overflow-x-hidden">
+    <div className="h-screen bg-[#020202] text-white font-sans relative overflow-x-hidden overflow-y-auto">
 
       {/* Ambient top glow */}
       <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[900px] h-[400px] bg-emerald-500/8 blur-[130px] rounded-full pointer-events-none z-0" />
