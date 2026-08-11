@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useRouterState, useRouteContext } from "@tanstack/react-router";
 import {
   Home,
@@ -86,20 +87,27 @@ export function Sidebar({
     window.location.href = '/admin/builders';
   };
 
+  const [isHovered, setIsHovered] = useState(false);
+  
+  // The sidebar is visually collapsed ONLY if it is pinned collapsed AND not hovered
+  const actuallyCollapsed = isCollapsed && !isHovered;
+
   return (
     <aside
-      className={`fixed inset-y-0 left-0 bg-sidebar border-r border-border flex flex-col z-20 transition-all duration-300 ${
-        isCollapsed ? "w-[70px]" : "w-[240px]"
-      }`}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      className={`fixed inset-y-0 left-0 bg-sidebar border-r border-border flex flex-col z-50 transition-all duration-300 ${
+        actuallyCollapsed ? "w-[70px]" : "w-[240px]"
+      } ${isHovered && isCollapsed ? "shadow-2xl border-r-white/10" : ""}`}
     >
 
 
       {/* ── Logo (Click to Toggle) ── */}
       <div
         onClick={onToggle}
-        title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+        title={actuallyCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
         className={`h-[60px] flex items-center px-5 border-b border-border transition-all duration-300 cursor-pointer hover:bg-white/[0.02] select-none ${
-          isCollapsed ? "justify-center" : "gap-3"
+          actuallyCollapsed ? "justify-center" : "gap-3"
         }`}
       >
         {/* Layers icon logo */}
@@ -108,7 +116,7 @@ export function Sidebar({
         </div>
         <span
           className={`font-display text-base font-semibold tracking-[0.08em] uppercase text-foreground transition-all duration-300 origin-left ${
-            isCollapsed ? "opacity-0 w-0 scale-x-0 overflow-hidden ml-0" : "opacity-100 w-auto scale-x-100 ml-0"
+            actuallyCollapsed ? "opacity-0 w-0 scale-x-0 overflow-hidden ml-0" : "opacity-100 w-auto scale-x-100 ml-0"
           }`}
         >
           WeaverFrame
@@ -131,8 +139,8 @@ export function Sidebar({
               preloadDelay={50}
               className={`group relative flex items-center rounded-md text-sm transition-all duration-300 ${
                 active ? "nav-active" : "nav-inactive"
-              } px-3 py-2 ${isCollapsed ? "gap-0" : "gap-3"}`}
-              title={isCollapsed ? item.label : undefined}
+              } px-3 py-2 ${actuallyCollapsed ? "gap-0" : "gap-3"}`}
+              title={actuallyCollapsed ? item.label : undefined}
             >
               {/* Active left indicator */}
               {active && (
@@ -147,7 +155,7 @@ export function Sidebar({
 
               <span
                 className={`transition-all duration-300 origin-left truncate ${
-                  isCollapsed ? "opacity-0 w-0 scale-x-0 overflow-hidden" : "opacity-100 w-auto scale-x-100"
+                  actuallyCollapsed ? "opacity-0 w-0 scale-x-0 overflow-hidden" : "opacity-100 w-auto scale-x-100"
                 }`}
               >
                 {item.label}
@@ -155,7 +163,7 @@ export function Sidebar({
 
               {/* AI Activity live badge */}
               {item.badge && (
-                <span className={`relative flex size-2 shrink-0 transition-all duration-300 ${isCollapsed ? "absolute top-1.5 right-1.5" : ""}`}>
+                <span className={`relative flex size-2 shrink-0 transition-all duration-300 ${actuallyCollapsed ? "absolute top-1.5 right-1.5" : ""}`}>
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-60" />
                   <span className="relative inline-flex rounded-full size-2 bg-success" />
                 </span>
@@ -170,7 +178,7 @@ export function Sidebar({
         {/* Company block */}
         <div
           className={`px-2 py-1.5 transition-all duration-300 origin-top overflow-hidden ${
-            isCollapsed ? "opacity-0 max-h-0 py-0 mb-0" : "opacity-100 max-h-[100px] mb-1"
+            actuallyCollapsed ? "opacity-0 max-h-0 py-0 mb-0" : "opacity-100 max-h-[100px] mb-1"
           }`}
         >
           <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-widest">
@@ -181,7 +189,7 @@ export function Sidebar({
           </div>
         </div>
 
-        {isAdminPreviewingBuilder && !isCollapsed && (
+        {isAdminPreviewingBuilder && !actuallyCollapsed && (
           <button
             onClick={handleExitPreview}
             className="w-full inline-flex items-center justify-center gap-1.5 text-xs px-2 py-1.5 rounded-md border border-warning/30 bg-warning/10 text-warning hover:bg-warning/20 transition-colors"
@@ -195,9 +203,9 @@ export function Sidebar({
         {/* Profile row */}
         <div
           className={`flex items-center rounded-md hover:bg-white/[0.04] transition-all duration-300 overflow-hidden px-2 py-2 ${
-            isCollapsed ? "gap-0" : "gap-3"
+            actuallyCollapsed ? "gap-0" : "gap-3"
           }`}
-          title={isCollapsed ? "Profile" : undefined}
+          title={actuallyCollapsed ? "Profile" : undefined}
         >
           <div className="relative shrink-0">
             <div className="size-9 rounded-full bg-white/10 border border-white/15 text-foreground flex items-center justify-center text-sm font-semibold font-display">
@@ -212,7 +220,7 @@ export function Sidebar({
 
           <div
             className={`min-w-0 transition-all duration-300 origin-left flex-1 ${
-              isCollapsed ? "opacity-0 w-0 scale-x-0 overflow-hidden" : "opacity-100 w-auto scale-x-100"
+              actuallyCollapsed ? "opacity-0 w-0 scale-x-0 overflow-hidden" : "opacity-100 w-auto scale-x-100"
             }`}
           >
             <div className="text-sm text-foreground truncate font-medium">
@@ -224,7 +232,7 @@ export function Sidebar({
           <button 
             onClick={handleLogout}
             className={`shrink-0 p-1.5 text-muted-foreground hover:text-white rounded-md hover:bg-white/10 transition-colors ${
-              isCollapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100 w-auto"
+              actuallyCollapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100 w-auto"
             }`}
             title="Log out"
           >
