@@ -690,7 +690,7 @@ function LeadsPage() {
           <>
             <div className="overflow-x-auto overflow-y-auto flex-1 min-h-0 border-t border-border custom-scrollbar">
               <table className="w-full text-sm">
-                <thead className="bg-secondary/50">
+                <thead className="sticky top-0 z-20 bg-secondary/95 backdrop-blur border-b border-border shadow-xs">
                   <tr className="text-center text-xs text-muted-foreground uppercase tracking-wider">
                     <th className="px-4 py-3 font-medium text-center">#</th>
                     <th className="px-4 py-3 font-medium text-center">Name</th>
@@ -714,7 +714,7 @@ function LeadsPage() {
                       <tr
                         key={lead.id}
                         onClick={() => setSelected(lead)}
-                        className={`border-t border-border cursor-pointer transition-all duration-150 hover:bg-white/[0.03] hover:border-l-2 hover:border-l-white/20 ${i % 2 ? "bg-card" : "bg-card/60"}`}
+                        className={`border-t border-border cursor-pointer transition-colors duration-100 hover:bg-white/[0.06] ${i % 2 ? "bg-card" : "bg-card/60"}`}
                       >
                         <td className="px-4 py-3 font-mono text-muted-foreground text-xs text-center">{String(globalIndex + 1).padStart(2, "0")}</td>
                         <td className="px-4 py-3 font-medium text-foreground text-center">
@@ -1608,7 +1608,7 @@ function KanbanColumn({ column, leads, ...cardProps }: KanbanColumnProps) {
   return (
     <div className={`flex flex-col flex-1 min-w-0 rounded-xl border-t-2 ${column.accent} bg-card/60 border border-border overflow-hidden`}>
       {/* Column Header */}
-      <div className={`px-3 py-2.5 ${column.headerBg} border-b border-border flex items-center justify-between`}>
+      <div className={`px-3 py-2.5 ${column.headerBg} border-b border-border flex items-center justify-between shrink-0`}>
         <div className="flex items-center gap-2">
           <span className="text-base leading-none">{column.icon}</span>
           <span className={`text-xs font-semibold uppercase tracking-wider ${column.headerText}`}>
