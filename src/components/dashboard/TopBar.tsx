@@ -131,13 +131,13 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
       ]
     : [
         { title: "Dashboard Overview", url: "/" },
+        { title: "Messages & Inbox", url: "/messages" },
         { title: "Leads Database", url: "/leads" },
-        { title: "Review Booster", url: "/reviews" },
-        { title: "AI Activity Logs", url: "/ai-activity" },
         { title: "Appointments Calendar", url: "/appointments" },
-        { title: "Messages", url: "/messages" },
-        { title: "Reports", url: "/reports" },
-        { title: "Team Management", url: "/team" },
+        { title: "AI Activity & Brain", url: "/ai-activity" },
+        // { title: "Review Booster", url: "/reviews" },
+        // { title: "Reports", url: "/reports" },
+        // { title: "Team Management", url: "/team" },
         { title: "Settings", url: "/settings" },
       ];
 

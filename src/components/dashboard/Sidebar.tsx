@@ -22,13 +22,13 @@ import { stopBuilderPreview } from "@/lib/admin";
 
 const builderItems = [
   { to: "/",             label: "Overview",     icon: Home,          exact: true },
+  { to: "/messages",     label: "Inbox",        icon: MessageSquare },
   { to: "/leads",        label: "Leads",        icon: Users },
-  { to: "/reviews",      label: "Reviews",      icon: Star },
-  { to: "/ai-activity",  label: "AI Activity",  icon: Bot,           badge: true },
   { to: "/appointments", label: "Appointments", icon: Calendar },
-  { to: "/messages",     label: "Messages",     icon: MessageSquare },
-  { to: "/reports",      label: "Reports",      icon: BarChart3 },
-  { to: "/team",         label: "Team",         icon: Users },
+  { to: "/ai-activity",  label: "AI Brain",     icon: Bot,           badge: true },
+  // { to: "/reviews",      label: "Reviews",      icon: Star },
+  // { to: "/reports",      label: "Reports",      icon: BarChart3 },
+  // { to: "/team",         label: "Team",         icon: Users },
   { to: "/settings",     label: "Settings",     icon: Settings },
 ];
 
