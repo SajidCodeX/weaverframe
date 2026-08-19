@@ -142,75 +142,6 @@ function WelcomePage() {
     };
   }, []);
 
-  // ── FULL 3-AXIS (X, Y, Z) SPATIAL ENGINE ──
-  const heroCardRef = useRef<HTMLDivElement>(null);
-  const mouseX = useMotionValue(0);
-  const mouseY = useMotionValue(0);
-
-  // 3-Axis Springs (X = Pitch, Y = Yaw, Z = Roll)
-  const rotateX = useSpring(useTransform(mouseY, [-0.5, 0.5], [12, -12]), { damping: 20, stiffness: 180 });
-  const rotateY = useSpring(useTransform(mouseX, [-0.5, 0.5], [-14, 14]), { damping: 20, stiffness: 180 });
-  const rotateZ = useSpring(
-    useTransform([mouseX, mouseY], ([latestX, latestY]: any) => latestX * latestY * 16),
-    { damping: 20, stiffness: 180 }
-  );
-
-  const [cursorPos, setCursorPos] = useState({ x: 0, y: 0, opacity: 0 });
-  const [heroMode, setHeroMode] = useState<"night" | "lidar" | "wireframe">("night");
-  const [hoveredLayer, setHoveredLayer] = useState<string | null>(null);
-  const [isAutoOrbit, setIsAutoOrbit] = useState<boolean>(false);
-  const [axisCoords, setAxisCoords] = useState({ x: 0, y: 0, z: 0 });
-
-  // Auto-orbit loop
-  useEffect(() => {
-    if (!isAutoOrbit) return;
-    let frameId: number;
-    let t = 0;
-    const loop = () => {
-      t += 0.02;
-      mouseX.set(Math.sin(t) * 0.4);
-      mouseY.set(Math.cos(t * 0.8) * 0.35);
-      frameId = requestAnimationFrame(loop);
-    };
-    frameId = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(frameId);
-  }, [isAutoOrbit]);
-
-  // Update real-time 3-Axis angle display
-  useEffect(() => {
-    const unsubX = rotateX.on("change", (latest) => setAxisCoords((prev) => ({ ...prev, x: Math.round(latest * 10) / 10 })));
-    const unsubY = rotateY.on("change", (latest) => setAxisCoords((prev) => ({ ...prev, y: Math.round(latest * 10) / 10 })));
-    const unsubZ = rotateZ.on("change", (latest) => setAxisCoords((prev) => ({ ...prev, z: Math.round(latest * 10) / 10 })));
-    return () => {
-      unsubX();
-      unsubY();
-      unsubZ();
-    };
-  }, [rotateX, rotateY, rotateZ]);
-
-  const handleHeroMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (isAutoOrbit) return;
-    if (!heroCardRef.current) return;
-    const rect = heroCardRef.current.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width - 0.5;
-    const y = (e.clientY - rect.top) / rect.height - 0.5;
-    mouseX.set(x);
-    mouseY.set(y);
-
-    setCursorPos({
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
-      opacity: 1,
-    });
-  };
-
-  const handleHeroMouseLeave = () => {
-    if (isAutoOrbit) return;
-    mouseX.set(0);
-    mouseY.set(0);
-    setCursorPos((prev) => ({ ...prev, opacity: 0 }));
-  };
-
   // Demo Modal State
   const [isDemoModalOpen, setIsDemoModalOpen] = useState(false);
   const [demoForm, setDemoForm] = useState({ name: "", company: "", email: "", phone: "", buildVolume: "$1M - $3M" });
@@ -474,140 +405,22 @@ function WelcomePage() {
             </div>
           </div>
 
-          {/* RIGHT COLUMN: Interactive 3-Axis Perspective Exploded Villa Viewport */}
-          <div className="lg:col-span-7 relative flex items-center justify-center [perspective:1400px]">
+          {/* RIGHT COLUMN: Frameless, Grand-Scale Exploded Villa Image */}
+          <div className="lg:col-span-7 relative flex items-center justify-center">
+            {/* Ambient Background Glow */}
+            <div className="absolute inset-0 bg-radial from-[#c9a84c]/[0.06] via-transparent to-transparent rounded-full blur-3xl pointer-events-none" />
+
             <motion.div
-              ref={heroCardRef}
-              onMouseMove={handleHeroMouseMove}
-              onMouseLeave={handleHeroMouseLeave}
-              style={{
-                rotateX,
-                rotateY,
-                rotateZ,
-                transformStyle: "preserve-3d",
-              }}
-              className="relative w-full rounded-2xl border border-white/[0.12] bg-[#07080b]/90 backdrop-blur-2xl shadow-[0_30px_70px_-15px_rgba(0,0,0,0.95)] overflow-hidden group transition-shadow duration-300"
+              initial={{ opacity: 0, scale: 0.96, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
+              className="relative w-full flex items-center justify-center"
             >
-              {/* Dynamic Mouse Spotlight Flashlight */}
-              <div
-                className="pointer-events-none absolute -inset-px rounded-2xl opacity-0 transition-opacity duration-300 group-hover:opacity-100 z-30"
-                style={{
-                  background: `radial-gradient(550px circle at ${cursorPos.x}px ${cursorPos.y}px, rgba(229, 217, 197, 0.14), transparent 70%)`,
-                }}
+              <img
+                src="/images/exploded-villa.jpg"
+                alt="WeaverFrame Exploded Luxury Architecture"
+                className="w-full max-w-[860px] h-auto object-contain select-none pointer-events-none drop-shadow-[0_20px_50px_rgba(0,0,0,0.85)]"
               />
-
-              {/* 3-Axis Real-Time Coordinate Telemetry & Auto-Orbit Top Badge */}
-              <div
-                className="absolute top-3.5 left-3.5 right-3.5 z-40 flex items-center justify-between pointer-events-none"
-                style={{ transform: "translateZ(35px)" }}
-              >
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-black/80 border border-white/15 backdrop-blur-md text-[9px] font-mono text-white/70 shadow-lg">
-                  <Crosshair className="size-3 text-[#e5d9c5]" />
-                  <span>3-AXIS GYRO:</span>
-                  <span className="text-[#e5d9c5]">X: {axisCoords.x > 0 ? `+${axisCoords.x}` : axisCoords.x}°</span>
-                  <span className="text-[#e5d9c5]">Y: {axisCoords.y > 0 ? `+${axisCoords.y}` : axisCoords.y}°</span>
-                  <span className="text-[#e5d9c5]">Z: {axisCoords.z > 0 ? `+${axisCoords.z}` : axisCoords.z}°</span>
-                </div>
-
-                <button
-                  onClick={() => setIsAutoOrbit(!isAutoOrbit)}
-                  className={`pointer-events-auto px-3 py-1.5 rounded-md text-[9px] font-mono uppercase tracking-wider transition-all flex items-center gap-1.5 border shadow-lg ${
-                    isAutoOrbit
-                      ? "bg-[#e5d9c5] text-black border-[#e5d9c5] font-bold animate-pulse"
-                      : "bg-black/80 text-white/70 border-white/15 hover:text-white hover:border-[#e5d9c5]/50"
-                  }`}
-                >
-                  <Compass className="size-3" />
-                  <span>{isAutoOrbit ? "Auto-Orbit Active" : "Auto-Orbit 3-Axis"}</span>
-                </button>
-              </div>
-
-              {/* Exploded Villa Visual Image Container with Z-Depth Translation */}
-              <div
-                style={{ transform: "translateZ(20px)" }}
-                className={`relative w-full aspect-[16/10.5] overflow-hidden transition-all duration-700 ${
-                  heroMode === "lidar" ? "hue-rotate-180 saturate-150 contrast-125" : heroMode === "wireframe" ? "invert grayscale contrast-200 opacity-80" : ""
-                }`}
-              >
-                <img
-                  src="/images/exploded-villa.jpg"
-                  alt="WeaverFrame 3D Exploded Architecture"
-                  className="w-full h-full object-cover select-none pointer-events-none transform transition-transform duration-500 group-hover:scale-[1.03]"
-                />
-
-                {/* LiDAR Scanning Laser Beam Sweep (Active in LiDAR Mode) */}
-                {heroMode === "lidar" && (
-                  <motion.div
-                    animate={{ y: ["0%", "100%", "0%"] }}
-                    transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
-                    className="absolute inset-x-0 h-1 bg-gradient-to-r from-transparent via-[#00ffcc] to-transparent shadow-[0_0_20px_#00ffcc] z-20 pointer-events-none opacity-80"
-                  />
-                )}
-
-                {/* Blueprint Grid Overlay (Active in Blueprint Mode) */}
-                {heroMode === "wireframe" && (
-                  <div className="absolute inset-0 bg-[linear-gradient(to_right,#000_1px,transparent_1px),linear-gradient(to_bottom,#000_1px,transparent_1px)] bg-[size:2rem_2rem] opacity-20 pointer-events-none z-20" />
-                )}
-
-                {/* Interactive Hotspot Annotation Rings on Image Layers (Floating with translateZ(50px)) */}
-                {architecturalLayers.map((layer) => {
-                  const isHovered = hoveredLayer === layer.id;
-                  return (
-                    <div
-                      key={layer.id}
-                      style={{
-                        top: layer.pinY,
-                        left: layer.pinX,
-                        transform: `translate(-50%, -50%) translateZ(${isHovered ? 55 : 35}px)`,
-                      }}
-                      className="absolute z-30 cursor-pointer group/pin transition-transform duration-300"
-                      onMouseEnter={() => setHoveredLayer(layer.id)}
-                      onMouseLeave={() => setHoveredLayer(null)}
-                    >
-                      <span className="relative flex size-6 items-center justify-center">
-                        <span className={`animate-ping absolute inline-flex h-full w-full rounded-full transition-opacity ${
-                          isHovered ? "bg-[#e5d9c5] opacity-90" : "bg-white/40 opacity-40"
-                        }`} />
-                        <span className={`relative inline-flex rounded-full size-3 border-2 transition-all ${
-                          isHovered ? "bg-[#e5d9c5] border-white scale-125 shadow-[0_0_15px_#e5d9c5]" : "bg-white/80 border-black/40"
-                        }`} />
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Bottom 3D Viewport Options Toolbar (The 3 Options Kept) */}
-              <div
-                style={{ transform: "translateZ(30px)" }}
-                className="p-3.5 bg-black/90 border-t border-white/[0.1] flex flex-col sm:flex-row items-center justify-between gap-3 relative z-30"
-              >
-                <div className="flex items-center gap-2 text-[10px] font-mono text-white/50 pl-1">
-                  <Scan className="size-3.5 text-[#e5d9c5]" />
-                  <span>3-Axis Exploded View · Mode:</span>
-                </div>
-                
-                <div className="flex gap-2 w-full sm:w-auto justify-end">
-                  {[
-                    { id: "night", label: "Night Architecture", icon: Moon },
-                    { id: "lidar", label: "LiDAR AI Scan", icon: Scan },
-                    { id: "wireframe", label: "Blueprint Grid", icon: GridIcon },
-                  ].map((mode) => (
-                    <button
-                      key={mode.id}
-                      onClick={() => setHeroMode(mode.id as any)}
-                      className={`px-3 py-1.5 rounded-lg text-[10px] font-mono tracking-wider uppercase transition-all flex items-center gap-1.5 border ${
-                        heroMode === mode.id
-                          ? "bg-[#e5d9c5] text-black border-[#e5d9c5] font-bold shadow-md scale-102"
-                          : "bg-white/[0.04] text-white/60 border-white/[0.08] hover:text-white hover:border-white/20"
-                      }`}
-                    >
-                      <mode.icon className="size-3" />
-                      <span>{mode.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
             </motion.div>
           </div>
 
