@@ -31,127 +31,179 @@ import {
   ChevronDown,
   Compass,
   MapPin,
-  Cpu
+  Cpu,
+  Box,
+  Maximize2,
+  Scan,
+  Sun,
+  Moon,
+  Grid as GridIcon
 } from "lucide-react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { MeshDistortMaterial, Float, Points, PointMaterial } from "@react-three/drei";
+import { Float, Html, Grid, Center } from "@react-three/drei";
 import * as THREE from "three";
 
 import { CustomCursor } from "../components/CustomCursor";
 import { MagneticButton } from "../components/MagneticButton";
 
-// ── 3D LUXURY ARCHITECTURAL SCENE WITH MOUSE TRACKING & PARTICLES ─────────────
+// ── 3D BESPOKE ARCHITECTURAL MODERN VILLA MODEL WITH LIDAR SCAN ────────────────
 
-function FloatingParticles({ count = 300 }) {
-  const points = useMemo(() => {
-    const p = new Float32Array(count * 3);
-    for (let i = 0; i < count; i++) {
-      p[i * 3] = (Math.random() - 0.5) * 20;
-      p[i * 3 + 1] = (Math.random() - 0.5) * 20;
-      p[i * 3 + 2] = (Math.random() - 0.5) * 15;
-    }
-    return p;
-  }, [count]);
-
-  const pointsRef = useRef<THREE.Points>(null!);
-  useFrame((state) => {
-    if (pointsRef.current) {
-      pointsRef.current.rotation.y = state.clock.getElapsedTime() * 0.02;
-      pointsRef.current.rotation.x = state.clock.getElapsedTime() * 0.01;
-    }
-  });
-
-  return (
-    <Points ref={pointsRef} positions={points} stride={3} frustumCulled={false}>
-      <PointMaterial
-        transparent
-        color="#e5d9c5"
-        size={0.06}
-        sizeAttenuation={true}
-        depthWrite={false}
-        opacity={0.35}
-      />
-    </Points>
-  );
-}
-
-function ArchitecturalCore() {
-  const meshRef = useRef<THREE.Mesh>(null!);
-  const wireRef = useRef<THREE.Mesh>(null!);
-  const ringRef = useRef<THREE.Mesh>(null!);
+function ModernArchitecturalVilla({ visualMode }: { visualMode: "night" | "lidar" | "wireframe" }) {
+  const villaGroup = useRef<THREE.Group>(null!);
+  const scannerRef = useRef<THREE.Mesh>(null!);
 
   useFrame((state) => {
     const t = state.clock.getElapsedTime();
     const { x, y } = state.pointer;
 
-    if (meshRef.current) {
-      meshRef.current.rotation.x = THREE.MathUtils.lerp(meshRef.current.rotation.x, y * 0.4 + t * 0.05, 0.05);
-      meshRef.current.rotation.y = THREE.MathUtils.lerp(meshRef.current.rotation.y, x * 0.6 + t * 0.08, 0.05);
+    // Smooth subtle mouse rotation
+    if (villaGroup.current) {
+      villaGroup.current.rotation.y = THREE.MathUtils.lerp(
+        villaGroup.current.rotation.y,
+        -0.45 + x * 0.45 + Math.sin(t * 0.25) * 0.08,
+        0.05
+      );
+      villaGroup.current.rotation.x = THREE.MathUtils.lerp(
+        villaGroup.current.rotation.x,
+        0.28 - y * 0.25,
+        0.05
+      );
     }
-    if (wireRef.current) {
-      wireRef.current.rotation.x = THREE.MathUtils.lerp(wireRef.current.rotation.x, -y * 0.3 - t * 0.03, 0.05);
-      wireRef.current.rotation.y = THREE.MathUtils.lerp(wireRef.current.rotation.y, -x * 0.5 - t * 0.04, 0.05);
-    }
-    if (ringRef.current) {
-      ringRef.current.rotation.z = t * 0.1;
-      ringRef.current.rotation.x = Math.PI / 3 + y * 0.2;
+
+    // LiDAR Scanner beam oscillation
+    if (scannerRef.current) {
+      scannerRef.current.position.y = Math.sin(t * 1.5) * 1.8 + 0.8;
     }
   });
 
+  const isWireframe = visualMode === "wireframe";
+  const isLidar = visualMode === "lidar";
+
   return (
-    <group position={[1.8, 0, 0]}>
-      {/* Central Morphing Architectural Solid */}
-      <Float speed={2} rotationIntensity={0.4} floatIntensity={0.8}>
-        <mesh ref={meshRef} scale={2.4}>
-          <icosahedronGeometry args={[1.2, 3]} />
-          <MeshDistortMaterial
-            color="#121214"
-            attach="material"
-            distort={0.4}
-            speed={1.5}
-            roughness={0.15}
-            metalness={0.95}
-          />
-        </mesh>
-      </Float>
-
-      {/* Outer Golden Wireframe Architectural Cage */}
-      <Float speed={1.4} rotationIntensity={0.3} floatIntensity={0.5}>
-        <mesh ref={wireRef} scale={3.4}>
-          <octahedronGeometry args={[1.4, 2]} />
-          <meshBasicMaterial color="#e5d9c5" wireframe transparent opacity={0.2} />
-        </mesh>
-      </Float>
-
-      {/* Orbiting Meridian Halo */}
-      <mesh ref={ringRef} scale={4.2}>
-        <torusGeometry args={[1, 0.012, 16, 100]} />
-        <meshBasicMaterial color="#c9a84c" transparent opacity={0.35} />
+    <group ref={villaGroup} position={[0, -0.6, 0]}>
+      {/* Foundation Concrete Slabs */}
+      <mesh position={[0, -0.1, 0]}>
+        <boxGeometry args={[6.2, 0.2, 4.4]} />
+        <meshStandardMaterial
+          color={isWireframe ? "#1a1a1a" : "#111215"}
+          roughness={0.8}
+          metalness={0.2}
+          wireframe={isWireframe}
+        />
       </mesh>
+
+      {/* Ground Floor Cantilever Pavilion (Living & Dining) */}
+      <mesh position={[-0.8, 0.7, 0.2]}>
+        <boxGeometry args={[3.8, 1.35, 3.2]} />
+        <meshPhysicalMaterial
+          color={isLidar ? "#0a192f" : "#0d0f14"}
+          transparent
+          opacity={isWireframe ? 0.2 : 0.85}
+          roughness={0.1}
+          metalness={0.8}
+          wireframe={isWireframe}
+        />
+      </mesh>
+
+      {/* Upper Floor Architectural Master Cantilever (Offset) */}
+      <mesh position={[0.8, 1.9, -0.2]}>
+        <boxGeometry args={[4.2, 1.25, 2.8]} />
+        <meshPhysicalMaterial
+          color={isLidar ? "#112240" : "#161820"}
+          transparent
+          opacity={isWireframe ? 0.3 : 0.9}
+          roughness={0.2}
+          metalness={0.7}
+          wireframe={isWireframe}
+        />
+      </mesh>
+
+      {/* Structural Steel Columns */}
+      <mesh position={[2.6, 0.7, 1.0]}>
+        <cylinderGeometry args={[0.04, 0.04, 1.4, 8]} />
+        <meshStandardMaterial color="#c9a84c" metalness={0.9} roughness={0.1} />
+      </mesh>
+      <mesh position={[2.6, 0.7, -1.2]}>
+        <cylinderGeometry args={[0.04, 0.04, 1.4, 8]} />
+        <meshStandardMaterial color="#c9a84c" metalness={0.9} roughness={0.1} />
+      </mesh>
+      <mesh position={[-2.4, 0.7, -1.2]}>
+        <cylinderGeometry args={[0.04, 0.04, 1.4, 8]} />
+        <meshStandardMaterial color="#c9a84c" metalness={0.9} roughness={0.1} />
+      </mesh>
+
+      {/* Warm Golden Architectural Interior Illumination */}
+      <pointLight position={[-0.8, 0.7, 0.2]} intensity={isLidar ? 1 : 4} color="#f5d799" distance={4.5} />
+      <pointLight position={[0.8, 1.9, -0.2]} intensity={isLidar ? 1 : 5} color="#e5d9c5" distance={4.5} />
+      <pointLight position={[0, -0.1, 2.2]} intensity={2} color="#00ffcc" distance={2.5} />
+
+      {/* LiDAR Laser Scanning Plane */}
+      {isLidar && (
+        <mesh ref={scannerRef} rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[7, 5]} />
+          <meshBasicMaterial color="#00ffcc" transparent opacity={0.18} side={THREE.DoubleSide} />
+        </mesh>
+      )}
+
+      {/* 3D Floating HUD Hotspots Pinpointed on Architecture */}
+      <Html position={[-1.6, 1.6, 1.8]} center distanceFactor={10}>
+        <div className="pointer-events-none flex items-center gap-2 px-2.5 py-1 rounded-md bg-black/85 border border-[#c9a84c]/50 backdrop-blur-md text-[9px] font-mono tracking-wider text-[#e5d9c5] shadow-xl whitespace-nowrap animate-pulse">
+          <span className="size-1.5 rounded-full bg-emerald-400" />
+          <span>&lt;45s AI Lead Response</span>
+        </div>
+      </Html>
+
+      <Html position={[1.8, 2.7, 0.5]} center distanceFactor={10}>
+        <div className="pointer-events-none flex items-center gap-2 px-2.5 py-1 rounded-md bg-black/85 border border-white/20 backdrop-blur-md text-[9px] font-mono tracking-wider text-white shadow-xl whitespace-nowrap">
+          <span className="size-1.5 rounded-full bg-[#c9a84c]" />
+          <span>$2M - $5M+ Budget Verified</span>
+        </div>
+      </Html>
+
+      <Html position={[0.5, 0.1, 2.3]} center distanceFactor={10}>
+        <div className="pointer-events-none flex items-center gap-2 px-2.5 py-1 rounded-md bg-black/85 border border-emerald-500/30 backdrop-blur-md text-[9px] font-mono tracking-wider text-emerald-400 shadow-xl whitespace-nowrap">
+          <span className="size-1.5 rounded-full bg-emerald-400" />
+          <span>Confirmed Site Consultation</span>
+        </div>
+      </Html>
+
+      {/* Ground Architectural Grid */}
+      <Grid
+        position={[0, -0.22, 0]}
+        args={[14, 14]}
+        cellSize={0.6}
+        cellThickness={0.8}
+        cellColor="#e5d9c5"
+        sectionSize={2.4}
+        sectionThickness={1.2}
+        sectionColor="#c9a84c"
+        fadeDistance={9}
+        fadeStrength={1.5}
+      />
     </group>
   );
 }
 
-function HeroScene3D() {
+function HeroArchitecturalScene3D({ visualMode }: { visualMode: "night" | "lidar" | "wireframe" }) {
   return (
     <Canvas
-      camera={{ position: [0, 0, 9], fov: 45 }}
+      camera={{ position: [5, 4, 6.5], fov: 42 }}
       dpr={[1, 1.5]}
       gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
     >
-      <ambientLight intensity={0.7} />
-      <directionalLight position={[12, 18, 10]} intensity={3.5} color="#e5d9c5" />
-      <directionalLight position={[-12, -10, -5]} intensity={1.5} color="#ffffff" />
-      <pointLight position={[2, 1, 3]} intensity={3} color="#c9a84c" />
+      <ambientLight intensity={visualMode === "lidar" ? 0.3 : 0.8} />
+      <directionalLight position={[10, 15, 8]} intensity={visualMode === "lidar" ? 1.5 : 3.5} color="#e5d9c5" />
+      <directionalLight position={[-10, 10, -5]} intensity={1.2} color="#ffffff" />
       <Suspense fallback={null}>
-        <FloatingParticles count={250} />
-        <ArchitecturalCore />
+        <Center>
+          <ModernArchitecturalVilla visualMode={visualMode} />
+        </Center>
       </Suspense>
     </Canvas>
   );
 }
 
-// ── 3D SPOTLIGHT TILT CARD COMPONENT (AWWWARDS GRADE) ─────────────────────────
+// ── 3D SPOTLIGHT TILT CARD COMPONENT ──────────────────────────────────────────
 function TiltCard({
   children,
   className = "",
@@ -165,8 +217,8 @@ function TiltCard({
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
 
-  const rotateX = useSpring(useTransform(mouseY, [-0.5, 0.5], [12, -12]), { damping: 20, stiffness: 200 });
-  const rotateY = useSpring(useTransform(mouseX, [-0.5, 0.5], [-12, 12]), { damping: 20, stiffness: 200 });
+  const rotateX = useSpring(useTransform(mouseY, [-0.5, 0.5], [10, -10]), { damping: 20, stiffness: 200 });
+  const rotateY = useSpring(useTransform(mouseX, [-0.5, 0.5], [-10, 10]), { damping: 20, stiffness: 200 });
 
   const [cursorPos, setCursorPos] = useState({ x: 0, y: 0, opacity: 0 });
 
@@ -203,14 +255,13 @@ function TiltCard({
       }}
       className={`relative rounded-xl border border-white/[0.09] bg-[#0c0d11]/80 backdrop-blur-xl transition-colors duration-300 group overflow-hidden ${className}`}
     >
-      {/* Dynamic Cursor Spotlight Overlay */}
       <div
         className="pointer-events-none absolute -inset-px rounded-xl opacity-0 transition-opacity duration-300 group-hover:opacity-100 z-10"
         style={{
           background: `radial-gradient(400px circle at ${cursorPos.x}px ${cursorPos.y}px, ${spotlightColor}, transparent 70%)`,
         }}
       />
-      <div className="relative z-20" style={{ transform: "translateZ(30px)" }}>
+      <div className="relative z-20" style={{ transform: "translateZ(25px)" }}>
         {children}
       </div>
     </motion.div>
@@ -285,7 +336,7 @@ export const Route = createFileRoute("/welcome")({
 
 // ── MAIN LUXURY LANDING PAGE ──────────────────────────────────────────────────
 function WelcomePage() {
-  // Initialize Lenis Buttery Smooth Inertial Scroll
+  // Lenis Smooth Scroll
   useEffect(() => {
     const lenis = new Lenis({
       duration: 1.2,
@@ -307,6 +358,9 @@ function WelcomePage() {
       lenis.destroy();
     };
   }, []);
+
+  // 3D Hero Visual Mode State
+  const [heroMode, setHeroMode] = useState<"night" | "lidar" | "wireframe">("night");
 
   // Demo Modal State
   const [isDemoModalOpen, setIsDemoModalOpen] = useState(false);
@@ -408,12 +462,12 @@ function WelcomePage() {
     <div className="min-h-screen overflow-x-hidden relative bg-[#060608] text-[#f8f8f8] font-sans selection:bg-[#e5d9c5] selection:text-black">
       <CustomCursor />
 
-      {/* Ambient Luxury Background Glows */}
-      <div className="fixed top-0 left-1/4 w-[600px] h-[600px] bg-radial from-[#c9a84c]/[0.07] to-transparent rounded-full blur-3xl pointer-events-none z-0" />
+      {/* Ambient Lighting Orbs */}
+      <div className="fixed top-0 left-1/3 w-[600px] h-[600px] bg-radial from-[#c9a84c]/[0.08] to-transparent rounded-full blur-3xl pointer-events-none z-0" />
       <div className="fixed bottom-0 right-1/4 w-[700px] h-[700px] bg-radial from-[#e5d9c5]/[0.05] to-transparent rounded-full blur-3xl pointer-events-none z-0" />
 
       {/* ── TOP LUXURY NAVIGATION ── */}
-      <header className="fixed top-0 w-full z-50 bg-[#060608]/80 backdrop-blur-xl border-b border-white/[0.07] px-6 md:px-12 py-5 flex items-center justify-between pointer-events-auto">
+      <header className="fixed top-0 w-full z-50 bg-[#060608]/85 backdrop-blur-xl border-b border-white/[0.07] px-6 md:px-12 py-5 flex items-center justify-between pointer-events-auto">
         <Link to="/welcome" className="flex items-center gap-3 group">
           <div className="size-8 rounded border border-white/20 bg-white/[0.04] flex items-center justify-center font-serif text-sm font-bold text-[#e5d9c5] group-hover:border-[#e5d9c5] group-hover:scale-105 transition-all">
             W
@@ -455,96 +509,132 @@ function WelcomePage() {
         </div>
       </header>
 
-      {/* ── CINEMATIC 3D HERO SECTION ── */}
-      <section className="relative min-h-screen flex items-center pt-28 pb-16 overflow-hidden border-b border-white/[0.08]">
-        {/* 3D WebGL Background Canvas */}
-        <div className="absolute inset-0 z-0 pointer-events-none opacity-85 lg:opacity-100">
-          <HeroScene3D />
-        </div>
-
-        {/* Hero Copy & Entrance */}
-        <div className="relative z-10 w-full max-w-7xl mx-auto px-6 md:px-12">
-          <div className="max-w-3xl">
-            {/* Status Pill with Radar Pulse */}
+      {/* ── HIGH-CONCEPT ARCHITECTURAL HERO SECTION ── */}
+      <section className="relative min-h-[92vh] flex items-center pt-24 pb-12 overflow-hidden border-b border-white/[0.08]">
+        <div className="w-full max-w-7xl mx-auto px-6 md:px-12 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center z-10">
+          
+          {/* Left Column: High-Status Editorial Headline */}
+          <div className="lg:col-span-6 space-y-6 pt-4">
+            
+            {/* Live Ticker Pulse */}
             <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6 }}
-              className="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full border border-[#e5d9c5]/25 bg-[#e5d9c5]/8 backdrop-blur-md mb-8 shadow-lg shadow-[#e5d9c5]/5"
+              className="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full border border-[#e5d9c5]/25 bg-[#e5d9c5]/8 backdrop-blur-md shadow-lg shadow-[#e5d9c5]/5"
             >
               <span className="relative flex size-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                 <span className="relative inline-flex rounded-full size-2 bg-emerald-500" />
               </span>
               <span className="text-[10px] font-mono uppercase tracking-[0.22em] text-[#e5d9c5] font-semibold">
-                Autonomous AI Lead Concierge & Pipeline OS
+                Autonomous 24/7 AI Lead Concierge
               </span>
             </motion.div>
 
-            {/* Dynamic Kinetic Headline */}
-            <h1 className="font-serif text-4xl sm:text-6xl md:text-7xl lg:text-[80px] leading-[1.02] tracking-tight font-normal text-white mb-8">
-              <KineticText text="Never lose a" delay={0.1} />{" "}
-              <span className="italic text-[#e5d9c5] font-serif block sm:inline">
-                <KineticText text="$1M+ custom build" delay={0.25} />
-              </span>{" "}
-              <KineticText text="to slow follow-up." delay={0.45} />
+            {/* Main Headline */}
+            <h1 className="font-serif text-4xl sm:text-6xl lg:text-[72px] leading-[1.04] tracking-tight font-normal text-white">
+              Your <span className="italic text-[#e5d9c5]">$2M+ custom builds</span> deserve a 24/7 digital architect.
             </h1>
 
             {/* Subtitle */}
             <motion.p
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, delay: 0.7 }}
-              className="text-base sm:text-lg md:text-xl font-light text-white/75 leading-relaxed mb-10 max-w-2xl"
+              transition={{ duration: 0.8, delay: 0.25 }}
+              className="text-base sm:text-lg font-light text-white/75 leading-relaxed max-w-xl"
             >
-              WeaverFrame engages high-net-worth home buyers across WhatsApp, SMS, and Email in <strong className="text-white font-medium">&lt; 45 seconds</strong>. It qualifies seven-figure budgets, verifies land ownership, and books confirmed site visits directly to your calendar.
+              WeaverFrame engages high-ticket luxury home buyers in <strong className="text-white font-medium">&lt; 45 seconds</strong> across WhatsApp, SMS, and Email. It screens seven-figure budgets, verifies land ownership, and schedules qualified site consultations directly to your team.
             </motion.p>
 
-            {/* Action CTAs */}
+            {/* Magnetic CTAs */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, delay: 0.85 }}
-              className="flex flex-col sm:flex-row gap-4 sm:items-center"
+              transition={{ duration: 0.8, delay: 0.4 }}
+              className="flex flex-col sm:flex-row gap-4 sm:items-center pt-2"
             >
               <MagneticButton>
                 <button
                   onClick={() => setIsDemoModalOpen(true)}
-                  className="w-full sm:w-auto px-9 py-4.5 bg-[#e5d9c5] text-black text-xs font-bold uppercase tracking-widest hover:bg-white transition-all flex items-center justify-center gap-3 shadow-2xl shadow-[#e5d9c5]/20 group"
+                  className="w-full sm:w-auto px-8 py-4 bg-[#e5d9c5] text-black text-xs font-bold uppercase tracking-widest hover:bg-white transition-all flex items-center justify-center gap-3 shadow-2xl shadow-[#e5d9c5]/20 group"
                 >
-                  Schedule Private Demonstration
+                  Schedule Private Demo
                   <ArrowRight className="size-4 group-hover:translate-x-1 transition-transform" />
                 </button>
               </MagneticButton>
               <a
                 href="#radar"
-                className="w-full sm:w-auto px-8 py-4.5 border border-white/20 bg-white/[0.02] text-white text-xs font-bold uppercase tracking-widest hover:border-[#e5d9c5] hover:text-[#e5d9c5] transition-all text-center backdrop-blur-sm"
+                className="w-full sm:w-auto px-7 py-4 border border-white/20 bg-white/[0.02] text-white text-xs font-bold uppercase tracking-widest hover:border-[#e5d9c5] hover:text-[#e5d9c5] transition-all text-center backdrop-blur-sm"
               >
-                Experience Live Radar ↓
+                Test Live Radar ↓
               </a>
             </motion.div>
 
-            {/* Real-time Trust Metrics Bar */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 1, delay: 1.1 }}
-              className="grid grid-cols-3 gap-6 mt-16 pt-8 border-t border-white/[0.12] max-w-lg"
-            >
+            {/* Live Trust Metrics Ticker */}
+            <div className="grid grid-cols-3 gap-4 pt-6 border-t border-white/[0.1] max-w-md">
               <div>
                 <div className="font-serif text-2xl sm:text-3xl text-white font-bold">&lt; 45s</div>
-                <div className="text-[10px] uppercase font-mono tracking-widest text-white/50 mt-1">Response Time</div>
+                <div className="text-[9px] uppercase font-mono tracking-widest text-white/50 mt-1">Lead Response</div>
               </div>
               <div>
                 <div className="font-serif text-2xl sm:text-3xl text-[#e5d9c5] font-bold">100%</div>
-                <div className="text-[10px] uppercase font-mono tracking-widest text-white/50 mt-1">Lead Capture</div>
+                <div className="text-[9px] uppercase font-mono tracking-widest text-white/50 mt-1">Coverage</div>
               </div>
               <div>
-                <div className="font-serif text-2xl sm:text-3xl text-white font-bold">24 / 7 / 365</div>
-                <div className="text-[10px] uppercase font-mono tracking-widest text-white/50 mt-1">Continuous OS</div>
+                <div className="font-serif text-2xl sm:text-3xl text-white font-bold">$180M+</div>
+                <div className="text-[9px] uppercase font-mono tracking-widest text-white/50 mt-1">Pipeline Qualified</div>
               </div>
-            </motion.div>
+            </div>
           </div>
+
+          {/* Right Column: Interactive 3D Modern Villa Viewport with Mode Switcher */}
+          <div className="lg:col-span-6 relative h-[480px] sm:h-[580px] w-full rounded-2xl border border-white/[0.12] bg-[#090a0f]/90 backdrop-blur-2xl shadow-2xl overflow-hidden group">
+            
+            {/* 3D Canvas */}
+            <div className="absolute inset-0 z-0">
+              <HeroArchitecturalScene3D visualMode={heroMode} />
+            </div>
+
+            {/* Top Viewport Header */}
+            <div className="absolute top-4 left-4 right-4 z-20 flex items-center justify-between pointer-events-none">
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-black/75 border border-white/10 backdrop-blur-md text-[10px] font-mono text-white/70">
+                <Scan className="size-3.5 text-[#e5d9c5]" />
+                <span>3D Architectural Viewport · Interactive</span>
+              </div>
+              <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded border border-emerald-500/20">
+                AI Concierge Active
+              </span>
+            </div>
+
+            {/* Bottom 3D Mode Switcher Toolbar */}
+            <div className="absolute bottom-4 left-4 right-4 z-20 flex items-center justify-between bg-black/80 border border-white/15 p-2 rounded-xl backdrop-blur-xl">
+              <span className="text-[9px] font-mono text-white/40 uppercase tracking-widest hidden sm:inline pl-2">
+                Viewport Mode:
+              </span>
+              <div className="flex gap-1.5 w-full sm:w-auto justify-end">
+                {[
+                  { id: "night", label: "Night Architecture", icon: Moon },
+                  { id: "lidar", label: "LiDAR AI Scan", icon: Scan },
+                  { id: "wireframe", label: "Blueprint Grid", icon: GridIcon },
+                ].map((mode) => (
+                  <button
+                    key={mode.id}
+                    onClick={() => setHeroMode(mode.id as any)}
+                    className={`px-3 py-1.5 rounded-lg text-[10px] font-mono tracking-wider uppercase transition-all flex items-center gap-1.5 border ${
+                      heroMode === mode.id
+                        ? "bg-[#e5d9c5] text-black border-[#e5d9c5] font-bold"
+                        : "bg-white/[0.04] text-white/60 border-white/[0.08] hover:text-white"
+                    }`}
+                  >
+                    <mode.icon className="size-3" />
+                    <span>{mode.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
         </div>
       </section>
 
@@ -777,15 +867,15 @@ function WelcomePage() {
               
               <div className="space-y-3.5 pt-4">
                 <div className="flex items-center gap-3 text-sm text-white/80">
-                  <CheckCircle2 className="size-4 text-[#e5d9c5] shrink-0" />
+                  <CheckCircle2 className="size-4 text-[#e5d9c5]" />
                   <span>Eliminate lost opportunities on weekends and holidays</span>
                 </div>
                 <div className="flex items-center gap-3 text-sm text-white/80">
-                  <CheckCircle2 className="size-4 text-[#e5d9c5] shrink-0" />
+                  <CheckCircle2 className="size-4 text-[#e5d9c5]" />
                   <span>Nurture long-cycle leads automatically for up to 12 months</span>
                 </div>
                 <div className="flex items-center gap-3 text-sm text-white/80">
-                  <CheckCircle2 className="size-4 text-[#e5d9c5] shrink-0" />
+                  <CheckCircle2 className="size-4 text-[#e5d9c5]" />
                   <span>Protect architect and sales time with pre-screened budgets</span>
                 </div>
               </div>
