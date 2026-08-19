@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import React, { Suspense, useRef, useState, useEffect, useMemo } from "react";
+import React, { useRef, useState, useEffect, useMemo } from "react";
 import { motion, useScroll, useTransform, useSpring, useMotionValue, AnimatePresence } from "framer-motion";
 import Lenis from "lenis";
 import {
@@ -43,381 +43,13 @@ import {
   Utensils,
   Armchair,
   Car,
-  LandPlot
+  LandPlot,
+  Layers3,
+  Crosshair
 } from "lucide-react";
-import { Canvas, useFrame } from "@react-three/fiber";
-import { Float, Center, Grid } from "@react-three/drei";
-import * as THREE from "three";
 
 import { CustomCursor } from "../components/CustomCursor";
 import { MagneticButton } from "../components/MagneticButton";
-
-// ── 3D ISOMETRIC EXPLODED VILLA ARCHITECTURAL MODEL ───────────────────────────
-
-interface ExplodedHouseProps {
-  visualMode: "night" | "lidar" | "wireframe";
-  hoveredZone: string | null;
-  explodedAmount: number; // 0 to 1
-}
-
-function ExplodedVillaModel({ visualMode, hoveredZone, explodedAmount }: ExplodedHouseProps) {
-  const groupRef = useRef<THREE.Group>(null!);
-  const roofRef = useRef<THREE.Group>(null!);
-  const lidarBeamRef = useRef<THREE.Mesh>(null!);
-
-  const isWireframe = visualMode === "wireframe";
-  const isLidar = visualMode === "lidar";
-
-  useFrame((state) => {
-    const t = state.clock.getElapsedTime();
-    const { x, y } = state.pointer;
-
-    // Smooth subtle isometric parallax
-    if (groupRef.current) {
-      groupRef.current.rotation.y = THREE.MathUtils.lerp(
-        groupRef.current.rotation.y,
-        Math.PI / 4 + x * 0.25 + Math.sin(t * 0.15) * 0.03,
-        0.05
-      );
-      groupRef.current.rotation.x = THREE.MathUtils.lerp(
-        groupRef.current.rotation.x,
-        0.58 - y * 0.15,
-        0.05
-      );
-    }
-
-    // Dynamic roof float & explosion
-    if (roofRef.current) {
-      const targetY = 1.9 + explodedAmount * 1.8 + Math.sin(t * 1.2) * 0.08;
-      roofRef.current.position.y = THREE.MathUtils.lerp(roofRef.current.position.y, targetY, 0.08);
-    }
-
-    // LiDAR scanning beam animation
-    if (lidarBeamRef.current) {
-      lidarBeamRef.current.position.y = Math.sin(t * 2) * 1.6 + 0.6;
-    }
-  });
-
-  // Material helpers
-  const wallMat = useMemo(() => {
-    if (isWireframe) return new THREE.MeshBasicMaterial({ color: "#e5d9c5", wireframe: true });
-    if (isLidar) return new THREE.MeshStandardMaterial({ color: "#0d1b2a", roughness: 0.2, metalness: 0.8 });
-    return new THREE.MeshStandardMaterial({ color: "#ded8ce", roughness: 0.7, metalness: 0.1 });
-  }, [isWireframe, isLidar]);
-
-  const floorMat = useMemo(() => {
-    if (isWireframe) return new THREE.MeshBasicMaterial({ color: "#333333", wireframe: true });
-    if (isLidar) return new THREE.MeshStandardMaterial({ color: "#060d17", roughness: 0.3 });
-    return new THREE.MeshStandardMaterial({ color: "#221c17", roughness: 0.4 }); // Dark luxury hardwood
-  }, [isWireframe, isLidar]);
-
-  const roofMat = useMemo(() => {
-    if (isWireframe) return new THREE.MeshBasicMaterial({ color: "#c9a84c", wireframe: true });
-    if (isLidar) return new THREE.MeshStandardMaterial({ color: "#112240", roughness: 0.1, metalness: 0.9 });
-    return new THREE.MeshStandardMaterial({ color: "#2b2a29", roughness: 0.6, metalness: 0.3 }); // Charcoal architectural shingles
-  }, [isWireframe, isLidar]);
-
-  return (
-    <group ref={groupRef} position={[0, -0.4, 0]}>
-      
-      {/* ── 1. FOUNDATION & LANDSCAPING BASE ── */}
-      <group position={[0, -0.15, 0]}>
-        {/* Concrete Foundation Slab */}
-        <mesh position={[0, 0, 0]}>
-          <boxGeometry args={[7.4, 0.25, 6.2]} />
-          <meshStandardMaterial
-            color={hoveredZone === "foundation" ? "#c9a84c" : isWireframe ? "#111" : "#1a1c22"}
-            roughness={0.9}
-            wireframe={isWireframe}
-          />
-        </mesh>
-
-        {/* Front Driveway & Paved Walkway */}
-        <mesh position={[-1.6, 0.02, 2.2]}>
-          <boxGeometry args={[2.8, 0.05, 1.8]} />
-          <meshStandardMaterial color={isWireframe ? "#222" : "#303238"} roughness={0.9} />
-        </mesh>
-        <mesh position={[1.2, 0.02, 2.2]}>
-          <boxGeometry args={[1.6, 0.04, 1.8]} />
-          <meshStandardMaterial color={isWireframe ? "#222" : "#24252a"} roughness={0.9} />
-        </mesh>
-
-        {/* Landscaping Perimeter Garden Beds & Shrubbery */}
-        <mesh position={[2.6, 0.1, 1.8]}>
-          <boxGeometry args={[1.5, 0.16, 1.8]} />
-          <meshStandardMaterial color={isWireframe ? "#1a3320" : "#1d2e1f"} roughness={0.9} />
-        </mesh>
-        <mesh position={[-2.8, 0.1, -1.8]}>
-          <boxGeometry args={[1.2, 0.16, 2.2]} />
-          <meshStandardMaterial color={isWireframe ? "#1a3320" : "#1d2e1f"} roughness={0.9} />
-        </mesh>
-      </group>
-
-      {/* ── 2. DETAILED CUTAWAY INTERIOR ROOMS & WALLS ── */}
-      <group position={[0, 0, 0]}>
-        {/* Main Floor Plate */}
-        <mesh position={[0, 0.02, 0]}>
-          <boxGeometry args={[6.8, 0.08, 5.6]} />
-          <primitive object={floorMat} attach="material" />
-        </mesh>
-
-        {/* Outer Perimeter Cutaway Walls */}
-        <group>
-          {/* Back Wall */}
-          <mesh position={[0, 0.55, -2.75]}>
-            <boxGeometry args={[6.8, 1.0, 0.16]} />
-            <primitive object={wallMat} attach="material" />
-          </mesh>
-          {/* Left Wall */}
-          <mesh position={[-3.35, 0.55, 0]}>
-            <boxGeometry args={[0.16, 1.0, 5.6]} />
-            <primitive object={wallMat} attach="material" />
-          </mesh>
-          {/* Right Wall */}
-          <mesh position={[3.35, 0.55, 0]}>
-            <boxGeometry args={[0.16, 1.0, 5.6]} />
-            <primitive object={wallMat} attach="material" />
-          </mesh>
-          {/* Front Partial Low Walls for Cutaway View */}
-          <mesh position={[-2.2, 0.35, 2.75]}>
-            <boxGeometry args={[2.4, 0.6, 0.16]} />
-            <primitive object={wallMat} attach="material" />
-          </mesh>
-          <mesh position={[1.8, 0.35, 2.75]}>
-            <boxGeometry args={[3.2, 0.6, 0.16]} />
-            <primitive object={wallMat} attach="material" />
-          </mesh>
-        </group>
-
-        {/* Internal Room Dividing Walls */}
-        <group>
-          {/* Dividing Wall: Garage / Living */}
-          <mesh position={[-1.2, 0.5, 1.2]}>
-            <boxGeometry args={[0.14, 0.9, 3.0]} />
-            <primitive object={wallMat} attach="material" />
-          </mesh>
-          {/* Dividing Wall: Living / Kitchen / Dining */}
-          <mesh position={[0.8, 0.45, -0.6]}>
-            <boxGeometry args={[0.14, 0.8, 2.6]} />
-            <primitive object={wallMat} attach="material" />
-          </mesh>
-          {/* Dividing Wall: Master Bed Suite */}
-          <mesh position={[2.0, 0.5, -0.2]}>
-            <boxGeometry args={[2.6, 0.9, 0.14]} />
-            <primitive object={wallMat} attach="material" />
-          </mesh>
-          {/* Dividing Wall: Guest Bed */}
-          <mesh position={[-2.2, 0.5, -1.0]}>
-            <boxGeometry args={[2.2, 0.9, 0.14]} />
-            <primitive object={wallMat} attach="material" />
-          </mesh>
-        </group>
-
-        {/* ── ROOM INTERIORS & HIGHLIGHTS ── */}
-
-        {/* 🛋️ LIVING AREA */}
-        <group position={[0.2, 0.1, 1.2]}>
-          {/* Sectional Luxury Sofa */}
-          <mesh position={[0, 0.15, 0]}>
-            <boxGeometry args={[1.5, 0.28, 0.7]} />
-            <meshStandardMaterial color={hoveredZone === "living" ? "#e5d9c5" : "#55524e"} roughness={0.8} />
-          </mesh>
-          <mesh position={[-0.6, 0.15, 0.5]}>
-            <boxGeometry args={[0.6, 0.28, 0.7]} />
-            <meshStandardMaterial color={hoveredZone === "living" ? "#e5d9c5" : "#55524e"} roughness={0.8} />
-          </mesh>
-          {/* Coffee Table */}
-          <mesh position={[0.1, 0.1, 0.5]}>
-            <boxGeometry args={[0.7, 0.14, 0.45]} />
-            <meshStandardMaterial color="#2d261e" roughness={0.3} metalness={0.5} />
-          </mesh>
-          {/* Living Room Warm Point Light */}
-          <pointLight
-            position={[0, 1.0, 0.4]}
-            intensity={hoveredZone === "living" ? 6 : isLidar ? 1.5 : 3.5}
-            color="#f7e1b5"
-            distance={3.5}
-          />
-        </group>
-
-        {/* 🍳 GOURMET KITCHEN & ISLAND */}
-        <group position={[-0.2, 0.1, -1.4]}>
-          {/* Kitchen Island with Quartz Top */}
-          <mesh position={[0, 0.28, 0]}>
-            <boxGeometry args={[1.6, 0.45, 0.7]} />
-            <meshStandardMaterial
-              color={hoveredZone === "kitchen" ? "#c9a84c" : "#f0ede6"}
-              roughness={0.2}
-              metalness={0.4}
-            />
-          </mesh>
-          {/* Back Counter & Cabinets */}
-          <mesh position={[0, 0.35, -1.0]}>
-            <boxGeometry args={[2.2, 0.6, 0.45]} />
-            <meshStandardMaterial color="#262422" roughness={0.4} />
-          </mesh>
-          {/* Kitchen Spotlight */}
-          <pointLight
-            position={[0, 1.0, 0]}
-            intensity={hoveredZone === "kitchen" ? 6 : isLidar ? 1.5 : 3.5}
-            color="#ffe9be"
-            distance={3.2}
-          />
-        </group>
-
-        {/* 🛏️ MASTER BEDROOM SUITE */}
-        <group position={[2.2, 0.1, -1.4]}>
-          {/* King Platform Bed */}
-          <mesh position={[0, 0.2, 0]}>
-            <boxGeometry args={[1.2, 0.32, 1.5]} />
-            <meshStandardMaterial color={hoveredZone === "bedrooms" ? "#e5d9c5" : "#e0ded9"} roughness={0.8} />
-          </mesh>
-          {/* Headboard */}
-          <mesh position={[0, 0.35, -0.75]}>
-            <boxGeometry args={[1.4, 0.5, 0.1]} />
-            <meshStandardMaterial color="#3a342c" roughness={0.7} />
-          </mesh>
-          {/* Nightstands */}
-          <mesh position={[-0.75, 0.15, -0.6]}>
-            <boxGeometry args={[0.25, 0.25, 0.25]} />
-            <meshStandardMaterial color="#222" />
-          </mesh>
-          <mesh position={[0.75, 0.15, -0.6]}>
-            <boxGeometry args={[0.25, 0.25, 0.25]} />
-            <meshStandardMaterial color="#222" />
-          </mesh>
-          {/* Bedroom Ambient Light */}
-          <pointLight
-            position={[0, 1.0, 0]}
-            intensity={hoveredZone === "bedrooms" ? 6 : isLidar ? 1.5 : 3.0}
-            color="#fce2b8"
-            distance={3.2}
-          />
-        </group>
-
-        {/* 🛏️ GUEST BEDROOM */}
-        <group position={[-2.2, 0.1, -1.8]}>
-          <mesh position={[0, 0.18, 0]}>
-            <boxGeometry args={[1.0, 0.28, 1.3]} />
-            <meshStandardMaterial color={hoveredZone === "bedrooms" ? "#e5d9c5" : "#d1cdc5"} roughness={0.8} />
-          </mesh>
-        </group>
-
-        {/* 🚗 2-CAR GARAGE */}
-        <group position={[-2.2, 0.1, 1.2]}>
-          {/* Luxury Coupe Car Silhouette */}
-          <group position={[0, 0.2, 0]}>
-            {/* Car Body Base */}
-            <mesh position={[0, 0.08, 0]}>
-              <boxGeometry args={[1.0, 0.26, 1.9]} />
-              <meshStandardMaterial color={hoveredZone === "garage" ? "#e5d9c5" : "#2d3748"} metalness={0.9} roughness={0.2} />
-            </mesh>
-            {/* Car Cabin Roof */}
-            <mesh position={[0, 0.26, -0.1]}>
-              <boxGeometry args={[0.85, 0.2, 1.0]} />
-              <meshStandardMaterial color="#111" metalness={0.9} roughness={0.1} />
-            </mesh>
-            {/* Headlights */}
-            <pointLight position={[0, 0.1, 1.0]} intensity={1.8} color="#00ffcc" distance={1.5} />
-          </group>
-        </group>
-      </group>
-
-      {/* ── 3. FLOATING EXPLODED ROOF LAYER ── */}
-      <group ref={roofRef} position={[0, 1.9, 0]}>
-        {/* Main Architectural Hip Roof Slab */}
-        <mesh position={[0, 0.35, 0]}>
-          <coneGeometry args={[4.4, 0.9, 4]} />
-          <primitive object={roofMat} attach="material" />
-        </mesh>
-
-        {/* Eaves & Fascia Trim */}
-        <mesh position={[0, -0.05, 0]}>
-          <boxGeometry args={[7.2, 0.12, 6.0]} />
-          <meshStandardMaterial
-            color={hoveredZone === "roof" ? "#c9a84c" : isWireframe ? "#666" : "#1a1918"}
-            roughness={0.5}
-            wireframe={isWireframe}
-          />
-        </mesh>
-
-        {/* Ceiling Underside Soft Glow */}
-        <pointLight position={[0, -0.2, 0]} intensity={hoveredZone === "roof" ? 5 : 2} color="#f5dfb8" distance={4} />
-      </group>
-
-      {/* ── 4. DASHED PROJECTION GUIDELINES (Connecting Roof to Base) ── */}
-      {explodedAmount > 0.1 && (
-        <group>
-          {/* 4 Corner Projection Vertical Lines */}
-          {[
-            [-3.4, 2.8],
-            [3.4, 2.8],
-            [-3.4, -2.8],
-            [3.4, -2.8],
-          ].map(([lx, lz], idx) => (
-            <mesh key={idx} position={[lx, 1.0 + (explodedAmount * 0.9), lz]}>
-              <cylinderGeometry args={[0.008, 0.008, 1.2 + explodedAmount * 1.5, 4]} />
-              <meshBasicMaterial color="#c9a84c" transparent opacity={0.35} />
-            </mesh>
-          ))}
-        </group>
-      )}
-
-      {/* ── 5. OPTIONAL LIDAR SCANNING LASER PLANE ── */}
-      {isLidar && (
-        <mesh ref={lidarBeamRef} rotation={[-Math.PI / 2, 0, 0]}>
-          <planeGeometry args={[8, 7]} />
-          <meshBasicMaterial color="#00ffcc" transparent opacity={0.16} side={THREE.DoubleSide} />
-        </mesh>
-      )}
-
-      {/* ── 6. ARCHITECTURAL ISOMETRIC GRID ── */}
-      <Grid
-        position={[0, -0.28, 0]}
-        args={[16, 16]}
-        cellSize={0.6}
-        cellThickness={0.7}
-        cellColor="#e5d9c5"
-        sectionSize={2.4}
-        sectionThickness={1.2}
-        sectionColor="#c9a84c"
-        fadeDistance={11}
-        fadeStrength={1.5}
-      />
-    </group>
-  );
-}
-
-function ExplodedVillaCanvas({
-  visualMode,
-  hoveredZone,
-  explodedAmount
-}: {
-  visualMode: "night" | "lidar" | "wireframe";
-  hoveredZone: string | null;
-  explodedAmount: number;
-}) {
-  return (
-    <Canvas
-      camera={{ position: [7.5, 6.2, 8.5], fov: 38 }}
-      dpr={[1, 1.5]}
-      gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
-    >
-      <ambientLight intensity={visualMode === "lidar" ? 0.4 : 0.85} />
-      <directionalLight position={[14, 20, 10]} intensity={visualMode === "lidar" ? 1.5 : 3.8} color="#e5d9c5" />
-      <directionalLight position={[-12, 10, -8]} intensity={1.2} color="#ffffff" />
-      <Suspense fallback={null}>
-        <Center>
-          <ExplodedVillaModel
-            visualMode={visualMode}
-            hoveredZone={hoveredZone}
-            explodedAmount={explodedAmount}
-          />
-        </Center>
-      </Suspense>
-    </Canvas>
-  );
-}
 
 // ── KINETIC TEXT REVEAL ───────────────────────────────────────────────────────
 const KineticText = ({ text, delay = 0, className = "" }: { text: string; delay?: number; className?: string }) => {
@@ -487,7 +119,7 @@ export const Route = createFileRoute("/welcome")({
 
 // ── MAIN LANDING PAGE COMPONENT ──────────────────────────────────────────────
 function WelcomePage() {
-  // Initialize Lenis Buttery Smooth Inertial Scroll
+  // Lenis Smooth Scroll Engine
   useEffect(() => {
     const lenis = new Lenis({
       duration: 1.2,
@@ -510,10 +142,38 @@ function WelcomePage() {
     };
   }, []);
 
-  // 3D Exploded Hero Interactive States
+  // 3D Perspective Mouse-Parallax States for Hero Viewport
+  const heroCardRef = useRef<HTMLDivElement>(null);
+  const mouseX = useMotionValue(0);
+  const mouseY = useMotionValue(0);
+
+  const rotateX = useSpring(useTransform(mouseY, [-0.5, 0.5], [7, -7]), { damping: 25, stiffness: 180 });
+  const rotateY = useSpring(useTransform(mouseX, [-0.5, 0.5], [-8, 8]), { damping: 25, stiffness: 180 });
+
+  const [cursorPos, setCursorPos] = useState({ x: 0, y: 0, opacity: 0 });
   const [heroMode, setHeroMode] = useState<"night" | "lidar" | "wireframe">("night");
-  const [hoveredZone, setHoveredZone] = useState<string | null>(null);
-  const [explodedAmount, setExplodedAmount] = useState<number>(0.85); // Exploded by default
+  const [hoveredLayer, setHoveredLayer] = useState<string | null>(null);
+
+  const handleHeroMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!heroCardRef.current) return;
+    const rect = heroCardRef.current.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width - 0.5;
+    const y = (e.clientY - rect.top) / rect.height - 0.5;
+    mouseX.set(x);
+    mouseY.set(y);
+
+    setCursorPos({
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+      opacity: 1,
+    });
+  };
+
+  const handleHeroMouseLeave = () => {
+    mouseX.set(0);
+    mouseY.set(0);
+    setCursorPos((prev) => ({ ...prev, opacity: 0 }));
+  };
 
   // Demo Modal State
   const [isDemoModalOpen, setIsDemoModalOpen] = useState(false);
@@ -582,49 +242,43 @@ function WelcomePage() {
 
   const currentScenario = scenarios[activeScenario];
 
-  // Right HUD Callout Cards Data (Matching the reference image)
-  const specCards = [
+  // 4 Architectural Exploded Layers (Matching the image)
+  const architecturalLayers = [
     {
       id: "roof",
-      icon: Home,
       title: "ROOF",
       spec1: "Architectural Shingles",
-      spec2: "High Wind Resistance",
+      spec2: "Weather Protection",
+      icon: Home,
+      pinY: "14%",
+      pinX: "72%",
     },
     {
-      id: "bedrooms",
-      icon: Bed,
-      title: "BEDROOMS",
-      spec1: "Spacious & Private",
-      spec2: "Natural Lighting",
-    },
-    {
-      id: "kitchen",
-      icon: Utensils,
-      title: "KITCHEN",
-      spec1: "Custom Layout",
-      spec2: "Premium Finishes",
+      id: "ceiling",
+      title: "CEILING",
+      spec1: "Drywall Finish",
+      spec2: "Insulation Layer",
+      icon: Layers3,
+      pinY: "33%",
+      pinX: "72%",
     },
     {
       id: "living",
+      title: "LIVING SPACE",
+      spec1: "Bedrooms, Kitchen, Living & Dining",
+      spec2: "Interior Walls · Flooring",
       icon: Armchair,
-      title: "LIVING AREA",
-      spec1: "Open Concept",
-      spec2: "Indoor Comfort",
-    },
-    {
-      id: "garage",
-      icon: Car,
-      title: "GARAGE",
-      spec1: "2-Car Capacity",
-      spec2: "EV Ready",
+      pinY: "49%",
+      pinX: "72%",
     },
     {
       id: "foundation",
-      icon: LandPlot,
       title: "FOUNDATION",
       spec1: "Concrete Slab",
-      spec2: "Engineered Strength",
+      spec2: "Structural Support",
+      icon: LandPlot,
+      pinY: "73%",
+      pinX: "72%",
     },
   ];
 
@@ -708,12 +362,12 @@ function WelcomePage() {
         </div>
       </header>
 
-      {/* ── HERO SECTION: 3D ISOMETRIC EXPLODED VILLA (MATCHING EXACT REFERENCE) ── */}
-      <section className="relative min-h-[95vh] flex items-center pt-24 pb-12 overflow-hidden border-b border-white/[0.08]">
-        <div className="w-full max-w-[1400px] mx-auto px-6 md:px-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center z-10">
+      {/* ── HERO SECTION: 3D PERSPECTIVE EXPLODED VILLA (MATCHING EXACT IMAGE) ── */}
+      <section className="relative min-h-[96vh] flex items-center pt-24 pb-12 overflow-hidden border-b border-white/[0.08]">
+        <div className="w-full max-w-[1440px] mx-auto px-6 md:px-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center z-10">
           
           {/* LEFT COLUMN: Editorial Typography & High-Ticket Positioning */}
-          <div className="lg:col-span-4 space-y-6 pt-2">
+          <div className="lg:col-span-5 space-y-6 pt-2">
             
             {/* Status Pill */}
             <motion.div
@@ -729,7 +383,7 @@ function WelcomePage() {
             </motion.div>
 
             {/* Main Headline */}
-            <h1 className="font-serif text-4xl sm:text-5xl lg:text-[58px] leading-[1.04] tracking-tight font-normal text-white">
+            <h1 className="font-serif text-4xl sm:text-5xl lg:text-[64px] leading-[1.03] tracking-tight font-normal text-white">
               Your <span className="italic text-[#e5d9c5] font-serif">$2M+ custom builds</span> deserve a 24/7 digital architect.
             </h1>
 
@@ -738,7 +392,7 @@ function WelcomePage() {
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.25 }}
-              className="text-sm sm:text-base font-light text-white/70 leading-relaxed max-w-md"
+              className="text-sm sm:text-base font-light text-white/75 leading-relaxed max-w-lg"
             >
               WeaverFrame engages high-ticket luxury home buyers in <strong className="text-white font-medium">&lt; 45 seconds</strong> across WhatsApp, SMS, and Email. It screens seven-figure budgets, verifies land ownership, and schedules qualified site consultations directly to your team.
             </motion.p>
@@ -748,12 +402,12 @@ function WelcomePage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.4 }}
-              className="flex flex-col sm:flex-row gap-3 sm:items-center pt-2"
+              className="flex flex-col sm:flex-row gap-3.5 sm:items-center pt-2"
             >
               <MagneticButton>
                 <button
                   onClick={() => setIsDemoModalOpen(true)}
-                  className="w-full sm:w-auto px-7 py-4 bg-[#e5d9c5] text-black text-xs font-bold uppercase tracking-widest hover:bg-white transition-all flex items-center justify-center gap-2.5 shadow-2xl shadow-[#e5d9c5]/20 group"
+                  className="w-full sm:w-auto px-8 py-4 bg-[#e5d9c5] text-black text-xs font-bold uppercase tracking-widest hover:bg-white transition-all flex items-center justify-center gap-2.5 shadow-2xl shadow-[#e5d9c5]/20 group"
                 >
                   Schedule Private Demo
                   <ArrowRight className="size-4 group-hover:translate-x-1 transition-transform" />
@@ -761,110 +415,127 @@ function WelcomePage() {
               </MagneticButton>
               <a
                 href="#radar"
-                className="w-full sm:w-auto px-6 py-4 border border-white/20 bg-white/[0.02] text-white text-xs font-bold uppercase tracking-widest hover:border-[#e5d9c5] hover:text-[#e5d9c5] transition-all text-center backdrop-blur-sm"
+                className="w-full sm:w-auto px-7 py-4 border border-white/20 bg-white/[0.02] text-white text-xs font-bold uppercase tracking-widest hover:border-[#e5d9c5] hover:text-[#e5d9c5] transition-all text-center backdrop-blur-sm"
               >
                 Test Live Radar ↓
               </a>
             </motion.div>
 
             {/* Trust Metrics */}
-            <div className="grid grid-cols-3 gap-4 pt-6 border-t border-white/[0.1] max-w-sm">
+            <div className="grid grid-cols-3 gap-4 pt-6 border-t border-white/[0.1] max-w-md">
               <div>
-                <div className="font-serif text-2xl text-white font-bold">&lt; 45s</div>
+                <div className="font-serif text-2xl sm:text-3xl text-white font-bold">&lt; 45s</div>
                 <div className="text-[9px] uppercase font-mono tracking-widest text-white/50 mt-1">Lead Response</div>
               </div>
               <div>
-                <div className="font-serif text-2xl text-[#e5d9c5] font-bold">100%</div>
+                <div className="font-serif text-2xl sm:text-3xl text-[#e5d9c5] font-bold">100%</div>
                 <div className="text-[9px] uppercase font-mono tracking-widest text-white/50 mt-1">Coverage</div>
               </div>
               <div>
-                <div className="font-serif text-2xl text-white font-bold">$180M+</div>
+                <div className="font-serif text-2xl sm:text-3xl text-white font-bold">$180M+</div>
                 <div className="text-[9px] uppercase font-mono tracking-widest text-white/50 mt-1">Pipeline Qualified</div>
               </div>
             </div>
           </div>
 
-          {/* CENTER COLUMN: 3D Isometric Exploded Viewport */}
-          <div className="lg:col-span-5 relative h-[500px] sm:h-[620px] w-full flex items-center justify-center">
-            
-            {/* 3D Canvas */}
-            <div className="w-full h-full">
-              <ExplodedVillaCanvas
-                visualMode={heroMode}
-                hoveredZone={hoveredZone}
-                explodedAmount={explodedAmount}
+          {/* RIGHT COLUMN: Interactive 3D Perspective Exploded Villa Viewport */}
+          <div className="lg:col-span-7 relative flex items-center justify-center">
+            <motion.div
+              ref={heroCardRef}
+              onMouseMove={handleHeroMouseMove}
+              onMouseLeave={handleHeroMouseLeave}
+              style={{
+                rotateX,
+                rotateY,
+                transformStyle: "preserve-3d",
+              }}
+              className="relative w-full rounded-2xl border border-white/[0.12] bg-[#07080b]/90 backdrop-blur-2xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9)] overflow-hidden group"
+            >
+              {/* Dynamic Mouse Spotlight Flashlight */}
+              <div
+                className="pointer-events-none absolute -inset-px rounded-2xl opacity-0 transition-opacity duration-300 group-hover:opacity-100 z-30"
+                style={{
+                  background: `radial-gradient(500px circle at ${cursorPos.x}px ${cursorPos.y}px, rgba(229, 217, 197, 0.12), transparent 70%)`,
+                }}
               />
-            </div>
 
-            {/* 3D Viewport Controls (Top & Bottom Toolbars) */}
-            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 bg-black/85 border border-white/15 p-1.5 rounded-xl backdrop-blur-xl shadow-2xl">
-              {[
-                { id: "night", label: "Night Architecture", icon: Moon },
-                { id: "lidar", label: "LiDAR AI Scan", icon: Scan },
-                { id: "wireframe", label: "Blueprint Grid", icon: GridIcon },
-              ].map((mode) => (
-                <button
-                  key={mode.id}
-                  onClick={() => setHeroMode(mode.id as any)}
-                  className={`px-3 py-1.5 rounded-lg text-[10px] font-mono tracking-wider uppercase transition-all flex items-center gap-1.5 border ${
-                    heroMode === mode.id
-                      ? "bg-[#e5d9c5] text-black border-[#e5d9c5] font-bold shadow-md"
-                      : "bg-white/[0.04] text-white/60 border-white/[0.08] hover:text-white"
-                  }`}
-                >
-                  <mode.icon className="size-3" />
-                  <span className="hidden sm:inline">{mode.label}</span>
-                </button>
-              ))}
-            </div>
+              {/* Exploded Villa Visual Image Container */}
+              <div className={`relative w-full aspect-[16/10.5] overflow-hidden transition-all duration-700 ${
+                heroMode === "lidar" ? "hue-rotate-180 saturate-150 contrast-125" : heroMode === "wireframe" ? "invert grayscale contrast-200 opacity-80" : ""
+              }`}>
+                <img
+                  src="/images/exploded-villa.jpg"
+                  alt="WeaverFrame 3D Exploded Architecture"
+                  className="w-full h-full object-cover select-none pointer-events-none transform transition-transform duration-500 group-hover:scale-[1.02]"
+                />
 
-            {/* Explosion Range Slider Pill */}
-            <div className="absolute top-2 right-2 z-20 flex items-center gap-2 bg-black/80 border border-white/10 px-3 py-1.5 rounded-lg backdrop-blur-md">
-              <span className="text-[9px] font-mono uppercase text-white/50">Explode View:</span>
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.05}
-                value={explodedAmount}
-                onChange={(e) => setExplodedAmount(Number(e.target.value))}
-                className="w-16 h-1 bg-white/20 rounded-lg appearance-none cursor-pointer accent-[#e5d9c5]"
-              />
-            </div>
-          </div>
+                {/* LiDAR Scanning Laser Beam Sweep (Active in LiDAR Mode) */}
+                {heroMode === "lidar" && (
+                  <motion.div
+                    animate={{ y: ["0%", "100%", "0%"] }}
+                    transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
+                    className="absolute inset-x-0 h-1 bg-gradient-to-r from-transparent via-[#00ffcc] to-transparent shadow-[0_0_20px_#00ffcc] z-20 pointer-events-none opacity-80"
+                  />
+                )}
 
-          {/* RIGHT COLUMN: Interactive Room & Layer Callout Cards */}
-          <div className="lg:col-span-3 space-y-2.5">
-            {specCards.map((card) => {
-              const isHovered = hoveredZone === card.id;
-              return (
-                <motion.div
-                  key={card.id}
-                  onMouseEnter={() => setHoveredZone(card.id)}
-                  onMouseLeave={() => setHoveredZone(null)}
-                  whileHover={{ x: -4 }}
-                  className={`p-3.5 rounded-xl border transition-all duration-300 cursor-pointer flex items-center gap-3.5 backdrop-blur-xl ${
-                    isHovered
-                      ? "bg-[#16171f] border-[#e5d9c5] shadow-lg shadow-[#e5d9c5]/10 scale-102"
-                      : "bg-[#0b0c10]/80 border-white/[0.08] hover:border-white/20"
-                  }`}
-                >
-                  <div className={`size-9 rounded-lg border flex items-center justify-center transition-colors ${
-                    isHovered ? "bg-[#e5d9c5] text-black border-[#e5d9c5]" : "bg-white/[0.04] text-[#e5d9c5] border-white/10"
-                  }`}>
-                    <card.icon className="size-4 stroke-[1.75]" />
-                  </div>
-                  <div>
-                    <span className="text-[11px] font-mono font-bold tracking-wider text-white block">
-                      {card.title}
-                    </span>
-                    <div className="text-[10px] text-white/50 leading-tight mt-0.5">
-                      <span>{card.spec1}</span> · <span>{card.spec2}</span>
+                {/* Blueprint Grid Overlay (Active in Blueprint Mode) */}
+                {heroMode === "wireframe" && (
+                  <div className="absolute inset-0 bg-[linear-gradient(to_right,#000_1px,transparent_1px),linear-gradient(to_bottom,#000_1px,transparent_1px)] bg-[size:2rem_2rem] opacity-20 pointer-events-none z-20" />
+                )}
+
+                {/* Interactive Hotspot Annotation Rings on Image Layers */}
+                {architecturalLayers.map((layer) => {
+                  const isHovered = hoveredLayer === layer.id;
+                  return (
+                    <div
+                      key={layer.id}
+                      style={{ top: layer.pinY, left: layer.pinX }}
+                      className="absolute z-20 -translate-x-1/2 -translate-y-1/2 cursor-pointer group/pin"
+                      onMouseEnter={() => setHoveredLayer(layer.id)}
+                      onMouseLeave={() => setHoveredLayer(null)}
+                    >
+                      <span className="relative flex size-5 items-center justify-center">
+                        <span className={`animate-ping absolute inline-flex h-full w-full rounded-full transition-opacity ${
+                          isHovered ? "bg-[#e5d9c5] opacity-80" : "bg-white/40 opacity-40"
+                        }`} />
+                        <span className={`relative inline-flex rounded-full size-2.5 border transition-all ${
+                          isHovered ? "bg-[#e5d9c5] border-white scale-125 shadow-[0_0_12px_#e5d9c5]" : "bg-white/80 border-black/40"
+                        }`} />
+                      </span>
                     </div>
-                  </div>
-                </motion.div>
-              );
-            })}
+                  );
+                })}
+              </div>
+
+              {/* Bottom 3D Viewport Options Toolbar (The 3 Options Kept) */}
+              <div className="p-3.5 bg-black/90 border-t border-white/[0.1] flex flex-col sm:flex-row items-center justify-between gap-3 relative z-30">
+                <div className="flex items-center gap-2 text-[10px] font-mono text-white/50 pl-1">
+                  <Scan className="size-3.5 text-[#e5d9c5]" />
+                  <span>Interactive Exploded View · Mode:</span>
+                </div>
+                
+                <div className="flex gap-2 w-full sm:w-auto justify-end">
+                  {[
+                    { id: "night", label: "Night Architecture", icon: Moon },
+                    { id: "lidar", label: "LiDAR AI Scan", icon: Scan },
+                    { id: "wireframe", label: "Blueprint Grid", icon: GridIcon },
+                  ].map((mode) => (
+                    <button
+                      key={mode.id}
+                      onClick={() => setHeroMode(mode.id as any)}
+                      className={`px-3 py-1.5 rounded-lg text-[10px] font-mono tracking-wider uppercase transition-all flex items-center gap-1.5 border ${
+                        heroMode === mode.id
+                          ? "bg-[#e5d9c5] text-black border-[#e5d9c5] font-bold shadow-md scale-102"
+                          : "bg-white/[0.04] text-white/60 border-white/[0.08] hover:text-white hover:border-white/20"
+                      }`}
+                    >
+                      <mode.icon className="size-3" />
+                      <span>{mode.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
           </div>
 
         </div>
