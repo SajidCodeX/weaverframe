@@ -417,7 +417,7 @@ function WelcomePage() {
               className="relative w-full flex items-center justify-center"
             >
               <img
-                src="/images/exploded-villa.jpg"
+                src="/images/exploded-villa.png"
                 alt="WeaverFrame Exploded Luxury Architecture"
                 className="w-full max-w-[1250px] xl:scale-115 xl:translate-x-4 h-auto object-contain select-none pointer-events-none drop-shadow-[0_30px_70px_rgba(0,0,0,0.95)] transition-transform duration-700 hover:scale-[1.18]"
               />
