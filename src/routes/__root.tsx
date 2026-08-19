@@ -200,7 +200,7 @@ function RootShell({ children }: { children: React.ReactNode }) {
       <head>
         <HeadContent />
       </head>
-      <body className="font-sans antialiased bg-background text-foreground custom-scrollbar overflow-hidden">
+      <body className="font-sans antialiased bg-background text-foreground custom-scrollbar">
         <ThemeProvider defaultTheme="dark" storageKey="builders-edge-theme">
           {children}
         </ThemeProvider>

@@ -96,16 +96,14 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
-    overflow: hidden;
-    height: 100%;
+    min-height: 100%;
   }
 
   body {
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    height: 100%;
-    overflow: hidden;
+    min-height: 100%;
   }
 }
 
