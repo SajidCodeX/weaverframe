@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as TeamRouteImport } from './routes/team'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ReviewsRouteImport } from './routes/reviews'
@@ -30,6 +31,11 @@ import { Route as AdminBuildersRouteImport } from './routes/admin/builders'
 import { Route as AdminBillingRouteImport } from './routes/admin/billing'
 import { Route as ApiCronSyncLeadsRouteImport } from './routes/api.cron.sync-leads'
 
+const WelcomeRoute = WelcomeRouteImport.update({
+  id: '/welcome',
+  path: '/welcome',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TeamRoute = TeamRouteImport.update({
   id: '/team',
   path: '/team',
@@ -143,6 +149,7 @@ export interface FileRoutesByFullPath {
   '/reviews': typeof ReviewsRoute
   '/settings': typeof SettingsRoute
   '/team': typeof TeamRoute
+  '/welcome': typeof WelcomeRoute
   '/admin/billing': typeof AdminBillingRoute
   '/admin/builders': typeof AdminBuildersRoute
   '/admin/settings': typeof AdminSettingsRoute
@@ -165,6 +172,7 @@ export interface FileRoutesByTo {
   '/reviews': typeof ReviewsRoute
   '/settings': typeof SettingsRoute
   '/team': typeof TeamRoute
+  '/welcome': typeof WelcomeRoute
   '/admin/billing': typeof AdminBillingRoute
   '/admin/builders': typeof AdminBuildersRoute
   '/admin/settings': typeof AdminSettingsRoute
@@ -188,6 +196,7 @@ export interface FileRoutesById {
   '/reviews': typeof ReviewsRoute
   '/settings': typeof SettingsRoute
   '/team': typeof TeamRoute
+  '/welcome': typeof WelcomeRoute
   '/admin/billing': typeof AdminBillingRoute
   '/admin/builders': typeof AdminBuildersRoute
   '/admin/settings': typeof AdminSettingsRoute
@@ -212,6 +221,7 @@ export interface FileRouteTypes {
     | '/reviews'
     | '/settings'
     | '/team'
+    | '/welcome'
     | '/admin/billing'
     | '/admin/builders'
     | '/admin/settings'
@@ -234,6 +244,7 @@ export interface FileRouteTypes {
     | '/reviews'
     | '/settings'
     | '/team'
+    | '/welcome'
     | '/admin/billing'
     | '/admin/builders'
     | '/admin/settings'
@@ -256,6 +267,7 @@ export interface FileRouteTypes {
     | '/reviews'
     | '/settings'
     | '/team'
+    | '/welcome'
     | '/admin/billing'
     | '/admin/builders'
     | '/admin/settings'
@@ -279,6 +291,7 @@ export interface RootRouteChildren {
   ReviewsRoute: typeof ReviewsRoute
   SettingsRoute: typeof SettingsRoute
   TeamRoute: typeof TeamRoute
+  WelcomeRoute: typeof WelcomeRoute
   AdminBillingRoute: typeof AdminBillingRoute
   AdminBuildersRoute: typeof AdminBuildersRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
@@ -292,6 +305,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/welcome': {
+      id: '/welcome'
+      path: '/welcome'
+      fullPath: '/welcome'
+      preLoaderRoute: typeof WelcomeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/team': {
       id: '/team'
       path: '/team'
@@ -447,6 +467,7 @@ const rootRouteChildren: RootRouteChildren = {
   ReviewsRoute: ReviewsRoute,
   SettingsRoute: SettingsRoute,
   TeamRoute: TeamRoute,
+  WelcomeRoute: WelcomeRoute,
   AdminBillingRoute: AdminBillingRoute,
   AdminBuildersRoute: AdminBuildersRoute,
   AdminSettingsRoute: AdminSettingsRoute,

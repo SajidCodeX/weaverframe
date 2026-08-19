@@ -57,11 +57,31 @@ test-*
 check-*
 cleanup-*
 *.log
-git_history*.txt
+# AI Agent and tool configurations
+.agents/
+.augment/
+.claude/
+.codebuddy/
+.codewhale/
+.continue/
+.cursor/
+.factory/
+.gemini/
+.kilocode/
+.kiro/
+.opencode/
+.qoder/
+.roo/
+.trae/
+.vercel/
+.warp/
+.windsurf/
+
+# Temporary files & scripts
+*.txt
 *.csv
 *.cjs
-sync-now.ts
-trigger-sync.ts
-distribute-leads.ts
+*.sql
 reset-dummy-status.ts
 clear-reviews.ts
+
