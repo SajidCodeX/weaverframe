@@ -208,13 +208,13 @@ function SettingsPage() {
   const [profileSaved, setProfileSaved] = useState(false);
 
   const handleSaveProfile = async () => {
-    // Unique Zip Code Validation
-    const zips = profileForm.targetZipCodes.split(',').map((z: string) => z.trim()).filter(Boolean);
-    const uniqueZips = new Set(zips);
-    if (uniqueZips.size !== zips.length) {
-      alert("Error: Duplicate zip codes are not allowed in Target Zip Codes. Please remove duplicates.");
-      return;
-    }
+    // // Unique Zip Code Validation (Scraper remnant - commented out)
+    // const zips = profileForm.targetZipCodes.split(',').map((z: string) => z.trim()).filter(Boolean);
+    // const uniqueZips = new Set(zips);
+    // if (uniqueZips.size !== zips.length) {
+    //   alert("Error: Duplicate zip codes are not allowed in Target Zip Codes. Please remove duplicates.");
+    //   return;
+    // }
 
     // Mandatory Field Verification
     if (!profileForm.companyName.trim() || !profileForm.primaryContact.trim() || !profileForm.email.trim() || !profileForm.phone.trim() || !profileForm.businessAddress.trim()) {
@@ -550,11 +550,11 @@ function SettingsPage() {
               <Row label={<>Email <span className="text-danger">*</span></>}><Input type="email" value={profileForm.email} onChange={e => setProfileForm(p => ({ ...p, email: e.target.value }))} /></Row>
               <Row label={<>Phone <span className="text-danger">*</span></>}><Input type="tel" value={profileForm.phone} onChange={e => setProfileForm(p => ({ ...p, phone: e.target.value }))} /></Row>
               <Row label={<>Business address <span className="text-danger">*</span></>}><Input value={profileForm.businessAddress} onChange={e => setProfileForm(p => ({ ...p, businessAddress: e.target.value }))} /></Row>
-              <Row label="Target zip codes"><Input value={profileForm.targetZipCodes} onChange={e => setProfileForm(p => ({ ...p, targetZipCodes: e.target.value }))} /></Row>
-              <div className="grid grid-cols-2 gap-4">
+              {/* <Row label="Target zip codes"><Input value={profileForm.targetZipCodes} onChange={e => setProfileForm(p => ({ ...p, targetZipCodes: e.target.value }))} /></Row> */}
+              {/* <div className="grid grid-cols-2 gap-4">
                 <Row label="Avg home price"><Input value={profileForm.avgHomePrice} onChange={e => setProfileForm(p => ({ ...p, avgHomePrice: e.target.value }))} /></Row>
                 <Row label="Homes built / year"><Input value={profileForm.homesPerYear} onChange={e => setProfileForm(p => ({ ...p, homesPerYear: e.target.value }))} /></Row>
-              </div>
+              </div> */}
 
               <div className="mt-4 pt-4 border-t border-border">
                 <h4 className="text-sm font-semibold text-foreground mb-4">AI Concierge Preferences</h4>
@@ -583,7 +583,7 @@ function SettingsPage() {
                   <textarea
                     value={profileForm.aiContext}
                     onChange={e => setProfileForm(p => ({ ...p, aiContext: e.target.value }))}
-                    placeholder="e.g. Default meeting location: Lakeway Model Home, 123 Lake Dr. Office hours: Mon-Sat 9am-6pm. We do not build outside of Travis County."
+                    placeholder="e.g. Office hours: Mon-Sat 9am-6pm. We specialize in luxury custom homes & modern architectural estates. Consultation locations: Office or virtual video call."
                     className="w-full bg-[#0c0d12] border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-primary transition-colors text-white resize-y min-h-[100px]"
                   />
                   <p className="text-[10px] text-muted-foreground">
@@ -657,7 +657,7 @@ function SettingsPage() {
               <Row label="Minimum budget"><Input value={qualForm.minBudget} onChange={e => setQualForm(p => ({ ...p, minBudget: e.target.value }))} /></Row>
               <Row label="Maximum timeline (months)"><Input value={qualForm.maxTimeline} onChange={e => setQualForm(p => ({ ...p, maxTimeline: e.target.value }))} /></Row>
               <Toggle label="Pre-approval required" checked={qualForm.preApprovalRequired} onChange={v => setQualForm(p => ({ ...p, preApprovalRequired: v }))} />
-              <Toggle label="Specific zip codes only" checked={qualForm.specificZipOnly} onChange={v => setQualForm(p => ({ ...p, specificZipOnly: v }))} />
+              {/* <Toggle label="Specific zip codes only" checked={qualForm.specificZipOnly} onChange={v => setQualForm(p => ({ ...p, specificZipOnly: v }))} /> */}
               <div>
                 <label className="text-xs text-muted-foreground uppercase tracking-wider">Minimum lead score to notify builder</label>
                 <div className="flex items-center gap-3 mt-2">
