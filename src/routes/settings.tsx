@@ -153,10 +153,11 @@ function SettingsPage() {
     doc.line(20, 115, 190, 115);
 
     doc.setFont("helvetica", "normal");
-    doc.text("WeaverFrame SaaS Monthly Platform Licensing", 20, 125);
-    doc.text("- Travis County permit feed streaming & ingestion", 25, 135);
-    doc.text("- Advanced AI nurture concierge", 25, 145);
-    doc.text("- Google Business reputation optimization", 25, 155);
+    doc.text("WeaverFrame AI Lead Conversion OS Platform License", 20, 125);
+    // doc.text("- Travis County permit feed streaming & ingestion", 25, 135);
+    doc.text("- 24/7 AI Lead Concierge & Automated Qualification", 25, 135);
+    doc.text("- Live Multi-Channel Pipeline & WhatsApp/SMS Concierge", 25, 145);
+    // doc.text("- Google Business reputation optimization", 25, 155);
     doc.text("$3,000.00", 170, 125);
 
     doc.line(20, 170, 190, 170);
@@ -517,7 +518,7 @@ function SettingsPage() {
     {
       id: "ghl",
       name: "GoHighLevel (GHL) Sync",
-      desc: "Trigger review requests and AI conversational actions directly inside GHL sub-accounts.",
+      desc: "Sync contacts, pipeline stages, and AI conversation actions directly inside GHL sub-accounts.",
       icon: "GHL",
       fields: [
         { key: "apiKey", label: "GHL Location API Key (v2)", type: "password", required: true, placeholder: "Enter GHL Location API Key", colSpan: 2 }
@@ -761,12 +762,12 @@ function SettingsPage() {
 
                            <div className="flex items-center justify-between pt-2 border-t border-border/20">
                              <span className="text-[10px] text-muted-foreground font-sans">
-                               {i.id === "google" && "🔑 Synchronizes and auto-replies to Google Business reviews."}
-                               {i.id === "houzz" && "🔑 Tracks 5-star Houzz review routing progress."}
-                               {i.id === "facebook" && "🔑 Fetches social page check-ins and recommendations."}
+                               {/* {i.id === "google" && "🔑 Synchronizes and auto-replies to Google Business reviews."} */}
+                               {/* {i.id === "houzz" && "🔑 Tracks 5-star Houzz review routing progress."} */}
+                               {/* {i.id === "facebook" && "🔑 Fetches social page check-ins and recommendations."} */}
                                {i.id === "twilio" && "💬 Powers automated SMS dialogue with real builder phone number."}
                                {i.id === "hubspot" && "🔄 Automatically syncs qualified leads directly to pipeline deals."}
-                               {i.id === "ghl" && "🔄 Integrates review automation triggers with sub-account workflows."}
+                               {i.id === "ghl" && "🔄 Synchronizes custom fields, contact pipelines, and AI actions inside GHL."}
 
                              </span>
                              <div className="flex gap-2">
@@ -808,7 +809,7 @@ function SettingsPage() {
                   />
                 </Row>
                 <p className="text-[10px] text-muted-foreground">
-                  Sends raw payload of newly captured permits and qualified builder leads to external endpoints.
+                  Sends raw webhook payload of newly captured and qualified builder leads to external endpoints.
                 </p>
                 <Save onClick={handleSaveWebhook} isSaving={isSavingWebhook} saved={webhookSaved} />
               </div>
@@ -829,14 +830,14 @@ function SettingsPage() {
                         await updateBillingProfile({ data: { plan: val } as any });
                       }}
                       options={[
-                        {label: "Professional", value: "professional"},
-                        {label: "Enterprise", value: "enterprise"},
-                        {label: "MRR Plan", value: "mrr"}
+                        {label: "Starter ($1,500/mo)", value: "starter"},
+                        {label: "Professional ($3,000/mo)", value: "professional"},
+                        {label: "Enterprise ($5,000/mo)", value: "enterprise"}
                       ]}
                     />
                   </div>
                   <div className="font-mono text-xl text-foreground mt-3">
-                    {billingPlan === "mrr" ? "$10,000" : billingPlan === "enterprise" ? "$5,000" : "$3,000"}<span className="text-xs text-muted-foreground">/mo</span>
+                    {billingPlan === "starter" ? "$1,500" : billingPlan === "enterprise" ? "$5,000" : "$3,000"}<span className="text-xs text-muted-foreground">/mo</span>
                   </div>
                 </Card>
                 <Card className="p-4">
