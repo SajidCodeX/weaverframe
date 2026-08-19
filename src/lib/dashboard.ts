@@ -2232,36 +2232,43 @@ export const exportLeadsToCsv = createServerFn({ method: 'POST' })
 // We reuse the Integration table with reserved platformId keys so no new
 // Prisma migration is required.
 
-export async function readSettingJson(platformId: string): Promise<Record<string, any>> {
-  const { getTenantDb, requireAuth } = await import('./server-utils.server');
-  const session = await requireAuth()
-  const db = await getTenantDb()
+export async function readSettingJson(platformId: string, preResolvedSession?: any): Promise<Record<string, any>> {
+  const { requireAuth } = await import('./server-utils.server');
+  const { getDb } = await import('./db');
   try {
+    const session = preResolvedSession ?? await requireAuth()
+    const db = await getDb()
+    const builderId = session.role === 'admin' ? (session.actingAsBuilderId || session.builderId) : session.builderId;
+    if (!builderId) return {}
     const builder = await db.builder.findUnique({
-      where: { id: session.builderId || '' }
+      where: { id: builderId }
     })
     if (!builder || !builder.settings) return {}
-    const settingsObj = JSON.parse(builder.settings)
+    const settingsObj = typeof builder.settings === 'string' ? JSON.parse(builder.settings) : (builder.settings || {})
     return settingsObj[platformId] || {}
   } catch {
     return {}
   }
 }
 
-async function writeSettingJson(platformId: string, value: Record<string, any>) {
-  const { getTenantDb, requireAuth } = await import('./server-utils.server');
-  const session = await requireAuth()
-  const db = await getTenantDb()
+export async function writeSettingJson(platformId: string, value: Record<string, any>, preResolvedSession?: any) {
+  const { requireAuth } = await import('./server-utils.server');
+  const { getDb } = await import('./db');
+  const session = preResolvedSession ?? await requireAuth()
+  const db = await getDb()
+  
+  const builderId = session.role === 'admin' ? (session.actingAsBuilderId || session.builderId) : session.builderId;
+  if (!builderId) throw new Error('No active builder ID found for settings update');
   
   const builder = await db.builder.findUnique({
-    where: { id: session.builderId || '' }
+    where: { id: builderId }
   })
   
-  const settingsObj = builder?.settings ? JSON.parse(builder.settings) : {}
+  const settingsObj = builder?.settings ? (typeof builder.settings === 'string' ? JSON.parse(builder.settings) : builder.settings) : {}
   settingsObj[platformId] = value
   
   await db.builder.update({
-    where: { id: session.builderId || '' },
+    where: { id: builderId },
     data: { settings: JSON.stringify(settingsObj) }
   })
 }
@@ -2274,9 +2281,9 @@ export const getBuilderProfile = createServerFn({ method: 'POST' })
   const session = await requireAuth(data?.activeRole ?? undefined);
   const db = await getDb();
   
-  const savedProfile = await readSettingJson('builder_profile');
+  const builderId = session.role === 'admin' ? (session.actingAsBuilderId || session.builderId) : session.builderId;
+  const savedProfile = await readSettingJson('builder_profile', session);
   
-  const builderId = session.role === 'admin' ? session.actingAsBuilderId : session.builderId;
   const builder = await db.builder.findUnique({
     where: { id: builderId || '' },
     include: { users: { where: { id: session.userId } } }
@@ -2285,10 +2292,10 @@ export const getBuilderProfile = createServerFn({ method: 'POST' })
   const user = builder?.users[0];
   
   return {
-    companyName: savedProfile.companyName || builder?.companyName || "Your Company LLC",
-    primaryContact: savedProfile.primaryContact || builder?.contactName || user?.displayName || "Your Name",
-    email: savedProfile.email || builder?.email || user?.email || "youremail@example.com",
-    phone: savedProfile.phone || builder?.phone || "+1 512-555-0100",
+    companyName: builder?.companyName || savedProfile.companyName || "Your Company LLC",
+    primaryContact: builder?.contactName || savedProfile.primaryContact || user?.displayName || "Your Name",
+    email: builder?.email || savedProfile.email || user?.email || "youremail@example.com",
+    phone: builder?.phone || savedProfile.phone || "+1 512-555-0100",
     businessAddress: savedProfile.businessAddress || "1100 S Lamar Blvd, Austin, TX 78704",
     targetZipCodes: savedProfile.targetZipCodes || "78704, 78703, 78731, 78613, 78641",
     avgHomePrice: savedProfile.avgHomePrice || "$700,000",
@@ -2338,6 +2345,10 @@ export const saveBuilderProfile = createServerFn({ method: 'POST' })
         displayName: profileData.primaryContact,
       };
       await setAuthCookie(nextSession as any);
+      
+      const { invalidateSessionCache } = await import('./auth');
+      invalidateSessionCache(session.userId);
+      invalidateCache("dashboard_");
       
       return { success: true }
     } catch (err: any) {

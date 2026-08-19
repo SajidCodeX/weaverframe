@@ -45,6 +45,14 @@ export const loginFn = createServerFn({ method: 'POST' })
 // on every navigation. JWT verification still happens on every request.
 const sessionCache = new Map<string, { session: AuthSession; expiry: number }>()
 
+export function invalidateSessionCache(userId?: string) {
+  if (userId) {
+    sessionCache.delete(userId)
+  } else {
+    sessionCache.clear()
+  }
+}
+
 export const getSessionFn = createServerFn({ method: 'POST' })
   .inputValidator((data: { activeRole?: string | null } | undefined) => data)
   .handler(async ({ data }) => {

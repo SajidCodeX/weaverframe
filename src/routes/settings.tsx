@@ -174,17 +174,35 @@ function SettingsPage() {
 
   // ── Builder Profile State ───────────────────────────────────────────────────
   const [profileForm, setProfileForm] = useState({
-    companyName: loadedProfile.companyName || "Your Company LLC",
-    primaryContact: loadedProfile.primaryContact || "Your Name",
-    email: loadedProfile.email || "youremail@example.com",
-    phone: loadedProfile.phone || "+1 512-555-0100",
-    businessAddress: loadedProfile.businessAddress || "1100 S Lamar Blvd, Austin, TX 78704",
-    targetZipCodes: loadedProfile.targetZipCodes || "78704, 78703, 78731, 78613, 78641",
+    companyName: loadedProfile.companyName || "",
+    primaryContact: loadedProfile.primaryContact || "",
+    email: loadedProfile.email || "",
+    phone: loadedProfile.phone || "",
+    businessAddress: loadedProfile.businessAddress || "",
+    targetZipCodes: loadedProfile.targetZipCodes || "",
     avgHomePrice: loadedProfile.avgHomePrice || "$700,000",
     homesPerYear: loadedProfile.homesPerYear || "42",
     timezone: loadedProfile.timezone || "Asia/Kolkata",
     aiContext: loadedProfile.aiContext || "",
   });
+
+  useEffect(() => {
+    if (loadedProfile && Object.keys(loadedProfile).length > 0) {
+      setProfileForm({
+        companyName: loadedProfile.companyName || "",
+        primaryContact: loadedProfile.primaryContact || "",
+        email: loadedProfile.email || "",
+        phone: loadedProfile.phone || "",
+        businessAddress: loadedProfile.businessAddress || "",
+        targetZipCodes: loadedProfile.targetZipCodes || "",
+        avgHomePrice: loadedProfile.avgHomePrice || "$700,000",
+        homesPerYear: loadedProfile.homesPerYear || "42",
+        timezone: loadedProfile.timezone || "Asia/Kolkata",
+        aiContext: loadedProfile.aiContext || "",
+      });
+    }
+  }, [loadedProfile]);
+
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileSaved, setProfileSaved] = useState(false);
 
@@ -242,6 +260,19 @@ function SettingsPage() {
     specificZipOnly: loadedQualRules.specificZipOnly ?? true,
     minLeadScore: loadedQualRules.minLeadScore ?? 60,
   });
+
+  useEffect(() => {
+    if (loadedQualRules && Object.keys(loadedQualRules).length > 0) {
+      setQualForm({
+        minBudget: loadedQualRules.minBudget || "$500,000",
+        maxTimeline: loadedQualRules.maxTimeline || "12",
+        preApprovalRequired: loadedQualRules.preApprovalRequired ?? false,
+        specificZipOnly: loadedQualRules.specificZipOnly ?? true,
+        minLeadScore: loadedQualRules.minLeadScore ?? 60,
+      });
+    }
+  }, [loadedQualRules]);
+
   const [isSavingQual, setIsSavingQual] = useState(false);
   const [qualSaved, setQualSaved] = useState(false);
 
@@ -268,6 +299,20 @@ function SettingsPage() {
     channel: loadedNotif.channel || "Both",
     quietHours: loadedNotif.quietHours ?? true,
   });
+
+  useEffect(() => {
+    if (loadedNotif && Object.keys(loadedNotif).length > 0) {
+      setNotifForm({
+        newLead: loadedNotif.newLead ?? true,
+        leadReplies: loadedNotif.leadReplies ?? true,
+        hotLead: loadedNotif.hotLead ?? true,
+        apptBooked: loadedNotif.apptBooked ?? true,
+        channel: loadedNotif.channel || "Both",
+        quietHours: loadedNotif.quietHours ?? true,
+      });
+    }
+  }, [loadedNotif]);
+
   const [isSavingNotif, setIsSavingNotif] = useState(false);
   const [notifSaved, setNotifSaved] = useState(false);
 
@@ -287,6 +332,13 @@ function SettingsPage() {
 
   // ── Webhook URL State ───────────────────────────────────────────────────
   const [webhookUrl, setWebhookUrl] = useState(loadedWebhookUrl || 'https://your-app.com/webhook/buildersedge');
+
+  useEffect(() => {
+    if (loadedWebhookUrl) {
+      setWebhookUrl(loadedWebhookUrl);
+    }
+  }, [loadedWebhookUrl]);
+
   const [isSavingWebhook, setIsSavingWebhook] = useState(false);
   const [webhookSaved, setWebhookSaved] = useState(false);
 
@@ -325,6 +377,25 @@ function SettingsPage() {
     });
     return creds;
   });
+
+  useEffect(() => {
+    if (loadedStatuses && Object.keys(loadedStatuses).length > 0) {
+      const statuses: Record<string, boolean> = {
+        google: false, houzz: false, facebook: false, twilio: false, hubspot: false, ghl: false
+      };
+      const creds: Record<string, Record<string, string>> = {
+        google: {}, twilio: {}, hubspot: {}, houzz: {}, facebook: {}, ghl: {}
+      };
+      Object.keys(loadedStatuses).forEach(key => {
+        if (loadedStatuses[key]) {
+          statuses[key] = loadedStatuses[key].isConnected;
+          creds[key] = loadedStatuses[key].credentials || {};
+        }
+      });
+      setConnectionStatus(statuses);
+      setCredentials(creds);
+    }
+  }, [loadedStatuses]);
 
   const [isSaving, setIsSaving] = useState<Record<string, boolean>>({});
 
