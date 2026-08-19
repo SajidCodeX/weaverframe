@@ -329,12 +329,12 @@ function WelcomePage() {
         </div>
       </header>
 
-      {/* ── HERO SECTION: 3D PERSPECTIVE EXPLODED VILLA (MATCHING EXACT IMAGE) ── */}
-      <section className="relative min-h-[96vh] flex items-center pt-24 pb-12 overflow-hidden border-b border-white/[0.08]">
-        <div className="w-full max-w-[1440px] mx-auto px-6 md:px-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center z-10">
+      {/* ── HERO SECTION: 3D PERSPECTIVE EXPLODED VILLA (GRAND SCALE) ── */}
+      <section className="relative min-h-[96vh] flex items-center pt-24 pb-16 overflow-hidden border-b border-white/[0.08]">
+        <div className="w-full max-w-[1680px] mx-auto px-6 md:px-12 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center z-10">
           
           {/* LEFT COLUMN: Editorial Typography & High-Ticket Positioning */}
-          <div className="lg:col-span-5 space-y-6 pt-2">
+          <div className="lg:col-span-5 space-y-6 pt-2 z-20">
             
             {/* Status Pill */}
             <motion.div
@@ -350,7 +350,7 @@ function WelcomePage() {
             </motion.div>
 
             {/* Main Headline */}
-            <h1 className="font-serif text-4xl sm:text-5xl lg:text-[64px] leading-[1.03] tracking-tight font-normal text-white">
+            <h1 className="font-serif text-4xl sm:text-5xl lg:text-[66px] leading-[1.03] tracking-tight font-normal text-white">
               Your <span className="italic text-[#e5d9c5] font-serif">$2M+ custom builds</span> deserve a 24/7 digital architect.
             </h1>
 
@@ -405,13 +405,13 @@ function WelcomePage() {
             </div>
           </div>
 
-          {/* RIGHT COLUMN: Frameless, Grand-Scale Exploded Villa Image */}
+          {/* RIGHT COLUMN: Massive Frameless Exploded Villa Visual */}
           <div className="lg:col-span-7 relative flex items-center justify-center">
-            {/* Ambient Background Glow */}
-            <div className="absolute inset-0 bg-radial from-[#c9a84c]/[0.06] via-transparent to-transparent rounded-full blur-3xl pointer-events-none" />
+            {/* Ambient Lighting Glow Behind Image */}
+            <div className="absolute inset-0 bg-radial from-[#c9a84c]/[0.08] via-transparent to-transparent rounded-full blur-3xl pointer-events-none scale-125" />
 
             <motion.div
-              initial={{ opacity: 0, scale: 0.96, y: 15 }}
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
               className="relative w-full flex items-center justify-center"
@@ -419,7 +419,7 @@ function WelcomePage() {
               <img
                 src="/images/exploded-villa.jpg"
                 alt="WeaverFrame Exploded Luxury Architecture"
-                className="w-full max-w-[860px] h-auto object-contain select-none pointer-events-none drop-shadow-[0_20px_50px_rgba(0,0,0,0.85)]"
+                className="w-full max-w-[1250px] xl:scale-115 xl:translate-x-4 h-auto object-contain select-none pointer-events-none drop-shadow-[0_30px_70px_rgba(0,0,0,0.95)] transition-transform duration-700 hover:scale-[1.18]"
               />
             </motion.div>
           </div>
