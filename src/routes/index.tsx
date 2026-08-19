@@ -194,11 +194,11 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
           value={qualifiedLeads.toString()}
           sub={`${totalLeads > 0 ? Math.round((qualifiedLeads / totalLeads) * 100) : 0}% qualification rate`}
           extra={
-            <div className="h-1.5 bg-[#14151e] rounded-full overflow-hidden border border-white/[0.04]">
+            <div className="h-1.5 bg-[#101014] rounded-full overflow-hidden border border-white/[0.04]">
               <div
                 className="h-full rounded-full bar-animated"
                 style={{
-                  background: "linear-gradient(90deg, #34d399, #60a5fa)",
+                  background: "linear-gradient(90deg, #34d399, #e5d9c5)",
                   ["--bar-pct" as string]: `${totalLeads > 0 ? Math.round((qualifiedLeads / totalLeads) * 100) : 0}%`,
                 }}
               />
@@ -394,13 +394,13 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
           <div className="flex items-stretch gap-0">
             {funnel.map((s: any, i: any) => {
               const colors = [
-                { accent: "#BF5AF2", grad: "#BF5AF2, #8B5CF6" },
-                { accent: "#0A84FF", grad: "#0A84FF, #38BDF8" },
-                { accent: "#30D158", grad: "#30D158, #34D399" },
-                { accent: "#FF9F0A", grad: "#FF9F0A, #FCD34D" },
-                { accent: "#FF453A", grad: "#FF453A, #F87171" },
+                { accent: "#e5d9c5", grad: "#ffffff, #e5d9c5" },
+                { accent: "#c9a84c", grad: "#e5d9c5, #c9a84c" },
+                { accent: "#34d399", grad: "#34d399, #10b981" },
+                { accent: "#fbbf24", grad: "#fbbf24, #f59e0b" },
+                { accent: "#f87171", grad: "#f87171, #ef4444" },
               ];
-              const c = colors[i];
+              const c = colors[i] || colors[0];
               const getLinkProps = (label: string) => {
                 if (label === 'AI Qualified') return { to: '/leads' as const, search: { stage: 'Qualified' } };
                 if (label === 'Builder Notified') return { to: '/leads' as const, search: { stage: 'Builder Notified' } };
@@ -414,7 +414,7 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
                   {/* Stage card */}
                   <Link
                     {...linkProps}
-                    className="flex-1 rounded-xl border border-white/[0.08] hover:border-[#e5d9c5]/40 bg-[#0c0d14] cursor-pointer transition-all duration-200 block no-underline shadow-sm group hover:-translate-y-0.5"
+                    className="flex-1 rounded-xl border border-white/[0.08] hover:border-[#e5d9c5]/40 bg-[#0a0a0d] cursor-pointer transition-all duration-200 block no-underline shadow-sm group hover:-translate-y-0.5"
                   >
                     <div className="p-4">
                       {/* Stage number + pct */}

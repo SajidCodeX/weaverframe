@@ -111,7 +111,7 @@ export function Sidebar({
         }`}
       >
         {/* Brand Monogram */}
-        <div className="size-8 rounded-lg bg-gradient-to-br from-[#161722] to-[#0c0d12] border border-[#e5d9c5]/25 shadow-[0_0_15px_rgba(201,168,76,0.12)] flex items-center justify-center font-nevera text-sm font-bold text-[#e5d9c5] shrink-0">
+        <div className="size-8 rounded-lg bg-gradient-to-br from-[#141417] to-[#08080a] border border-[#e5d9c5]/25 shadow-[0_0_15px_rgba(201,168,76,0.12)] flex items-center justify-center font-nevera text-sm font-bold text-[#e5d9c5] shrink-0">
           W
         </div>
         <div
@@ -179,7 +179,7 @@ export function Sidebar({
       </nav>
 
       {/* ── Footer: Company + User ── */}
-      <div className="p-3 border-t border-border flex flex-col gap-2 overflow-hidden bg-[#06070a]">
+      <div className="p-3 border-t border-border flex flex-col gap-2 overflow-hidden bg-[#060608]">
         {/* Company block */}
         <div
           className={`px-2 py-1.5 transition-all duration-300 origin-top overflow-hidden ${
@@ -214,7 +214,7 @@ export function Sidebar({
           title={actuallyCollapsed ? "Profile" : undefined}
         >
           <div className="relative shrink-0">
-            <div className="size-8 rounded-full bg-[#12131a] border border-[#e5d9c5]/30 text-[#e5d9c5] flex items-center justify-center text-xs font-bold font-nevera shadow-sm shadow-[#e5d9c5]/10">
+            <div className="size-8 rounded-full bg-[#101014] border border-[#e5d9c5]/30 text-[#e5d9c5] flex items-center justify-center text-xs font-bold font-nevera shadow-sm shadow-[#e5d9c5]/10">
                {isAdminView ? 'AD' : (session?.displayName ? session.displayName[0].toUpperCase() : 'U')}
             </div>
             {/* Online dot with premium pulse animation */}

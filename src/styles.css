@@ -65,33 +65,33 @@
 }
 
 :root {
-  /* WeaverFrame Luxury Architecture OS Design System */
+  /* WeaverFrame Luxury Architecture OS Design System - Pure Obsidian & Champagne */
   --radius: 0.75rem;
   --background: #060608;
   --foreground: #F5F5F7;
-  --card: #0c0d12;
+  --card: #0a0a0d;
   --card-foreground: #F5F5F7;
-  --popover: #0c0d12;
+  --popover: #0a0a0d;
   --popover-foreground: #F5F5F7;
   --primary: #e5d9c5;
   --primary-foreground: #000000;
-  --secondary: #14151e;
+  --secondary: #101014;
   --secondary-foreground: #F5F5F7;
-  --muted: #111218;
-  --muted-foreground: #8a8d9b;
-  --accent: #161722;
+  --muted: #0d0d10;
+  --muted-foreground: #9ca3af;
+  --accent: #141418;
   --accent-foreground: #e5d9c5;
   --destructive: #f87171;
   --destructive-foreground: #F5F5F7;
   --border: rgba(255, 255, 255, 0.08);
-  --input: #12131a;
+  --input: #101014;
   --ring: rgba(229, 217, 197, 0.35);
   --success: #34d399;
   --warning: #fbbf24;
   --danger: #f87171;
-  --cold: #60a5fa;
-  --row-hover: #12131c;
-  --sidebar: #08090d;
+  --cold: #9ca3af;
+  --row-hover: #101013;
+  --sidebar: #060608;
 }
 
 @layer base {
@@ -133,7 +133,7 @@
   }
 }
 
-/* ─── Vivid Lead Badges ────────────────────────────────── */
+/* ─── Vivid Lead Badges (Pure Warm/Obsidian/Champagne) ─── */
 @layer utilities {
   .badge-hot {
     background-color: rgba(248, 113, 113, 0.15);
@@ -148,9 +148,9 @@
   }
 
   .badge-cold {
-    background-color: rgba(96, 165, 250, 0.15);
-    color: #93c5fd;
-    border: 1px solid rgba(96, 165, 250, 0.3);
+    background-color: rgba(255, 255, 255, 0.06);
+    color: #d1d5db;
+    border: 1px solid rgba(255, 255, 255, 0.15);
   }
 
   .badge-success {

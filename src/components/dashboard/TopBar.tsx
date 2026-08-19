@@ -341,7 +341,7 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2">
           {/* Refresh Button */}
           <button
             onClick={() => {
@@ -351,7 +351,7 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
                 if (icon) icon.classList.remove('animate-spin');
               });
             }}
-            className="hidden sm:flex items-center justify-center size-[36px] text-white/70 bg-[#0e0f15] border border-white/[0.1] rounded-xl hover:border-[#e5d9c5]/40 hover:text-white transition-all duration-200 cursor-pointer shadow-sm"
+            className="hidden sm:flex items-center justify-center size-9 text-white/70 bg-[#0a0a0d] border border-white/[0.09] rounded-xl hover:border-[#e5d9c5]/40 hover:text-white transition-all duration-150 cursor-pointer shadow-sm shrink-0"
             title="Refresh Page Data"
           >
             <RefreshCw id="global-refresh-icon" className="size-3.5 text-white/60" />
@@ -361,25 +361,25 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
           <button
             id="topbar-search"
             onClick={() => setIsSearchOpen(true)}
-            className="hidden sm:flex items-center justify-between w-[150px] h-[36px] text-xs text-white/70 bg-[#0e0f15] border border-white/[0.1] rounded-xl px-3 hover:border-[#e5d9c5]/40 hover:text-white transition-all duration-200 group cursor-pointer shadow-sm"
+            className="hidden sm:flex items-center gap-3 h-9 text-xs text-white/70 bg-[#0a0a0d] border border-white/[0.09] rounded-xl px-3 hover:border-[#e5d9c5]/40 hover:text-white transition-all duration-150 group cursor-pointer shadow-sm shrink-0 whitespace-nowrap"
           >
-            <div className="flex items-center gap-2">
-              <Search className="size-3.5 text-white/40 group-hover:text-[#e5d9c5] transition-colors" />
-              <span className="text-xs font-normal">Search OS</span>
+            <div className="flex items-center gap-2 shrink-0">
+              <Search className="size-3.5 text-white/40 group-hover:text-[#e5d9c5] transition-colors shrink-0" />
+              <span className="text-xs font-normal whitespace-nowrap">Search OS</span>
             </div>
-            <kbd className="font-mono text-[9.5px] bg-[#161722] px-1.5 py-0.5 rounded border border-white/10 text-[#e5d9c5] font-semibold">
+            <kbd className="font-mono text-[9px] bg-[#141418] px-1.5 py-0.5 rounded border border-white/10 text-[#e5d9c5] font-semibold shrink-0">
               {shortcutText}
             </kbd>
           </button>
 
           {/* Live DB Sync */}
-          <div className="hidden sm:flex items-center justify-center h-[36px] text-[10.5px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-3.5 cursor-default font-mono tracking-wider shadow-sm">
-            <span className="size-1.5 rounded-full bg-emerald-400 mr-2 animate-pulse" />
-            <span>Sync: {realSyncTime ? formatLiveSyncTime(realSyncTime) : "Just now"}</span>
+          <div className="hidden sm:flex items-center justify-center h-9 text-[10.5px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-3.5 cursor-default font-mono tracking-wider shadow-sm shrink-0 whitespace-nowrap">
+            <span className="size-1.5 rounded-full bg-emerald-400 mr-2 animate-pulse shrink-0" />
+            <span className="whitespace-nowrap">Sync: {realSyncTime ? formatLiveSyncTime(realSyncTime) : "Just now"}</span>
           </div>
 
           {/* Today's Date */}
-          <div className="hidden lg:flex items-center justify-center h-[36px] px-3 text-xs text-white/60 font-mono tracking-widest bg-[#0e0f15] border border-white/[0.1] rounded-xl cursor-default">
+          <div className="hidden lg:flex items-center justify-center h-9 px-3 text-xs text-white/60 font-mono tracking-widest bg-[#0a0a0d] border border-white/[0.09] rounded-xl cursor-default shrink-0 whitespace-nowrap">
             {new Date().toLocaleDateString("en-US", {
               month: "2-digit",
               day: "2-digit",
@@ -393,16 +393,16 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
               <button
                 id="topbar-daterange"
                 onClick={() => setIsDateOpen(!isDateOpen)}
-                className="flex items-center gap-1.5 text-xs text-foreground bg-secondary/80 border border-border/80 rounded-md px-3 py-1.5 hover:border-white/30 hover:bg-secondary transition-all duration-150"
+                className="flex items-center gap-1.5 text-xs text-foreground bg-[#0a0a0d] border border-white/[0.09] rounded-xl px-3 h-9 hover:border-[#e5d9c5]/40 transition-all duration-150 cursor-pointer shrink-0"
               >
-                <CalIcon className="size-3.5 text-foreground/75" />
-                <span className="font-medium text-foreground">{selectedRange}</span>
-                <ChevronDown className="size-3 text-foreground/60" />
+                <CalIcon className="size-3.5 text-white/60" />
+                <span className="font-medium text-foreground whitespace-nowrap">{selectedRange}</span>
+                <ChevronDown className="size-3 text-white/40" />
               </button>
 
               {isDateOpen && (
-                <div className="absolute right-0 mt-2 w-64 rounded-lg bg-card border border-border p-3 shadow-none z-50 animate-in fade-in slide-in-from-top-2 duration-150">
-                  <div className="text-[10px] font-semibold text-foreground/50 uppercase tracking-widest px-3 py-2 border-b border-border/40 mb-1">
+                <div className="absolute right-0 mt-2 w-64 rounded-xl bg-card border border-border p-3 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                  <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-3 py-2 border-b border-border/40 mb-1 font-mono">
                     Select Range
                   </div>
                   <div className="space-y-0.5 py-1">
@@ -420,17 +420,17 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
                           changeDateRange(range);
                           setIsDateOpen(false);
                         }}
-                        className="w-full text-left text-xs px-3 py-2 rounded-md text-foreground/90 hover:text-white hover:bg-white/[0.08] flex items-center justify-between transition-colors font-medium"
+                        className="w-full text-left text-xs px-3 py-2 rounded-lg text-foreground/90 hover:text-white hover:bg-white/[0.06] flex items-center justify-between transition-colors font-medium cursor-pointer"
                       >
                         <span>{range}</span>
-                        {selectedRange === range && <Check className="size-3.5 text-success" />}
+                        {selectedRange === range && <Check className="size-3.5 text-emerald-400" />}
                       </button>
                     ))}
                   </div>
 
                   {/* Custom Date Inputs inside the popup */}
                   <div className="flex flex-col gap-2 p-2 border-t border-border/40 mt-1.5 pt-2">
-                    <div className="text-[9px] uppercase tracking-wider text-foreground/50 font-semibold font-mono">
+                    <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold font-mono">
                       Custom Range
                     </div>
                     <div className="flex gap-1.5 items-center justify-between">
@@ -438,14 +438,14 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
                         type="date"
                         value={customStart}
                         onChange={(e) => setCustomStart(e.target.value)}
-                        className="bg-black/50 text-xs border border-border/80 rounded px-1.5 py-1.5 text-white focus:outline-none focus:ring-1 focus:ring-primary w-[98px] text-[10px] font-mono focus:border-primary"
+                        className="bg-black/50 text-xs border border-border/80 rounded-lg px-2 py-1.5 text-white focus:outline-none focus:ring-1 focus:ring-primary w-[100px] text-[10px] font-mono focus:border-primary"
                       />
-                      <span className="text-[10px] text-foreground/40 font-mono">to</span>
+                      <span className="text-[10px] text-muted-foreground font-mono">to</span>
                       <input
                         type="date"
                         value={customEnd}
                         onChange={(e) => setCustomEnd(e.target.value)}
-                        className="bg-black/50 text-xs border border-border/80 rounded px-1.5 py-1.5 text-white focus:outline-none focus:ring-1 focus:ring-primary w-[98px] text-[10px] font-mono focus:border-primary"
+                        className="bg-black/50 text-xs border border-border/80 rounded-lg px-2 py-1.5 text-white focus:outline-none focus:ring-1 focus:ring-primary w-[100px] text-[10px] font-mono focus:border-primary"
                       />
                     </div>
                     <button
@@ -456,7 +456,7 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
                         }
                       }}
                       disabled={!customStart || !customEnd}
-                      className="w-full mt-1 bg-primary text-primary-foreground font-medium text-[11px] py-1.5 rounded hover:bg-primary/90 transition-colors disabled:opacity-50"
+                      className="w-full mt-1 bg-primary text-primary-foreground font-semibold text-[11px] py-1.5 rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 cursor-pointer"
                     >
                       Apply Custom Range
                     </button>
@@ -471,11 +471,11 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
             <button
               id="topbar-notifications"
               onClick={() => setIsNotifOpen(!isNotifOpen)}
-              className="relative size-9 rounded-md hover:bg-white/[0.06] flex items-center justify-center text-foreground/80 hover:text-foreground transition-all duration-150"
+              className="relative size-9 rounded-xl bg-[#0a0a0d] border border-white/[0.09] hover:border-[#e5d9c5]/40 flex items-center justify-center text-white/70 hover:text-white transition-all duration-150 cursor-pointer shrink-0 shadow-sm"
             >
-              <Bell className="size-4" />
+              <Bell className="size-3.5" />
               {hasUnread && (
-                <span className="absolute top-2.5 right-2.5 size-2 bg-success rounded-full ring-2 ring-background animate-pulse" />
+                <span className="absolute top-2 right-2 size-2 bg-emerald-400 rounded-full ring-2 ring-[#060608] animate-pulse" />
               )}
             </button>
 
