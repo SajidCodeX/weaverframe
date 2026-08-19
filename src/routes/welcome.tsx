@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import React, { useRef, useState, useEffect, useMemo, Suspense } from "react";
-import { motion, useScroll, useTransform, useSpring, useMotionValue, AnimatePresence } from "framer-motion";
+import { motion, useScroll, useTransform, useSpring, useMotionValue, AnimatePresence, useInView } from "framer-motion";
 import Lenis from "lenis";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { Points, PointMaterial } from "@react-three/drei";
@@ -52,7 +52,8 @@ import {
   LandPlot,
   Layers3,
   Crosshair,
-  Quote
+  Quote,
+  Menu,
 } from "lucide-react";
 
 import { CustomCursor } from "../components/CustomCursor";
@@ -108,30 +109,64 @@ function ParticleConstellation({ mouseRef }: { mouseRef: React.MutableRefObject<
 }
 
 // ── KINETIC TEXT REVEAL ───────────────────────────────────────────────────────
-const KineticText = ({ text, delay = 0, className = "" }: { text: string; delay?: number; className?: string }) => {
-  const words = text.split(" ");
+const KineticText = ({ text, className = "" }: { text: string; delay?: number; className?: string }) => {
   return (
-    <span className={`inline-block overflow-hidden ${className}`}>
-      {words.map((word, i) => (
-        <span key={i} className="inline-block overflow-hidden mr-[0.28em]">
-          <motion.span
-            initial={{ y: "110%", opacity: 0 }}
-            whileInView={{ y: 0, opacity: 1 }}
-            viewport={{ once: true }}
-            transition={{
-              duration: 0.8,
-              ease: [0.16, 1, 0.3, 1],
-              delay: delay + i * 0.04,
-            }}
-            className="inline-block"
-          >
-            {word}
-          </motion.span>
-        </span>
-      ))}
-    </span>
+    <motion.span
+      initial={{ opacity: 0, y: 16 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+      className={`inline-block ${className}`}
+    >
+      {text}
+    </motion.span>
   );
 };
+
+// ── SCROLL-TRIGGERED NUMBER COUNTER ───────────────────────────────────────────
+function AnimatedCounter({
+  target,
+  prefix = "",
+  suffix = "",
+  decimals = 0,
+  duration = 1.6,
+}: {
+  target: number;
+  prefix?: string;
+  suffix?: string;
+  decimals?: number;
+  duration?: number;
+}) {
+  const [val, setVal] = useState(0);
+  const ref = useRef<HTMLSpanElement>(null);
+  const inView = useInView(ref, { once: true, margin: "-30px" });
+
+  useEffect(() => {
+    if (!inView) return;
+    let startTimestamp: number | null = null;
+    const step = (timestamp: number) => {
+      if (!startTimestamp) startTimestamp = timestamp;
+      const progress = Math.min((timestamp - startTimestamp) / (duration * 1000), 1);
+      // Exponential ease-out for ultra smooth luxury deceleration
+      const ease = progress === 1 ? 1 : 1 - Math.pow(2, -10 * progress);
+      setVal(ease * target);
+      if (progress < 1) {
+        requestAnimationFrame(step);
+      } else {
+        setVal(target);
+      }
+    };
+    requestAnimationFrame(step);
+  }, [inView, target, duration]);
+
+  return (
+    <span ref={ref} className="tabular-nums">
+      {prefix}
+      {decimals > 0 ? val.toFixed(decimals) : Math.round(val).toLocaleString()}
+      {suffix}
+    </span>
+  );
+}
 
 // ── LUXURY INFINITE MARQUEE ───────────────────────────────────────────────────
 const LuxuryMarquee = () => {
@@ -219,6 +254,7 @@ function WelcomePage() {
 
   // Demo Modal State
   const [isDemoModalOpen, setIsDemoModalOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [demoForm, setDemoForm] = useState({ name: "", company: "", email: "", phone: "", buildVolume: "$1M - $3M" });
   const [demoSubmitted, setDemoSubmitted] = useState(false);
 
@@ -448,7 +484,7 @@ function WelcomePage() {
           <div className="flex items-center gap-3 shrink-0">
             <Link
               to="/login"
-              className="text-[11px] font-bold tracking-[0.18em] uppercase text-white/80 hover:text-white px-3 py-1.5 transition-colors whitespace-nowrap"
+              className="text-[11px] font-bold tracking-[0.18em] uppercase text-white/80 hover:text-white px-3 py-1.5 transition-colors whitespace-nowrap hidden sm:inline-block"
             >
               Client Login
             </Link>
@@ -461,9 +497,86 @@ function WelcomePage() {
                 <ArrowRight className="size-3.5" />
               </button>
             </MagneticButton>
+
+            {/* Mobile Hamburger Toggle */}
+            <button
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="p-2 rounded-full border border-white/15 bg-white/5 text-white/80 hover:text-white lg:hidden"
+              aria-label="Toggle Navigation Menu"
+            >
+              {isMobileMenuOpen ? <X className="size-4" /> : <Menu className="size-4" />}
+            </button>
           </div>
         </header>
       </div>
+
+      {/* ── MOBILE NAVIGATION DRAWER ── */}
+      <AnimatePresence>
+        {isMobileMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.96 }}
+            className="fixed top-20 left-4 right-4 z-50 bg-[#0c0d12]/95 backdrop-blur-2xl border border-white/15 rounded-3xl p-6 shadow-2xl flex flex-col space-y-4 lg:hidden pointer-events-auto"
+          >
+            <nav className="flex flex-col space-y-3 font-mono text-xs tracking-widest uppercase text-white/80">
+              <a
+                href="#radar"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="py-2 border-b border-white/5 hover:text-[#e5d9c5]"
+              >
+                Live Radar
+              </a>
+              <a
+                href="#pillars"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="py-2 border-b border-white/5 hover:text-[#e5d9c5]"
+              >
+                Platform Architecture
+              </a>
+              <a
+                href="#calculator"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="py-2 border-b border-white/5 hover:text-[#e5d9c5]"
+              >
+                ROI Modeler
+              </a>
+              <a
+                href="#cases"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="py-2 border-b border-white/5 hover:text-[#e5d9c5]"
+              >
+                Case Studies
+              </a>
+              <a
+                href="#pricing"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="py-2 hover:text-[#e5d9c5]"
+              >
+                Pricing
+              </a>
+            </nav>
+            <div className="pt-3 border-t border-white/10 flex flex-col gap-3">
+              <Link
+                to="/login"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="w-full py-3 text-center border border-white/20 text-xs uppercase font-mono tracking-widest text-white hover:border-[#e5d9c5] rounded-full"
+              >
+                Client Login
+              </Link>
+              <button
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  setIsDemoModalOpen(true);
+                }}
+                className="w-full py-3 text-center bg-[#e5d9c5] text-black text-xs uppercase font-mono font-bold tracking-widest hover:bg-white rounded-full shadow-lg shadow-[#e5d9c5]/15"
+              >
+                Request Private Demo
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── HERO SECTION: 3D PERSPECTIVE EXPLODED VILLA & WEBGL CONSTELLATION ── */}
       <section
@@ -556,18 +669,24 @@ function WelcomePage() {
               </a>
             </motion.div>
 
-            {/* Trust Metrics */}
+            {/* Animated Trust Metrics */}
             <div className="grid grid-cols-3 gap-4 pt-6 border-t border-white/[0.1] max-w-md">
-              <div>
-                <div className="font-nevera text-2xl sm:text-3xl text-white font-bold">&lt; 45s</div>
+              <div className="group cursor-default">
+                <div className="font-nevera text-2xl sm:text-3xl text-white font-bold group-hover:text-[#e5d9c5] transition-colors">
+                  <AnimatedCounter target={45} prefix="< " suffix="s" duration={1.4} />
+                </div>
                 <div className="text-[9px] uppercase font-mono tracking-widest text-white/50 mt-1">Lead Response</div>
               </div>
-              <div>
-                <div className="font-nevera text-2xl sm:text-3xl text-[#e5d9c5] font-bold">100%</div>
+              <div className="group cursor-default">
+                <div className="font-nevera text-2xl sm:text-3xl text-[#e5d9c5] font-bold group-hover:scale-105 transition-transform origin-left">
+                  <AnimatedCounter target={100} suffix="%" duration={1.5} />
+                </div>
                 <div className="text-[9px] uppercase font-mono tracking-widest text-white/50 mt-1">Coverage</div>
               </div>
-              <div>
-                <div className="font-nevera text-2xl sm:text-3xl text-white font-bold">$180M+</div>
+              <div className="group cursor-default">
+                <div className="font-nevera text-2xl sm:text-3xl text-white font-bold group-hover:text-[#e5d9c5] transition-colors">
+                  <AnimatedCounter target={180} prefix="$" suffix="M+" duration={1.8} />
+                </div>
                 <div className="text-[9px] uppercase font-mono tracking-widest text-white/50 mt-1">Pipeline Qualified</div>
               </div>
             </div>
@@ -602,12 +721,15 @@ function WelcomePage() {
 
       {/* ── THE "WOW" FEATURE: LIVE AUTONOMOUS PIPELINE RADAR ── */}
       <section id="radar" className="py-32 px-6 md:px-12 max-w-7xl mx-auto border-b border-white/[0.08] relative">
+        {/* Ambient Gold Glow */}
+        <div className="absolute top-1/2 -left-48 w-96 h-96 bg-radial from-[#c9a84c]/[0.07] to-transparent rounded-full blur-3xl pointer-events-none" />
+
         <div className="mb-16 max-w-3xl">
           <span className="text-[11px] uppercase font-mono tracking-[0.3em] font-bold text-[#e5d9c5] block mb-4">
             01 / Live Demonstration
           </span>
           <h2 className="font-nevera text-3xl sm:text-5xl lg:text-6xl text-white leading-tight font-normal">
-            Watch the AI qualify a $2M+ client in real-time.
+            <KineticText text="Watch the AI qualify a $2M+ client in real-time." />
           </h2>
           <p className="text-white/60 font-light text-base mt-4 leading-relaxed">
             Select an active luxury build market below to observe how WeaverFrame autonomous AI screens buyers, validates lot readiness, and confirms consultation appointments without human delay.
@@ -624,7 +746,7 @@ function WelcomePage() {
             <button
               key={tab.id}
               onClick={() => setActiveScenario(tab.id as any)}
-              className={`px-5 py-3 rounded-lg text-xs font-mono tracking-wider uppercase transition-all flex items-center gap-3 border ${
+              className={`px-5 py-3 rounded-lg text-xs font-mono tracking-wider uppercase transition-all flex items-center gap-3 border cursor-pointer ${
                 activeScenario === tab.id
                   ? "bg-[#e5d9c5] text-black border-[#e5d9c5] font-bold shadow-lg shadow-[#e5d9c5]/15 scale-102"
                   : "bg-[#101116] text-white/60 border-white/[0.08] hover:border-white/30 hover:text-white"
@@ -632,7 +754,7 @@ function WelcomePage() {
             >
               <Compass className="size-3.5" />
               <span>{tab.label}</span>
-              <span className={`px-2 py-0.5 rounded text-[10px] ${activeScenario === tab.id ? "bg-black/20 text-black" : "bg-white/10 text-[#e5d9c5]"}`}>
+              <span className={`px-2 py-0.5 rounded text-[10px] ${activeScenario === tab.id ? "bg-black/20 text-black font-bold" : "bg-white/10 text-[#e5d9c5]"}`}>
                 {tab.budget}
               </span>
             </button>
@@ -640,7 +762,23 @@ function WelcomePage() {
         </div>
 
         {/* Live Radar Terminal Screen */}
-        <div className="rounded-xl border border-[#e5d9c5]/25 bg-[#0c0d11]/80 backdrop-blur-xl p-6 sm:p-10 shadow-2xl">
+        <div className="rounded-2xl border border-[#e5d9c5]/30 bg-[#0c0d12]/90 backdrop-blur-2xl p-6 sm:p-10 shadow-[0_20px_50px_rgba(0,0,0,0.85)] relative overflow-hidden">
+          {/* Top Window Chrome Bar */}
+          <div className="flex items-center justify-between pb-5 mb-6 border-b border-white/[0.08]">
+            <div className="flex items-center gap-2">
+              <span className="size-3 rounded-full bg-rose-500/80 inline-block" />
+              <span className="size-3 rounded-full bg-amber-500/80 inline-block" />
+              <span className="size-3 rounded-full bg-emerald-500/80 inline-block" />
+              <span className="text-[10px] font-mono text-white/40 uppercase tracking-widest ml-3 hidden sm:inline-block">
+                WeaverFrame AI Autonomous Terminal · Live Screening Feed
+              </span>
+            </div>
+            <div className="flex items-center gap-2 text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
+              <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Status: Operational & Screening
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
             
             {/* Left: Live Intelligence Feed */}
@@ -720,13 +858,16 @@ function WelcomePage() {
       </section>
 
       {/* ── 6 FOUNDATIONAL PILLARS (SPOTLIGHT CARDS) ── */}
-      <section id="pillars" className="py-32 px-6 md:px-12 max-w-7xl mx-auto border-b border-white/[0.08]">
+      <section id="pillars" className="py-32 px-6 md:px-12 max-w-7xl mx-auto border-b border-white/[0.08] relative">
+        {/* Ambient Gold Glow */}
+        <div className="absolute top-1/3 -right-48 w-96 h-96 bg-radial from-[#e5d9c5]/[0.06] to-transparent rounded-full blur-3xl pointer-events-none" />
+
         <div className="mb-20 max-w-3xl">
           <span className="text-[11px] uppercase font-mono tracking-[0.3em] font-bold text-[#e5d9c5] block mb-4">
             02 / Platform Architecture
           </span>
           <h2 className="font-nevera text-3xl sm:text-5xl lg:text-6xl text-white leading-tight font-normal">
-            Six pillars engineered for seven-figure construction deals.
+            <KineticText text="Six pillars engineered for seven-figure construction deals." />
           </h2>
           <p className="text-white/60 font-light text-base mt-6 leading-relaxed">
             Standard CRMs are built for small e-commerce checkouts. WeaverFrame is tailored specifically to custom architects and estate builders with multi-month sales cycles and high-touch requirements.
@@ -816,6 +957,9 @@ function WelcomePage() {
 
       {/* ── INTERACTIVE ROI & REVENUE CALCULATOR ── */}
       <section id="calculator" className="py-32 px-6 md:px-12 bg-[#08080a] border-b border-white/[0.08] relative">
+        {/* Ambient Gold Glow */}
+        <div className="absolute top-1/2 -right-48 w-96 h-96 bg-radial from-[#c9a84c]/[0.06] to-transparent rounded-full blur-3xl pointer-events-none" />
+
         <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
             
@@ -825,7 +969,7 @@ function WelcomePage() {
                 03 / ROI Modeling
               </span>
               <h2 className="font-nevera text-3xl sm:text-5xl text-white leading-tight font-normal">
-                How much revenue are you losing to slow responses?
+                <KineticText text="How much revenue are you losing to slow responses?" />
               </h2>
               <p className="text-white/60 font-light text-base leading-relaxed">
                 A custom home buyer inquiring at 9:00 PM on a Sunday will not wait until Tuesday for a callback. Engaging them in 45 seconds recaptures contracts that would otherwise go to competitors.
@@ -849,7 +993,7 @@ function WelcomePage() {
 
             {/* Right Interactive Calculator */}
             <div className="lg:col-span-7">
-              <div className="p-8 sm:p-10 rounded-2xl border border-[#e5d9c5]/30 bg-[#0c0d12]/90 backdrop-blur-2xl shadow-2xl">
+              <div className="p-8 sm:p-10 rounded-2xl border border-[#e5d9c5]/30 bg-[#0c0d12]/90 backdrop-blur-2xl shadow-[0_20px_60px_rgba(0,0,0,0.9)]">
                 <div className="flex items-center justify-between pb-6 border-b border-white/[0.08] mb-8">
                   <div className="flex items-center gap-3">
                     <Sliders className="size-5 text-[#e5d9c5]" />
@@ -878,7 +1022,7 @@ function WelcomePage() {
                       step={50000}
                       value={avgPrice}
                       onChange={(e) => setAvgPrice(Number(e.target.value))}
-                      className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[#e5d9c5]"
+                      className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[#e5d9c5] transition-all hover:bg-white/20"
                     />
                     <div className="flex justify-between text-[10px] font-mono text-white/30 mt-1">
                       <span>$600,000</span>
@@ -904,7 +1048,7 @@ function WelcomePage() {
                       step={1}
                       value={monthlyLeads}
                       onChange={(e) => setMonthlyLeads(Number(e.target.value))}
-                      className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[#e5d9c5]"
+                      className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[#e5d9c5] transition-all hover:bg-white/20"
                     />
                     <div className="flex justify-between text-[10px] font-mono text-white/30 mt-1">
                       <span>5 leads</span>
@@ -930,7 +1074,7 @@ function WelcomePage() {
                       step={0.5}
                       value={conversionLift}
                       onChange={(e) => setConversionLift(Number(e.target.value))}
-                      className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[#e5d9c5]"
+                      className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[#e5d9c5] transition-all hover:bg-white/20"
                     />
                     <div className="flex justify-between text-[10px] font-mono text-white/30 mt-1">
                       <span>+1.0%</span>
@@ -1020,24 +1164,32 @@ function WelcomePage() {
       </section>
 
       {/* ── THE CONTRAST (TRADITIONAL VS WEAVERFRAME) ── */}
-      <section id="comparison" className="py-32 px-6 md:px-12 max-w-7xl mx-auto border-b border-white/[0.08]">
+      <section id="comparison" className="py-32 px-6 md:px-12 max-w-7xl mx-auto border-b border-white/[0.08] relative">
+        {/* Ambient Glow */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-radial from-[#c9a84c]/[0.05] to-transparent rounded-full blur-3xl pointer-events-none" />
+
         <div className="text-center max-w-3xl mx-auto mb-20">
           <span className="text-[11px] uppercase font-mono tracking-[0.3em] font-bold text-[#e5d9c5] block mb-4">
             04 / Market Contrast
           </span>
           <h2 className="font-nevera text-3xl sm:text-5xl text-white leading-tight font-normal">
-            Why traditional sales follow-up fails luxury clientele.
+            <KineticText text="Why traditional sales follow-up fails luxury clientele." />
           </h2>
           <p className="text-white/60 font-light text-base mt-4">
             Compare standard sales operations against WeaverFrame Autonomous AI OS.
           </p>
         </div>
 
-        <div className="border border-white/[0.12] rounded-xl overflow-hidden bg-[#0a0b0e] shadow-2xl">
+        <div className="border border-white/[0.12] rounded-xl overflow-hidden bg-[#0a0b0e] shadow-2xl relative z-10">
           <div className="grid grid-cols-12 bg-white/[0.04] border-b border-white/[0.08] p-5 text-xs font-mono tracking-wider uppercase text-white/60">
             <div className="col-span-4 font-semibold text-white">Dimension</div>
             <div className="col-span-4 text-rose-400/90 font-semibold">Traditional Follow-Up</div>
-            <div className="col-span-4 text-[#e5d9c5] font-semibold">WeaverFrame AI OS</div>
+            <div className="col-span-4 text-[#e5d9c5] font-semibold flex items-center gap-2">
+              <span>WeaverFrame AI OS</span>
+              <span className="text-[9px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20 hidden sm:inline-block">
+                ★ 10x Advantage
+              </span>
+            </div>
           </div>
 
           {[
@@ -1078,7 +1230,7 @@ function WelcomePage() {
                 <XCircle className="size-4 text-rose-500/80 shrink-0 hidden sm:inline" />
                 <span>{row.trad}</span>
               </div>
-              <div className="col-span-4 text-[#e5d9c5] font-medium text-xs sm:text-sm flex items-center gap-2">
+              <div className="col-span-4 text-[#e5d9c5] font-medium text-xs sm:text-sm flex items-center gap-2 bg-[#e5d9c5]/[0.03] py-2 px-3 rounded-lg border border-[#e5d9c5]/10">
                 <CheckCircle2 className="size-4 text-emerald-400 shrink-0 hidden sm:inline" />
                 <span>{row.ai}</span>
               </div>
@@ -1088,14 +1240,17 @@ function WelcomePage() {
       </section>
 
       {/* ── CASE STUDIES & LIVE MARKET OUTCOMES (EMBLA CAROUSEL) ── */}
-      <section id="cases" className="py-32 px-6 md:px-12 max-w-7xl mx-auto border-b border-white/[0.08] overflow-hidden">
+      <section id="cases" className="py-32 px-6 md:px-12 max-w-7xl mx-auto border-b border-white/[0.08] overflow-hidden relative">
+        {/* Ambient Glow */}
+        <div className="absolute top-1/2 -left-48 w-96 h-96 bg-radial from-[#c9a84c]/[0.05] to-transparent rounded-full blur-3xl pointer-events-none" />
+
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-16">
           <div className="max-w-3xl">
             <span className="text-[11px] uppercase font-mono tracking-[0.3em] font-bold text-[#e5d9c5] block mb-4">
               05 / Live Market Outcomes
             </span>
             <h2 className="font-nevera text-3xl sm:text-5xl lg:text-6xl text-white leading-tight font-normal">
-              Real custom builders. Seven-figure outcomes.
+              <KineticText text="Real custom builders. Seven-figure outcomes." />
             </h2>
             <p className="text-white/60 font-light text-base mt-4">
               Explore how bespoke architecture firms and luxury builders protect and accelerate their high-ticket contract pipelines.
@@ -1127,9 +1282,9 @@ function WelcomePage() {
             {caseStudies.map((cs) => (
               <motion.div
                 key={cs.id}
-                whileHover={{ y: -4, scale: 1.01 }}
+                whileHover={{ y: -6, scale: 1.015 }}
                 transition={{ duration: 0.3 }}
-                className={`flex-none w-[90vw] sm:w-[500px] lg:w-[460px] p-8 sm:p-10 rounded-2xl border border-white/[0.1] bg-gradient-to-br ${cs.accent} via-[#0c0d12]/95 to-[#08090c] backdrop-blur-2xl flex flex-col justify-between min-h-[380px] shadow-2xl hover:border-[#e5d9c5]/40 transition-all group`}
+                className={`flex-none w-[90vw] sm:w-[500px] lg:w-[460px] p-8 sm:p-10 rounded-2xl border border-white/[0.12] bg-gradient-to-br ${cs.accent} via-[#0c0d12]/95 to-[#08090c] backdrop-blur-2xl flex flex-col justify-between min-h-[380px] shadow-2xl hover:border-[#e5d9c5]/50 transition-all group`}
               >
                 <div>
                   <div className="flex items-center justify-between mb-8">
@@ -1177,22 +1332,25 @@ function WelcomePage() {
       </section>
 
       {/* ── TRANSPARENT PRICING MATRIX ── */}
-      <section id="pricing" className="py-32 px-6 md:px-12 max-w-7xl mx-auto border-b border-white/[0.08]">
+      <section id="pricing" className="py-32 px-6 md:px-12 max-w-7xl mx-auto border-b border-white/[0.08] relative">
+        {/* Ambient Gold Glow */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-radial from-[#c9a84c]/[0.06] to-transparent rounded-full blur-3xl pointer-events-none" />
+
         <div className="text-center max-w-3xl mx-auto mb-20">
           <span className="text-[11px] uppercase font-mono tracking-[0.3em] font-bold text-[#e5d9c5] block mb-4">
             06 / Predictable Investment
           </span>
           <h2 className="font-nevera text-3xl sm:text-5xl text-white leading-tight font-normal">
-            One extra home build covers years of platform access.
+            <KineticText text="One extra home build covers years of platform access." />
           </h2>
           <p className="text-white/60 font-light text-base mt-4">
             No per-lead markups. No hidden commissions. Just pure operational power.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch relative z-10">
           {/* Plan 1: Starter */}
-          <div className="p-8 sm:p-10 rounded-2xl border border-white/[0.08] bg-[#0c0d12]/80 backdrop-blur-xl flex flex-col justify-between hover:border-white/20 transition-all">
+          <div className="p-8 sm:p-10 rounded-2xl border border-white/[0.08] bg-[#0c0d12]/80 backdrop-blur-xl flex flex-col justify-between hover:border-white/30 transition-all hover:bg-[#0e0f15]">
             <div>
               <span className="text-xs font-mono tracking-widest uppercase text-white/40 block mb-2 font-semibold">Boutique</span>
               <h3 className="font-nevera text-2xl text-white mb-2">Starter</h3>
@@ -1223,18 +1381,19 @@ function WelcomePage() {
 
             <button
               onClick={() => setIsDemoModalOpen(true)}
-              className="w-full mt-8 py-3.5 border border-white/20 text-white hover:border-[#e5d9c5] hover:text-[#e5d9c5] transition-colors text-xs font-bold uppercase tracking-widest"
+              className="w-full mt-8 py-3.5 border border-white/20 text-white hover:border-[#e5d9c5] hover:text-[#e5d9c5] transition-colors text-xs font-bold uppercase tracking-widest cursor-pointer"
             >
               Get Started
             </button>
           </div>
 
-          {/* Plan 2: Professional (Featured) */}
-          <div className="p-8 sm:p-10 rounded-2xl border-2 border-[#e5d9c5] flex flex-col justify-between relative shadow-[0_20px_50px_rgba(229,217,197,0.12)] bg-[#121319]/95 backdrop-blur-2xl group">
-            {/* Ambient Gold Glow */}
-            <div className="absolute -inset-1 bg-gradient-to-b from-[#e5d9c5]/20 via-[#c9a84c]/10 to-transparent rounded-3xl blur-xl opacity-75 pointer-events-none" />
+          {/* Plan 2: Professional (Dominant Featured Hero Card) */}
+          <div className="p-8 sm:p-10 rounded-2xl border-2 border-[#e5d9c5] flex flex-col justify-between relative shadow-[0_25px_60px_rgba(201,168,76,0.18)] bg-[#121319] backdrop-blur-2xl group lg:-translate-y-4 lg:scale-[1.03] transition-all">
+            {/* Ambient Gold Halo */}
+            <div className="absolute -inset-1 bg-gradient-to-b from-[#e5d9c5]/30 via-[#c9a84c]/15 to-transparent rounded-3xl blur-xl opacity-90 pointer-events-none" />
 
-            <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-[#e5d9c5] text-black text-[10px] font-mono uppercase font-bold tracking-widest px-4 py-1 rounded-full shadow-lg z-20">
+            <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-[#e5d9c5] text-black text-[10px] font-mono uppercase font-bold tracking-widest px-4 py-1 rounded-full shadow-lg z-20 flex items-center gap-1.5">
+              <span className="size-1.5 rounded-full bg-emerald-600 animate-pulse" />
               Most Popular · Recommended
             </div>
 
@@ -1272,14 +1431,14 @@ function WelcomePage() {
 
             <button
               onClick={() => setIsDemoModalOpen(true)}
-              className="w-full mt-8 py-4 bg-[#e5d9c5] text-black hover:bg-white transition-all text-xs font-bold uppercase tracking-widest shadow-xl shadow-[#e5d9c5]/20"
+              className="w-full mt-8 py-4 bg-[#e5d9c5] text-black hover:bg-white transition-all text-xs font-bold uppercase tracking-widest shadow-xl shadow-[#e5d9c5]/25 cursor-pointer relative z-10"
             >
               Start 14-Day Pilot
             </button>
           </div>
 
           {/* Plan 3: Enterprise */}
-          <div className="p-8 sm:p-10 rounded-2xl border border-white/[0.08] bg-[#0c0d12]/80 backdrop-blur-xl flex flex-col justify-between hover:border-white/20 transition-all">
+          <div className="p-8 sm:p-10 rounded-2xl border border-white/[0.08] bg-[#0c0d12]/80 backdrop-blur-xl flex flex-col justify-between hover:border-white/30 transition-all hover:bg-[#0e0f15]">
             <div>
               <span className="text-xs font-mono tracking-widest uppercase text-white/40 block mb-2 font-semibold">Multi-Location</span>
               <h3 className="font-nevera text-2xl text-white mb-2">Enterprise</h3>
@@ -1310,7 +1469,7 @@ function WelcomePage() {
 
             <button
               onClick={() => setIsDemoModalOpen(true)}
-              className="w-full mt-8 py-3.5 border border-white/20 text-white hover:border-[#e5d9c5] hover:text-[#e5d9c5] transition-colors text-xs font-bold uppercase tracking-widest"
+              className="w-full mt-8 py-3.5 border border-white/20 text-white hover:border-[#e5d9c5] hover:text-[#e5d9c5] transition-colors text-xs font-bold uppercase tracking-widest cursor-pointer"
             >
               Contact Advisory Team
             </button>
@@ -1325,7 +1484,7 @@ function WelcomePage() {
             07 / Private Briefing
           </span>
           <h2 className="font-nevera text-4xl sm:text-6xl text-white leading-tight font-normal">
-            Elevate your custom home pipeline to autonomous precision.
+            <KineticText text="Elevate your custom home pipeline to autonomous precision." />
           </h2>
           <p className="text-base sm:text-lg font-light text-white/60 max-w-2xl mx-auto leading-relaxed">
             Schedule a 1-on-1 private walkthrough of the WeaverFrame OS. We will configure the AI live with your exact portfolio, floor plans, and pricing parameters.
@@ -1335,7 +1494,7 @@ function WelcomePage() {
             <MagneticButton>
               <button
                 onClick={() => setIsDemoModalOpen(true)}
-                className="px-10 py-5 bg-[#e5d9c5] text-black text-xs font-bold uppercase tracking-widest hover:bg-white transition-all flex items-center justify-center gap-3 mx-auto shadow-2xl shadow-[#e5d9c5]/25 group"
+                className="px-10 py-5 bg-[#e5d9c5] text-black text-xs font-bold uppercase tracking-widest hover:bg-white transition-all flex items-center justify-center gap-3 mx-auto shadow-2xl shadow-[#e5d9c5]/25 group cursor-pointer"
               >
                 Schedule Private Demonstration
                 <ArrowRight className="size-4 group-hover:translate-x-1.5 transition-transform" />
@@ -1345,20 +1504,93 @@ function WelcomePage() {
         </div>
       </section>
 
-      {/* ── FOOTER ── */}
-      <footer className="border-t border-white/[0.08] py-12 px-6 md:px-12 text-[10px] uppercase font-mono tracking-[0.2em] text-white/40 bg-[#060608]">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-3">
-            <div className="size-2 rounded-full bg-emerald-400" />
-            <span>WeaverFrame OS · Version 2.5 Live · Engineered for Elite Custom Builders</span>
+      {/* ── EXPANSIVE LUXURY ARCHITECTURE OS FOOTER ── */}
+      <footer className="border-t border-white/[0.08] pt-20 pb-12 px-6 md:px-12 bg-[#060608] text-white">
+        <div className="max-w-7xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-12 pb-16 border-b border-white/[0.08]">
+            {/* Col 1: Brand & Tagline */}
+            <div className="lg:col-span-2 space-y-5">
+              <Link to="/welcome" className="flex items-center gap-3 group">
+                <div className="size-8 rounded-full border border-white/20 bg-white/[0.06] flex items-center justify-center font-nevera text-sm font-bold text-[#e5d9c5] group-hover:border-[#e5d9c5] transition-all">
+                  W
+                </div>
+                <div>
+                  <span className="font-nevera text-lg tracking-[0.18em] uppercase text-white font-semibold block leading-none">
+                    WeaverFrame
+                  </span>
+                  <span className="text-[8px] font-mono tracking-widest text-[#e5d9c5]/70 uppercase block mt-0.5">
+                    Architecture & AI Operating System
+                  </span>
+                </div>
+              </Link>
+              <p className="text-xs text-white/50 leading-relaxed max-w-sm">
+                The quiet luxury AI lead concierge and pipeline engine engineered exclusively for elite custom home builders, estates, and architecture studios.
+              </p>
+              <div className="flex items-center gap-3 text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-full border border-emerald-500/20 w-fit">
+                <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span>All Systems Operational · 99.99% Uptime</span>
+              </div>
+            </div>
+
+            {/* Col 2: Platform */}
+            <div className="space-y-4">
+              <h4 className="text-[11px] font-mono uppercase tracking-[0.2em] text-[#e5d9c5] font-semibold">
+                Platform
+              </h4>
+              <ul className="space-y-2.5 text-xs text-white/60">
+                <li><a href="#radar" className="hover:text-white transition-colors">Live Radar Simulator</a></li>
+                <li><a href="#pillars" className="hover:text-white transition-colors">The 6 Core Pillars</a></li>
+                <li><a href="#calculator" className="hover:text-white transition-colors">ROI Modeler</a></li>
+                <li><a href="#cases" className="hover:text-white transition-colors">Verified Case Studies</a></li>
+                <li><a href="#pricing" className="hover:text-white transition-colors">Predictable Pricing</a></li>
+              </ul>
+            </div>
+
+            {/* Col 3: Integrations */}
+            <div className="space-y-4">
+              <h4 className="text-[11px] font-mono uppercase tracking-[0.2em] text-[#e5d9c5] font-semibold">
+                Integrations
+              </h4>
+              <ul className="space-y-2.5 text-xs text-white/60">
+                <li><span className="text-white/80">WhatsApp Business API</span></li>
+                <li><span className="text-white/80">Twilio SMS (BYOK)</span></li>
+                <li><span className="text-white/80">HubSpot & GoHighLevel</span></li>
+                <li><span className="text-white/80">Google & Outlook Calendar</span></li>
+                <li><span className="text-white/80">Custom ERP Webhooks</span></li>
+              </ul>
+            </div>
+
+            {/* Col 4: Trust & Security */}
+            <div className="space-y-4">
+              <h4 className="text-[11px] font-mono uppercase tracking-[0.2em] text-[#e5d9c5] font-semibold">
+                Security & Data
+              </h4>
+              <ul className="space-y-2.5 text-xs text-white/60">
+                <li><span className="text-white/80">AES-256 GCM Data Encryption</span></li>
+                <li><span className="text-white/80">Strict Multi-Tenant Isolation</span></li>
+                <li><span className="text-white/80">SOC-2 & GDPR Compliance</span></li>
+                <li><span className="text-white/80">Private AI Model Training</span></li>
+                <li><Link to="/login" className="text-[#e5d9c5] hover:underline">Client Portal Access →</Link></li>
+              </ul>
+            </div>
           </div>
-          <div className="flex gap-8">
-            <Link to="/login" className="hover:text-white transition-colors">Client Login</Link>
-            <a href="#pillars" className="hover:text-white transition-colors">Platform</a>
-            <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
-          </div>
-          <div>
-            © {new Date().getFullYear()} WeaverFrame Inc. All Rights Reserved.
+
+          {/* Bottom Row */}
+          <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-[10px] font-mono text-white/40 tracking-wider">
+            <div>
+              © {new Date().getFullYear()} WeaverFrame Inc. All rights reserved. Quiet Luxury Architecture & AI OS.
+            </div>
+            <div className="flex items-center gap-6">
+              <a href="#" className="hover:text-white transition-colors">Privacy Policy</a>
+              <a href="#" className="hover:text-white transition-colors">Terms of Service</a>
+              <a href="#" className="hover:text-white transition-colors">Security Architecture</a>
+              <button
+                onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+                className="text-[#e5d9c5] hover:text-white transition-colors cursor-pointer"
+              >
+                Back to Top ↑
+              </button>
+            </div>
           </div>
         </div>
       </footer>
