@@ -22,45 +22,11 @@ export const Route = createFileRoute("/ai-activity")({
       { name: "description", content: "AI conversation log and scripts." },
     ],
   }),
-  staleTime: 60_000, // 60s — fresh data, instant revisits within a minute
+  staleTime: 60_000,
   pendingMs: 0,
   pendingComponent: () => <RoutePending title="Loading AI Activity..." type="ai-activity" />,
   component: AIPage,
 });
-
-function Stat({
-  label,
-  value,
-  sub,
-  icon: Icon,
-  color,
-}: {
-  label: string;
-  value: string;
-  sub: string;
-  icon: React.ElementType;
-  color: string;
-}) {
-  return (
-    <Card className="p-5">
-      <div className="flex items-start justify-between">
-        <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-widest">
-          {label}
-        </div>
-        <span
-          className="size-7 rounded-md flex items-center justify-center"
-          style={{ background: color + "18" }}
-        >
-          <Icon className="size-3.5" style={{ color }} />
-        </span>
-      </div>
-      <div className="font-display text-3xl font-semibold text-foreground mt-3">
-        {value}
-      </div>
-      <div className="text-xs text-muted-foreground mt-1.5">{sub}</div>
-    </Card>
-  );
-}
 
 function ChannelBadge({ channel }: { channel: string }) {
   const style =
