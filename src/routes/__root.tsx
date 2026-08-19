@@ -77,6 +77,16 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
 // JWT cookie is still the source of truth — this just avoids redundant calls.
 let _clientSession: any = null;
 
+export function invalidateClientSession(updatedSession?: any) {
+  if (typeof window !== 'undefined') {
+    if (updatedSession) {
+      _clientSession = { ...(_clientSession || {}), ...updatedSession };
+    } else {
+      _clientSession = null;
+    }
+  }
+}
+
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   head: () => ({
     meta: [

@@ -241,6 +241,13 @@ function SettingsPage() {
     setIsSavingProfile(true);
     try {
       await saveBuilderProfile({ data: profileForm });
+      if (typeof window !== 'undefined') {
+        const { invalidateClientSession } = await import('./__root');
+        invalidateClientSession({ 
+          companyName: profileForm.companyName, 
+          displayName: profileForm.primaryContact 
+        });
+      }
       await router.invalidate();
       setProfileSaved(true);
       setTimeout(() => setProfileSaved(false), 2500);
