@@ -181,15 +181,16 @@ function WelcomePage() {
     setMounted(true);
   }, []);
 
-  // Lenis Smooth Scroll Engine
+  // Lenis Smooth Scroll Engine (120 FPS High Performance)
   useEffect(() => {
     const lenis = new Lenis({
-      duration: 1.2,
+      duration: 0.9,
       easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
       orientation: "vertical",
       gestureOrientation: "vertical",
       smoothWheel: true,
-      wheelMultiplier: 1,
+      wheelMultiplier: 0.95,
+      touchMultiplier: 1.5,
     });
 
     function raf(time: number) {
@@ -207,10 +208,11 @@ function WelcomePage() {
   // Mouse coordinate tracker for Hero WebGL Particle Parallax
   const heroMouseRef = useRef({ x: 0, y: 0 });
 
-  // Scroll Progress & Parallax Transforms
+  // Scroll Progress & Spring-Smoothed Parallax
   const { scrollY, scrollYProgress } = useScroll();
-  const progressScaleX = useSpring(scrollYProgress, { stiffness: 100, damping: 30, restDelta: 0.001 });
-  const heroParallaxY = useTransform(scrollY, [0, 700], [0, -45]);
+  const progressScaleX = useSpring(scrollYProgress, { stiffness: 120, damping: 26, restDelta: 0.001 });
+  const rawParallax = useTransform(scrollY, [0, 700], [0, -35]);
+  const heroParallaxY = useSpring(rawParallax, { stiffness: 140, damping: 25, restDelta: 0.001 });
 
   // Embla Carousel Hook for Case Studies
   const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true, align: "start", dragFree: true });
@@ -473,8 +475,15 @@ function WelcomePage() {
             <Suspense fallback={null}>
               <Canvas
                 camera={{ position: [0, 0, 6], fov: 60 }}
-                gl={{ antialias: false, alpha: true, powerPreference: "high-performance" }}
-                className="w-full h-full"
+                dpr={[1, 1.5]}
+                gl={{
+                  antialias: false,
+                  alpha: true,
+                  powerPreference: "high-performance",
+                  depth: false,
+                  stencil: false,
+                }}
+                className="w-full h-full pointer-events-none"
               >
                 <ParticleConstellation mouseRef={heroMouseRef} />
               </Canvas>
@@ -763,12 +772,11 @@ function WelcomePage() {
           ].map((pillar, idx) => (
             <motion.div
               key={pillar.num}
-              initial={{ opacity: 0, y: 50, rotateX: 10 }}
-              whileInView={{ opacity: 1, y: 0, rotateX: 0 }}
-              viewport={{ once: true, margin: "-60px" }}
-              transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: idx * 0.08 }}
-              style={{ transformPerspective: 900 }}
-              className="p-8 rounded-xl border border-white/[0.08] bg-[#0b0c10]/80 backdrop-blur-xl flex flex-col justify-between h-full hover:border-[#e5d9c5]/40 transition-all duration-300 group"
+              initial={{ opacity: 0, y: 25 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-40px" }}
+              transition={{ duration: 0.5, delay: idx * 0.05 }}
+              className="p-8 rounded-xl border border-white/[0.08] bg-[#0c0d12] flex flex-col justify-between h-full hover:border-[#e5d9c5]/40 transition-all duration-300 group"
             >
               <div>
                 <div className="flex items-center justify-between mb-8">
