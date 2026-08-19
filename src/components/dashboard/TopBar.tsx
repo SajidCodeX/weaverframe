@@ -325,17 +325,23 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
   return (
     <>
       <header
-        className={`fixed top-0 right-0 h-[60px] bg-background/70 backdrop-blur-xl border-b border-border z-30 flex items-center justify-between px-6 transition-all duration-300 ${
+        className={`fixed top-0 right-0 h-[64px] bg-[#060608]/85 backdrop-blur-2xl border-b border-white/[0.07] z-30 flex items-center justify-between px-6 transition-all duration-300 ${
           isCollapsed ? "left-[70px]" : "left-[240px]"
         }`}
       >
-        {/* Page title */}
-        <h1 className="font-display text-base font-semibold tracking-tight text-foreground">
-          {title}
-        </h1>
+        {/* Page Title & Breadcrumb */}
+        <div className="flex items-center gap-3">
+          <h1 className="font-nevera text-lg font-normal tracking-[0.04em] text-white">
+            {title}
+          </h1>
+          <div className="hidden md:flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground uppercase tracking-widest bg-white/[0.03] px-2.5 py-1 rounded-full border border-white/[0.06]">
+            <span className="size-1 rounded-full bg-[#e5d9c5]" />
+            <span>Executive Command</span>
+          </div>
+        </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           {/* Refresh Button */}
           <button
             onClick={() => {
@@ -345,34 +351,35 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
                 if (icon) icon.classList.remove('animate-spin');
               });
             }}
-            className="hidden sm:flex items-center justify-center size-[34px] text-foreground/80 bg-secondary/80 border border-border/80 rounded-md hover:border-white/30 hover:text-foreground transition-all duration-150"
+            className="hidden sm:flex items-center justify-center size-[36px] text-white/70 bg-[#0e0f15] border border-white/[0.1] rounded-xl hover:border-[#e5d9c5]/40 hover:text-white transition-all duration-200 cursor-pointer shadow-sm"
             title="Refresh Page Data"
           >
-            <RefreshCw id="global-refresh-icon" className="size-4 text-foreground/60" />
+            <RefreshCw id="global-refresh-icon" className="size-3.5 text-white/60" />
           </button>
+
           {/* Cmd+K Search trigger */}
           <button
             id="topbar-search"
             onClick={() => setIsSearchOpen(true)}
-            className="hidden sm:flex items-center justify-between w-[130px] h-[34px] text-xs text-foreground/80 bg-secondary/80 border border-border/80 rounded-md px-3 hover:border-white/30 hover:text-foreground transition-all duration-150 group"
+            className="hidden sm:flex items-center justify-between w-[150px] h-[36px] text-xs text-white/70 bg-[#0e0f15] border border-white/[0.1] rounded-xl px-3 hover:border-[#e5d9c5]/40 hover:text-white transition-all duration-200 group cursor-pointer shadow-sm"
           >
             <div className="flex items-center gap-2">
-              <Search className="size-3 text-foreground/60 group-hover:text-foreground transition-colors" />
-              <span>Search</span>
+              <Search className="size-3.5 text-white/40 group-hover:text-[#e5d9c5] transition-colors" />
+              <span className="text-xs font-normal">Search OS</span>
             </div>
-            <kbd className="font-mono text-[10px] bg-secondary px-1.5 py-0.5 rounded border border-border text-foreground/50">
+            <kbd className="font-mono text-[9.5px] bg-[#161722] px-1.5 py-0.5 rounded border border-white/10 text-[#e5d9c5] font-semibold">
               {shortcutText}
             </kbd>
           </button>
 
-          {/* Data Last Updated */}
-          <div className="hidden sm:flex items-center justify-center h-[34px] text-[11px] text-success/80 bg-success/10 border border-success/20 rounded-md px-3 cursor-default font-medium">
-            <div className="size-1.5 rounded-full bg-success mr-2 animate-pulse" />
-            Live DB Sync: {realSyncTime ? formatLiveSyncTime(realSyncTime) : "Just now"}
+          {/* Live DB Sync */}
+          <div className="hidden sm:flex items-center justify-center h-[36px] text-[10.5px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-3.5 cursor-default font-mono tracking-wider shadow-sm">
+            <span className="size-1.5 rounded-full bg-emerald-400 mr-2 animate-pulse" />
+            <span>Sync: {realSyncTime ? formatLiveSyncTime(realSyncTime) : "Just now"}</span>
           </div>
 
-          {/* Today's Date (mm/dd/yy) */}
-          <div className="hidden sm:flex items-center justify-center w-[100px] h-[34px] text-[13px] text-foreground/80 font-mono tracking-widest bg-secondary/80 border border-border/80 rounded-md cursor-default">
+          {/* Today's Date */}
+          <div className="hidden lg:flex items-center justify-center h-[36px] px-3 text-xs text-white/60 font-mono tracking-widest bg-[#0e0f15] border border-white/[0.1] rounded-xl cursor-default">
             {new Date().toLocaleDateString("en-US", {
               month: "2-digit",
               day: "2-digit",

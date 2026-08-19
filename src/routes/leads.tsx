@@ -610,13 +610,13 @@ function LeadsPage() {
             </button>
             <button
               onClick={exportToCSV}
-              className="inline-flex items-center gap-1 text-xs border border-border rounded-md px-2.5 py-1.5 text-foreground hover:bg-secondary transition-colors whitespace-nowrap"
+              className="inline-flex items-center gap-1.5 text-xs border border-white/[0.1] bg-[#0c0d14] rounded-lg px-3 py-1.5 text-white/80 hover:text-white hover:border-[#e5d9c5]/40 transition-colors whitespace-nowrap cursor-pointer"
             >
-              <Download className="size-3.5" /> Export CSV
+              <Download className="size-3.5 text-white/50" /> Export CSV
             </button>
             <button
               onClick={() => setIsAddModalOpen(true)}
-              className="inline-flex items-center gap-1 text-xs bg-primary text-primary-foreground rounded-md px-2.5 py-1.5 font-medium hover:bg-primary/90 focus:ring-0 focus:outline-none transition-colors duration-75 whitespace-nowrap"
+              className="inline-flex items-center gap-1.5 text-xs bg-[#e5d9c5] text-black font-semibold rounded-lg px-3.5 py-1.5 hover:bg-white transition-all duration-200 shadow-sm shadow-[#e5d9c5]/15 whitespace-nowrap cursor-pointer"
             >
               <Plus className="size-3.5" /> Add Lead
             </button>
