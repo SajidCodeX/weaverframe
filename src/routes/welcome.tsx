@@ -289,11 +289,11 @@ function WelcomePage() {
       {/* ── TOP LUXURY NAVIGATION ── */}
       <header className="fixed top-0 w-full z-50 bg-[#060608]/85 backdrop-blur-xl border-b border-white/[0.07] px-6 md:px-12 py-5 flex items-center justify-between pointer-events-auto">
         <Link to="/welcome" className="flex items-center gap-3 group">
-          <div className="size-8 rounded border border-white/20 bg-white/[0.04] flex items-center justify-center font-serif text-sm font-bold text-[#e5d9c5] group-hover:border-[#e5d9c5] group-hover:scale-105 transition-all">
+          <div className="size-8 rounded border border-white/20 bg-white/[0.04] flex items-center justify-center font-nevera text-sm font-bold text-[#e5d9c5] group-hover:border-[#e5d9c5] group-hover:scale-105 transition-all">
             W
           </div>
           <div>
-            <span className="font-serif text-lg tracking-[0.2em] uppercase text-white font-semibold block leading-none">
+            <span className="font-nevera text-lg tracking-[0.2em] uppercase text-white font-semibold block leading-none">
               WeaverFrame
             </span>
             <span className="text-[9px] font-mono tracking-widest text-[#e5d9c5]/70 uppercase block mt-1">
@@ -350,8 +350,8 @@ function WelcomePage() {
             </motion.div>
 
             {/* Main Headline */}
-            <h1 className="font-serif text-4xl sm:text-5xl lg:text-[66px] leading-[1.03] tracking-tight font-normal text-white">
-              Your <span className="italic text-[#e5d9c5] font-serif">$2M+ custom builds</span> deserve a 24/7 digital architect.
+            <h1 className="font-nevera text-4xl sm:text-5xl lg:text-[66px] leading-[1.03] tracking-tight font-normal text-white">
+              Your <span className="italic text-[#e5d9c5] font-nevera">$2M+ custom builds</span> deserve a 24/7 digital architect.
             </h1>
 
             {/* Subtitle */}
@@ -391,15 +391,15 @@ function WelcomePage() {
             {/* Trust Metrics */}
             <div className="grid grid-cols-3 gap-4 pt-6 border-t border-white/[0.1] max-w-md">
               <div>
-                <div className="font-serif text-2xl sm:text-3xl text-white font-bold">&lt; 45s</div>
+                <div className="font-nevera text-2xl sm:text-3xl text-white font-bold">&lt; 45s</div>
                 <div className="text-[9px] uppercase font-mono tracking-widest text-white/50 mt-1">Lead Response</div>
               </div>
               <div>
-                <div className="font-serif text-2xl sm:text-3xl text-[#e5d9c5] font-bold">100%</div>
+                <div className="font-nevera text-2xl sm:text-3xl text-[#e5d9c5] font-bold">100%</div>
                 <div className="text-[9px] uppercase font-mono tracking-widest text-white/50 mt-1">Coverage</div>
               </div>
               <div>
-                <div className="font-serif text-2xl sm:text-3xl text-white font-bold">$180M+</div>
+                <div className="font-nevera text-2xl sm:text-3xl text-white font-bold">$180M+</div>
                 <div className="text-[9px] uppercase font-mono tracking-widest text-white/50 mt-1">Pipeline Qualified</div>
               </div>
             </div>
@@ -438,7 +438,7 @@ function WelcomePage() {
           <span className="text-[11px] uppercase font-mono tracking-[0.3em] font-bold text-[#e5d9c5] block mb-4">
             01 / Live Demonstration
           </span>
-          <h2 className="font-serif text-3xl sm:text-5xl lg:text-6xl text-white leading-tight font-normal">
+          <h2 className="font-nevera text-3xl sm:text-5xl lg:text-6xl text-white leading-tight font-normal">
             Watch the AI qualify a $2M+ client in real-time.
           </h2>
           <p className="text-white/60 font-light text-base mt-4 leading-relaxed">
@@ -557,7 +557,7 @@ function WelcomePage() {
           <span className="text-[11px] uppercase font-mono tracking-[0.3em] font-bold text-[#e5d9c5] block mb-4">
             02 / Platform Architecture
           </span>
-          <h2 className="font-serif text-3xl sm:text-5xl lg:text-6xl text-white leading-tight font-normal">
+          <h2 className="font-nevera text-3xl sm:text-5xl lg:text-6xl text-white leading-tight font-normal">
             Six pillars engineered for seven-figure construction deals.
           </h2>
           <p className="text-white/60 font-light text-base mt-6 leading-relaxed">
@@ -622,7 +622,7 @@ function WelcomePage() {
                 <span className="text-[10px] font-mono tracking-widest text-[#e5d9c5] uppercase block mb-2 font-semibold">
                   {pillar.badge}
                 </span>
-                <h3 className="font-serif text-2xl text-white font-medium mb-3 group-hover:text-[#e5d9c5] transition-colors">
+                <h3 className="font-nevera text-2xl text-white font-medium mb-3 group-hover:text-[#e5d9c5] transition-colors">
                   {pillar.title}
                 </h3>
                 <p className="text-sm font-light text-white/60 leading-relaxed">
@@ -649,7 +649,7 @@ function WelcomePage() {
               <span className="text-[11px] uppercase font-mono tracking-[0.3em] font-bold text-[#e5d9c5] block">
                 03 / ROI Modeling
               </span>
-              <h2 className="font-serif text-3xl sm:text-5xl text-white leading-tight font-normal">
+              <h2 className="font-nevera text-3xl sm:text-5xl text-white leading-tight font-normal">
                 How much revenue are you losing to slow responses?
               </h2>
               <p className="text-white/60 font-light text-base leading-relaxed">
@@ -678,7 +678,7 @@ function WelcomePage() {
                 <div className="flex items-center justify-between pb-6 border-b border-white/[0.08] mb-8">
                   <div className="flex items-center gap-3">
                     <Sliders className="size-5 text-[#e5d9c5]" />
-                    <span className="font-serif text-xl text-white font-medium">Custom Builder Revenue Modeler</span>
+                    <span className="font-nevera text-xl text-white font-medium">Custom Builder Revenue Modeler</span>
                   </div>
                   <span className="text-[10px] font-mono uppercase tracking-widest text-[#e5d9c5] bg-[#e5d9c5]/10 px-2.5 py-1 rounded">
                     Interactive Math
@@ -771,7 +771,7 @@ function WelcomePage() {
                     <span className="text-[10px] font-mono uppercase tracking-widest text-white/50 block">
                       Extra Homes Contracted / Year
                     </span>
-                    <div className="font-serif text-3xl sm:text-4xl text-white font-bold mt-1">
+                    <div className="font-nevera text-3xl sm:text-4xl text-white font-bold mt-1">
                       +{extraDealsPerYear} Homes
                     </div>
                     <p className="text-[11px] text-white/40 mt-1">Recaptured from dropped inquiries</p>
@@ -780,7 +780,7 @@ function WelcomePage() {
                     <span className="text-[10px] font-mono uppercase tracking-widest text-[#e5d9c5] block">
                       Annual Pipeline Value Protected
                     </span>
-                    <div className="font-serif text-3xl sm:text-4xl text-[#e5d9c5] font-bold mt-1">
+                    <div className="font-nevera text-3xl sm:text-4xl text-[#e5d9c5] font-bold mt-1">
                       ${(pipelineValueAnnual / 1000000).toFixed(1)}M+
                     </div>
                     <p className="text-[11px] text-emerald-400 mt-1 font-mono">
@@ -800,7 +800,7 @@ function WelcomePage() {
           <span className="text-[11px] uppercase font-mono tracking-[0.3em] font-bold text-[#e5d9c5] block mb-4">
             04 / Market Contrast
           </span>
-          <h2 className="font-serif text-3xl sm:text-5xl text-white leading-tight font-normal">
+          <h2 className="font-nevera text-3xl sm:text-5xl text-white leading-tight font-normal">
             Why traditional sales follow-up fails luxury clientele.
           </h2>
           <p className="text-white/60 font-light text-base mt-4">
@@ -868,7 +868,7 @@ function WelcomePage() {
           <span className="text-[11px] uppercase font-mono tracking-[0.3em] font-bold text-[#e5d9c5] block mb-4">
             05 / Predictable Investment
           </span>
-          <h2 className="font-serif text-3xl sm:text-5xl text-white leading-tight font-normal">
+          <h2 className="font-nevera text-3xl sm:text-5xl text-white leading-tight font-normal">
             One extra home build covers years of platform access.
           </h2>
           <p className="text-white/60 font-light text-base mt-4">
@@ -881,9 +881,9 @@ function WelcomePage() {
           <div className="p-8 sm:p-10 rounded-2xl border border-white/[0.08] bg-[#0c0d12]/80 backdrop-blur-xl flex flex-col justify-between hover:border-white/20 transition-all">
             <div>
               <span className="text-xs font-mono tracking-widest uppercase text-white/40 block mb-2 font-semibold">Boutique</span>
-              <h3 className="font-serif text-2xl text-white mb-2">Starter</h3>
+              <h3 className="font-nevera text-2xl text-white mb-2">Starter</h3>
               <p className="text-xs text-white/50 mb-6">Designed for boutique custom home builders handling up to 25 leads/month.</p>
-              <div className="font-serif text-4xl font-bold text-white mb-8">
+              <div className="font-nevera text-4xl font-bold text-white mb-8">
                 $1,500 <span className="text-xs font-mono text-white/40 font-normal">/ month</span>
               </div>
 
@@ -923,9 +923,9 @@ function WelcomePage() {
 
             <div>
               <span className="text-xs font-mono tracking-widest uppercase text-[#e5d9c5] block mb-2 font-semibold">Complete OS</span>
-              <h3 className="font-serif text-3xl text-white mb-2">Professional</h3>
+              <h3 className="font-nevera text-3xl text-white mb-2">Professional</h3>
               <p className="text-xs text-white/60 mb-6">Complete autonomous conversion OS for high-volume luxury custom builders.</p>
-              <div className="font-serif text-4xl font-bold text-[#e5d9c5] mb-8">
+              <div className="font-nevera text-4xl font-bold text-[#e5d9c5] mb-8">
                 $3,000 <span className="text-xs font-mono text-white/50 font-normal">/ month</span>
               </div>
 
@@ -965,9 +965,9 @@ function WelcomePage() {
           <div className="p-8 sm:p-10 rounded-2xl border border-white/[0.08] bg-[#0c0d12]/80 backdrop-blur-xl flex flex-col justify-between hover:border-white/20 transition-all">
             <div>
               <span className="text-xs font-mono tracking-widest uppercase text-white/40 block mb-2 font-semibold">Multi-Location</span>
-              <h3 className="font-serif text-2xl text-white mb-2">Enterprise</h3>
+              <h3 className="font-nevera text-2xl text-white mb-2">Enterprise</h3>
               <p className="text-xs text-white/50 mb-6">For multi-market architectural firms and luxury development groups.</p>
-              <div className="font-serif text-4xl font-bold text-white mb-8">
+              <div className="font-nevera text-4xl font-bold text-white mb-8">
                 $5,000 <span className="text-xs font-mono text-white/40 font-normal">/ month</span>
               </div>
 
@@ -1007,7 +1007,7 @@ function WelcomePage() {
           <span className="text-[11px] uppercase font-mono tracking-[0.3em] font-bold text-[#e5d9c5] block">
             06 / Private Briefing
           </span>
-          <h2 className="font-serif text-4xl sm:text-6xl text-white leading-tight font-normal">
+          <h2 className="font-nevera text-4xl sm:text-6xl text-white leading-tight font-normal">
             Elevate your custom home pipeline to autonomous precision.
           </h2>
           <p className="text-base sm:text-lg font-light text-white/60 max-w-2xl mx-auto leading-relaxed">
@@ -1068,7 +1068,7 @@ function WelcomePage() {
                   <div className="size-16 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full flex items-center justify-center mx-auto">
                     <CheckCircle2 className="size-8" />
                   </div>
-                  <h3 className="font-serif text-2xl text-white">Demonstration Requested</h3>
+                  <h3 className="font-nevera text-2xl text-white">Demonstration Requested</h3>
                   <p className="text-xs text-white/60 leading-relaxed max-w-sm mx-auto">
                     Thank you. An executive advisor will reach out within 2 hours to confirm your private architecture demonstration.
                   </p>
@@ -1079,7 +1079,7 @@ function WelcomePage() {
                     <span className="text-[10px] font-mono uppercase tracking-widest text-[#e5d9c5] block mb-1">
                       White-Glove Onboarding
                     </span>
-                    <h3 className="font-serif text-2xl text-white font-medium">
+                    <h3 className="font-nevera text-2xl text-white font-medium">
                       Schedule a Private OS Walkthrough
                     </h3>
                     <p className="text-xs text-white/50 mt-1">

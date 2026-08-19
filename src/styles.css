@@ -3,9 +3,18 @@
 @source "../src";
 @import "tw-animate-css";
 
+@font-face {
+  font-family: 'Nevera';
+  src: url('/fonts/Nevera-Regular.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  --font-nevera: "Nevera", sans-serif;
   --font-serif: "Playfair Display", serif;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -287,6 +296,11 @@
   --ring: #18181B;
   --sidebar: #FFFFFF;
 }
+
+.font-nevera {
+  font-family: 'Nevera', sans-serif !important;
+}
+
 
 @keyframes marquee {
   0% { transform: translateX(0); }
