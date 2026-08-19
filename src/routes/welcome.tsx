@@ -334,24 +334,24 @@ function WelcomePage() {
         <div className="w-full max-w-[1680px] mx-auto px-6 md:px-12 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center z-10">
           
           {/* LEFT COLUMN: Editorial Typography & High-Ticket Positioning */}
-          <div className="lg:col-span-5 space-y-6 pt-2 z-20">
+          <div className="lg:col-span-5 space-y-7 pt-2 z-20">
             
             {/* Status Pill */}
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6 }}
-              className="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full border border-[#e5d9c5]/25 bg-[#e5d9c5]/8 backdrop-blur-md shadow-lg shadow-[#e5d9c5]/5"
+              className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full border border-[#e5d9c5]/30 bg-[#e5d9c5]/10 backdrop-blur-md shadow-lg shadow-[#e5d9c5]/5"
             >
               <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-[10px] font-mono uppercase tracking-[0.22em] text-[#e5d9c5] font-semibold">
+              <span className="text-[10px] font-mono uppercase tracking-[0.24em] text-[#e5d9c5] font-semibold">
                 Autonomous 24/7 AI Lead Concierge
               </span>
             </motion.div>
 
             {/* Main Headline */}
-            <h1 className="font-nevera text-4xl sm:text-5xl lg:text-[66px] leading-[1.03] tracking-tight font-normal text-white">
-              Your <span className="italic text-[#e5d9c5] font-nevera">$2M+ custom builds</span> deserve a 24/7 digital architect.
+            <h1 className="font-nevera text-4xl sm:text-5xl lg:text-[62px] leading-[1.12] tracking-tight font-normal text-white">
+              Your <span className="italic bg-gradient-to-r from-[#e5d9c5] via-[#fce6b8] to-[#c9a84c] bg-clip-text text-transparent font-nevera">$2M+ custom builds</span> deserve a 24/7 digital architect.
             </h1>
 
             {/* Subtitle */}
@@ -369,12 +369,12 @@ function WelcomePage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.4 }}
-              className="flex flex-col sm:flex-row gap-3.5 sm:items-center pt-2"
+              className="flex flex-col sm:flex-row gap-3.5 sm:items-center pt-1"
             >
               <MagneticButton>
                 <button
                   onClick={() => setIsDemoModalOpen(true)}
-                  className="w-full sm:w-auto px-8 py-4 bg-[#e5d9c5] text-black text-xs font-bold uppercase tracking-widest hover:bg-white transition-all flex items-center justify-center gap-2.5 shadow-2xl shadow-[#e5d9c5]/20 group"
+                  className="w-full sm:w-auto px-8 py-4 bg-[#e5d9c5] text-black text-xs font-bold uppercase tracking-widest hover:bg-white transition-all flex items-center justify-center gap-2.5 shadow-2xl shadow-[#e5d9c5]/25 group"
                 >
                   Schedule Private Demo
                   <ArrowRight className="size-4 group-hover:translate-x-1 transition-transform" />
@@ -414,14 +414,14 @@ function WelcomePage() {
               initial={{ opacity: 0, scale: 0.95, y: 15 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
-              className="relative w-full flex items-center justify-center"
+              className="relative w-full flex items-center justify-center group"
             >
               <img
                 src="/images/exploded-villa.png"
                 alt="WeaverFrame Exploded Luxury Architecture"
                 fetchPriority="high"
                 decoding="async"
-                className="w-full max-w-[1150px] 2xl:max-w-[1300px] h-auto object-contain select-none pointer-events-none drop-shadow-[0_30px_70px_rgba(0,0,0,0.95)]"
+                className="w-full max-w-[1150px] 2xl:max-w-[1300px] h-auto object-contain select-none pointer-events-none drop-shadow-[0_30px_70px_rgba(0,0,0,0.95)] transition-transform duration-700 group-hover:scale-[1.03]"
               />
             </motion.div>
           </div>
@@ -916,12 +916,15 @@ function WelcomePage() {
           </div>
 
           {/* Plan 2: Professional (Featured) */}
-          <div className="p-8 sm:p-10 rounded-2xl border-2 border-[#e5d9c5] flex flex-col justify-between relative shadow-2xl shadow-[#e5d9c5]/15 bg-[#121319]/90 backdrop-blur-2xl">
-            <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-[#e5d9c5] text-black text-[10px] font-mono uppercase font-bold tracking-widest px-3.5 py-1 rounded-full shadow-lg">
+          <div className="p-8 sm:p-10 rounded-2xl border-2 border-[#e5d9c5] flex flex-col justify-between relative shadow-[0_20px_50px_rgba(229,217,197,0.12)] bg-[#121319]/95 backdrop-blur-2xl group">
+            {/* Ambient Gold Glow */}
+            <div className="absolute -inset-1 bg-gradient-to-b from-[#e5d9c5]/20 via-[#c9a84c]/10 to-transparent rounded-3xl blur-xl opacity-75 pointer-events-none" />
+
+            <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-[#e5d9c5] text-black text-[10px] font-mono uppercase font-bold tracking-widest px-4 py-1 rounded-full shadow-lg z-20">
               Most Popular · Recommended
             </div>
 
-            <div>
+            <div className="relative z-10">
               <span className="text-xs font-mono tracking-widest uppercase text-[#e5d9c5] block mb-2 font-semibold">Complete OS</span>
               <h3 className="font-nevera text-3xl text-white mb-2">Professional</h3>
               <p className="text-xs text-white/60 mb-6">Complete autonomous conversion OS for high-volume luxury custom builders.</p>
