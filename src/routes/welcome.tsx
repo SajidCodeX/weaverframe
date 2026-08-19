@@ -514,8 +514,12 @@ function WelcomePage() {
             </motion.div>
 
             {/* Main Headline */}
-            <h1 className="font-nevera text-4xl sm:text-5xl lg:text-[62px] leading-[1.12] tracking-tight font-normal text-white">
-              Your <span className="italic bg-gradient-to-r from-[#e5d9c5] via-[#fce6b8] to-[#c9a84c] bg-clip-text text-transparent font-nevera">$2M+ custom builds</span> deserve a 24/7 digital architect.
+            <h1 className="font-nevera text-4xl sm:text-5xl lg:text-[62px] leading-[1.18] font-normal text-white tracking-normal">
+              Your{" "}
+              <span className="inline-block px-1 bg-gradient-to-r from-[#e5d9c5] via-[#fce6b8] to-[#c9a84c] bg-clip-text text-transparent font-nevera">
+                $2M+ custom builds
+              </span>{" "}
+              deserve a 24/7 digital architect.
             </h1>
 
             {/* Subtitle */}
