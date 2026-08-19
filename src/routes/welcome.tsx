@@ -142,19 +142,54 @@ function WelcomePage() {
     };
   }, []);
 
-  // 3D Perspective Mouse-Parallax States for Hero Viewport
+  // ── FULL 3-AXIS (X, Y, Z) SPATIAL ENGINE ──
   const heroCardRef = useRef<HTMLDivElement>(null);
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
 
-  const rotateX = useSpring(useTransform(mouseY, [-0.5, 0.5], [7, -7]), { damping: 25, stiffness: 180 });
-  const rotateY = useSpring(useTransform(mouseX, [-0.5, 0.5], [-8, 8]), { damping: 25, stiffness: 180 });
+  // 3-Axis Springs (X = Pitch, Y = Yaw, Z = Roll)
+  const rotateX = useSpring(useTransform(mouseY, [-0.5, 0.5], [12, -12]), { damping: 20, stiffness: 180 });
+  const rotateY = useSpring(useTransform(mouseX, [-0.5, 0.5], [-14, 14]), { damping: 20, stiffness: 180 });
+  const rotateZ = useSpring(
+    useTransform([mouseX, mouseY], ([latestX, latestY]: any) => latestX * latestY * 16),
+    { damping: 20, stiffness: 180 }
+  );
 
   const [cursorPos, setCursorPos] = useState({ x: 0, y: 0, opacity: 0 });
   const [heroMode, setHeroMode] = useState<"night" | "lidar" | "wireframe">("night");
   const [hoveredLayer, setHoveredLayer] = useState<string | null>(null);
+  const [isAutoOrbit, setIsAutoOrbit] = useState<boolean>(false);
+  const [axisCoords, setAxisCoords] = useState({ x: 0, y: 0, z: 0 });
+
+  // Auto-orbit loop
+  useEffect(() => {
+    if (!isAutoOrbit) return;
+    let frameId: number;
+    let t = 0;
+    const loop = () => {
+      t += 0.02;
+      mouseX.set(Math.sin(t) * 0.4);
+      mouseY.set(Math.cos(t * 0.8) * 0.35);
+      frameId = requestAnimationFrame(loop);
+    };
+    frameId = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(frameId);
+  }, [isAutoOrbit]);
+
+  // Update real-time 3-Axis angle display
+  useEffect(() => {
+    const unsubX = rotateX.on("change", (latest) => setAxisCoords((prev) => ({ ...prev, x: Math.round(latest * 10) / 10 })));
+    const unsubY = rotateY.on("change", (latest) => setAxisCoords((prev) => ({ ...prev, y: Math.round(latest * 10) / 10 })));
+    const unsubZ = rotateZ.on("change", (latest) => setAxisCoords((prev) => ({ ...prev, z: Math.round(latest * 10) / 10 })));
+    return () => {
+      unsubX();
+      unsubY();
+      unsubZ();
+    };
+  }, [rotateX, rotateY, rotateZ]);
 
   const handleHeroMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (isAutoOrbit) return;
     if (!heroCardRef.current) return;
     const rect = heroCardRef.current.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width - 0.5;
@@ -170,6 +205,7 @@ function WelcomePage() {
   };
 
   const handleHeroMouseLeave = () => {
+    if (isAutoOrbit) return;
     mouseX.set(0);
     mouseY.set(0);
     setCursorPos((prev) => ({ ...prev, opacity: 0 }));
@@ -438,8 +474,8 @@ function WelcomePage() {
             </div>
           </div>
 
-          {/* RIGHT COLUMN: Interactive 3D Perspective Exploded Villa Viewport */}
-          <div className="lg:col-span-7 relative flex items-center justify-center">
+          {/* RIGHT COLUMN: Interactive 3-Axis Perspective Exploded Villa Viewport */}
+          <div className="lg:col-span-7 relative flex items-center justify-center [perspective:1400px]">
             <motion.div
               ref={heroCardRef}
               onMouseMove={handleHeroMouseMove}
@@ -447,26 +483,56 @@ function WelcomePage() {
               style={{
                 rotateX,
                 rotateY,
+                rotateZ,
                 transformStyle: "preserve-3d",
               }}
-              className="relative w-full rounded-2xl border border-white/[0.12] bg-[#07080b]/90 backdrop-blur-2xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9)] overflow-hidden group"
+              className="relative w-full rounded-2xl border border-white/[0.12] bg-[#07080b]/90 backdrop-blur-2xl shadow-[0_30px_70px_-15px_rgba(0,0,0,0.95)] overflow-hidden group transition-shadow duration-300"
             >
               {/* Dynamic Mouse Spotlight Flashlight */}
               <div
                 className="pointer-events-none absolute -inset-px rounded-2xl opacity-0 transition-opacity duration-300 group-hover:opacity-100 z-30"
                 style={{
-                  background: `radial-gradient(500px circle at ${cursorPos.x}px ${cursorPos.y}px, rgba(229, 217, 197, 0.12), transparent 70%)`,
+                  background: `radial-gradient(550px circle at ${cursorPos.x}px ${cursorPos.y}px, rgba(229, 217, 197, 0.14), transparent 70%)`,
                 }}
               />
 
-              {/* Exploded Villa Visual Image Container */}
-              <div className={`relative w-full aspect-[16/10.5] overflow-hidden transition-all duration-700 ${
-                heroMode === "lidar" ? "hue-rotate-180 saturate-150 contrast-125" : heroMode === "wireframe" ? "invert grayscale contrast-200 opacity-80" : ""
-              }`}>
+              {/* 3-Axis Real-Time Coordinate Telemetry & Auto-Orbit Top Badge */}
+              <div
+                className="absolute top-3.5 left-3.5 right-3.5 z-40 flex items-center justify-between pointer-events-none"
+                style={{ transform: "translateZ(35px)" }}
+              >
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-black/80 border border-white/15 backdrop-blur-md text-[9px] font-mono text-white/70 shadow-lg">
+                  <Crosshair className="size-3 text-[#e5d9c5]" />
+                  <span>3-AXIS GYRO:</span>
+                  <span className="text-[#e5d9c5]">X: {axisCoords.x > 0 ? `+${axisCoords.x}` : axisCoords.x}°</span>
+                  <span className="text-[#e5d9c5]">Y: {axisCoords.y > 0 ? `+${axisCoords.y}` : axisCoords.y}°</span>
+                  <span className="text-[#e5d9c5]">Z: {axisCoords.z > 0 ? `+${axisCoords.z}` : axisCoords.z}°</span>
+                </div>
+
+                <button
+                  onClick={() => setIsAutoOrbit(!isAutoOrbit)}
+                  className={`pointer-events-auto px-3 py-1.5 rounded-md text-[9px] font-mono uppercase tracking-wider transition-all flex items-center gap-1.5 border shadow-lg ${
+                    isAutoOrbit
+                      ? "bg-[#e5d9c5] text-black border-[#e5d9c5] font-bold animate-pulse"
+                      : "bg-black/80 text-white/70 border-white/15 hover:text-white hover:border-[#e5d9c5]/50"
+                  }`}
+                >
+                  <Compass className="size-3" />
+                  <span>{isAutoOrbit ? "Auto-Orbit Active" : "Auto-Orbit 3-Axis"}</span>
+                </button>
+              </div>
+
+              {/* Exploded Villa Visual Image Container with Z-Depth Translation */}
+              <div
+                style={{ transform: "translateZ(20px)" }}
+                className={`relative w-full aspect-[16/10.5] overflow-hidden transition-all duration-700 ${
+                  heroMode === "lidar" ? "hue-rotate-180 saturate-150 contrast-125" : heroMode === "wireframe" ? "invert grayscale contrast-200 opacity-80" : ""
+                }`}
+              >
                 <img
                   src="/images/exploded-villa.jpg"
                   alt="WeaverFrame 3D Exploded Architecture"
-                  className="w-full h-full object-cover select-none pointer-events-none transform transition-transform duration-500 group-hover:scale-[1.02]"
+                  className="w-full h-full object-cover select-none pointer-events-none transform transition-transform duration-500 group-hover:scale-[1.03]"
                 />
 
                 {/* LiDAR Scanning Laser Beam Sweep (Active in LiDAR Mode) */}
@@ -483,23 +549,27 @@ function WelcomePage() {
                   <div className="absolute inset-0 bg-[linear-gradient(to_right,#000_1px,transparent_1px),linear-gradient(to_bottom,#000_1px,transparent_1px)] bg-[size:2rem_2rem] opacity-20 pointer-events-none z-20" />
                 )}
 
-                {/* Interactive Hotspot Annotation Rings on Image Layers */}
+                {/* Interactive Hotspot Annotation Rings on Image Layers (Floating with translateZ(50px)) */}
                 {architecturalLayers.map((layer) => {
                   const isHovered = hoveredLayer === layer.id;
                   return (
                     <div
                       key={layer.id}
-                      style={{ top: layer.pinY, left: layer.pinX }}
-                      className="absolute z-20 -translate-x-1/2 -translate-y-1/2 cursor-pointer group/pin"
+                      style={{
+                        top: layer.pinY,
+                        left: layer.pinX,
+                        transform: `translate(-50%, -50%) translateZ(${isHovered ? 55 : 35}px)`,
+                      }}
+                      className="absolute z-30 cursor-pointer group/pin transition-transform duration-300"
                       onMouseEnter={() => setHoveredLayer(layer.id)}
                       onMouseLeave={() => setHoveredLayer(null)}
                     >
-                      <span className="relative flex size-5 items-center justify-center">
+                      <span className="relative flex size-6 items-center justify-center">
                         <span className={`animate-ping absolute inline-flex h-full w-full rounded-full transition-opacity ${
-                          isHovered ? "bg-[#e5d9c5] opacity-80" : "bg-white/40 opacity-40"
+                          isHovered ? "bg-[#e5d9c5] opacity-90" : "bg-white/40 opacity-40"
                         }`} />
-                        <span className={`relative inline-flex rounded-full size-2.5 border transition-all ${
-                          isHovered ? "bg-[#e5d9c5] border-white scale-125 shadow-[0_0_12px_#e5d9c5]" : "bg-white/80 border-black/40"
+                        <span className={`relative inline-flex rounded-full size-3 border-2 transition-all ${
+                          isHovered ? "bg-[#e5d9c5] border-white scale-125 shadow-[0_0_15px_#e5d9c5]" : "bg-white/80 border-black/40"
                         }`} />
                       </span>
                     </div>
@@ -508,10 +578,13 @@ function WelcomePage() {
               </div>
 
               {/* Bottom 3D Viewport Options Toolbar (The 3 Options Kept) */}
-              <div className="p-3.5 bg-black/90 border-t border-white/[0.1] flex flex-col sm:flex-row items-center justify-between gap-3 relative z-30">
+              <div
+                style={{ transform: "translateZ(30px)" }}
+                className="p-3.5 bg-black/90 border-t border-white/[0.1] flex flex-col sm:flex-row items-center justify-between gap-3 relative z-30"
+              >
                 <div className="flex items-center gap-2 text-[10px] font-mono text-white/50 pl-1">
                   <Scan className="size-3.5 text-[#e5d9c5]" />
-                  <span>Interactive Exploded View · Mode:</span>
+                  <span>3-Axis Exploded View · Mode:</span>
                 </div>
                 
                 <div className="flex gap-2 w-full sm:w-auto justify-end">
