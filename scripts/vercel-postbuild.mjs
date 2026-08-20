@@ -24,16 +24,8 @@ const VERCEL_OUT = join(ROOT, ".vercel", "output");
 const DIST_CLIENT = join(ROOT, "dist", "client");
 const DIST_SERVER = join(ROOT, "dist", "server");
 
-// --- Guard: if Nitro already created .vercel/output, nothing to do ---
-if (existsSync(join(VERCEL_OUT, "config.json"))) {
-  console.log(
-    "✅ .vercel/output already exists (Nitro vercel preset). Skipping manual conversion."
-  );
-  process.exit(0);
-}
-
 console.log(
-  "⚙️  Nitro preset not detected — converting build output to Vercel Build Output API format..."
+  "⚙️  Converting build output to Vercel Build Output API format..."
 );
 
 if (!existsSync(DIST_CLIENT)) {
@@ -78,6 +70,14 @@ await esbuild({
   target: "node22",
   format: "esm",
   outfile: join(FUNC_DIR, "server-bundle.js"),
+  banner: {
+    js: `import { createRequire as __createRequire } from "module";
+import { fileURLToPath as __fileURLToPath } from "url";
+import { dirname as __dirnameFunc } from "path";
+const require = __createRequire(import.meta.url);
+const __filename = __fileURLToPath(import.meta.url);
+const __dirname = __dirnameFunc(__filename);`,
+  },
   // This project uses @prisma/adapter-pg (pure JS) — no native bindings.
   external: ["ws", "@prisma/client", ".prisma/client"],
   define: {

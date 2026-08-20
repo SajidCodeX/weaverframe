@@ -80,9 +80,8 @@ export const getSessionFn = createServerFn({ method: 'POST' })
       
       return session
     } catch (err: any) {
-      const fs = await import('fs')
-      fs.appendFileSync('auth-debug.log', `[${new Date().toISOString()}] getSessionFn failed: ${err.message || err}\n${err.stack}\n`)
-      return null
+      console.error(`[${new Date().toISOString()}] getSessionFn error:`, err.message || err);
+      return null;
     }
   })
 
