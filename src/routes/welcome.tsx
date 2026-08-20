@@ -2,10 +2,6 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import React, { useRef, useState, useEffect, useMemo, Suspense } from "react";
 import { motion, useScroll, useTransform, useSpring, useMotionValue, AnimatePresence, useInView } from "framer-motion";
 import Lenis from "lenis";
-import { Canvas, useFrame } from "@react-three/fiber";
-import { Points, PointMaterial } from "@react-three/drei";
-import * as THREE from "three";
-import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer } from "recharts";
 import useEmblaCarousel from "embla-carousel-react";
 import {
   ArrowRight,
@@ -59,54 +55,9 @@ import {
 import { CustomCursor } from "../components/CustomCursor";
 import { MagneticButton } from "../components/MagneticButton";
 
-// ── 3D WEBGL PARTICLE CONSTELLATION ───────────────────────────────────────────
-function ParticleConstellation({ mouseRef }: { mouseRef: React.MutableRefObject<{ x: number; y: number }> }) {
-  const pointsRef = useRef<THREE.Points>(null);
-
-  const [positions, colors] = useMemo(() => {
-    const count = 900;
-    const pos = new Float32Array(count * 3);
-    const col = new Float32Array(count * 3);
-
-    for (let i = 0; i < count; i++) {
-      const theta = Math.random() * Math.PI * 2;
-      const phi = Math.acos(2 * Math.random() - 1);
-      const r = 3.2 + Math.random() * 5.5;
-
-      pos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-      pos[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta) * 0.72;
-      pos[i * 3 + 2] = r * Math.cos(phi) * 0.85;
-
-      // Color variation between champagne (#e5d9c5) and warm gold (#c9a84c)
-      const isGold = Math.random() > 0.45;
-      col[i * 3] = isGold ? 0.79 : 0.90;
-      col[i * 3 + 1] = isGold ? 0.66 : 0.85;
-      col[i * 3 + 2] = isGold ? 0.30 : 0.77;
-    }
-    return [pos, col];
-  }, []);
-
-  useFrame(({ clock }) => {
-    if (!pointsRef.current) return;
-    const elapsed = clock.getElapsedTime();
-    pointsRef.current.rotation.y = elapsed * 0.035 + mouseRef.current.x * 0.09;
-    pointsRef.current.rotation.x = Math.sin(elapsed * 0.02) * 0.05 + mouseRef.current.y * 0.07;
-  });
-
-  return (
-    <Points ref={pointsRef} positions={positions} colors={colors} stride={3}>
-      <PointMaterial
-        vertexColors
-        size={0.022}
-        sizeAttenuation
-        transparent
-        opacity={0.6}
-        depthWrite={false}
-        blending={THREE.AdditiveBlending}
-      />
-    </Points>
-  );
-}
+// ── LAZY-LOADED COMPONENTS (INSTANT HYDRATION) ────────────────────────────────
+const LazyParticleBackground = React.lazy(() => import("../components/ParticleBackground"));
+const LazyRoiProjectionChart = React.lazy(() => import("../components/RoiProjectionChart"));
 
 // ── KINETIC TEXT REVEAL ───────────────────────────────────────────────────────
 const KineticText = ({ text, className = "" }: { text: string; delay?: number; className?: string }) => {
@@ -216,27 +167,48 @@ function WelcomePage() {
     setMounted(true);
   }, []);
 
-  // Lenis Smooth Scroll Engine (120 FPS High Performance)
+  // Lenis Smooth Scroll Engine (120 FPS High Performance) - Deferred to prioritize instant interactivity
   useEffect(() => {
-    const lenis = new Lenis({
-      duration: 0.9,
-      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-      orientation: "vertical",
-      gestureOrientation: "vertical",
-      smoothWheel: true,
-      wheelMultiplier: 0.95,
-      touchMultiplier: 1.5,
-    });
+    let lenis: Lenis | null = null;
+    let reqId: number | null = null;
+    let idleHandle: any = null;
 
-    function raf(time: number) {
-      lenis.raf(time);
-      requestAnimationFrame(raf);
+    const initLenis = () => {
+      lenis = new Lenis({
+        duration: 0.9,
+        easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+        orientation: "vertical",
+        gestureOrientation: "vertical",
+        smoothWheel: true,
+        wheelMultiplier: 0.95,
+        touchMultiplier: 1.5,
+      });
+
+      function raf(time: number) {
+        lenis?.raf(time);
+        reqId = requestAnimationFrame(raf);
+      }
+      reqId = requestAnimationFrame(raf);
+    };
+
+    if (typeof window !== "undefined") {
+      if ("requestIdleCallback" in window) {
+        idleHandle = (window as any).requestIdleCallback(initLenis, { timeout: 350 });
+      } else {
+        idleHandle = setTimeout(initLenis, 100);
+      }
     }
-    const reqId = requestAnimationFrame(raf);
 
     return () => {
-      cancelAnimationFrame(reqId);
-      lenis.destroy();
+      if (idleHandle) {
+        if ("cancelIdleCallback" in window) {
+          (window as any).cancelIdleCallback(idleHandle);
+        } else {
+          clearTimeout(idleHandle);
+        }
+      }
+      if (reqId) cancelAnimationFrame(reqId);
+      lenis?.destroy();
     };
   }, []);
 
@@ -586,24 +558,11 @@ function WelcomePage() {
         }}
         className="relative min-h-[96vh] flex items-center pt-24 pb-16 overflow-hidden border-b border-white/[0.08]"
       >
-        {/* Living Three.js WebGL Particle Field */}
+        {/* Living Three.js WebGL Particle Field (Lazy-loaded for instant interactivity) */}
         {mounted && (
           <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
             <Suspense fallback={null}>
-              <Canvas
-                camera={{ position: [0, 0, 6], fov: 60 }}
-                dpr={[1, 1.5]}
-                gl={{
-                  antialias: false,
-                  alpha: true,
-                  powerPreference: "high-performance",
-                  depth: false,
-                  stencil: false,
-                }}
-                className="w-full h-full pointer-events-none"
-              >
-                <ParticleConstellation mouseRef={heroMouseRef} />
-              </Canvas>
+              <LazyParticleBackground mouseRef={heroMouseRef} />
             </Suspense>
           </div>
         )}
@@ -1101,36 +1060,9 @@ function WelcomePage() {
                   </div>
 
                   <div className="h-[180px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                        <defs>
-                          <linearGradient id="goldGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#c9a84c" stopOpacity={0.35} />
-                            <stop offset="95%" stopColor="#c9a84c" stopOpacity={0.0} />
-                          </linearGradient>
-                          <linearGradient id="baseGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#ffffff" stopOpacity={0.08} />
-                            <stop offset="95%" stopColor="#ffffff" stopOpacity={0.0} />
-                          </linearGradient>
-                        </defs>
-                        <XAxis dataKey="month" tick={{ fill: "rgba(255,255,255,0.35)", fontSize: 9 }} axisLine={false} tickLine={false} />
-                        <Tooltip
-                          formatter={(val: any) => [`$${(Number(val) / 1000000).toFixed(2)}M`, ""]}
-                          contentStyle={{
-                            background: "#0c0d12",
-                            border: "1px solid rgba(229,217,197,0.25)",
-                            borderRadius: 8,
-                            fontSize: 11,
-                            color: "#e5d9c5",
-                            boxShadow: "0 10px 25px rgba(0,0,0,0.8)"
-                          }}
-                          itemStyle={{ color: "#e5d9c5" }}
-                          cursor={{ stroke: "rgba(229,217,197,0.15)", strokeWidth: 1 }}
-                        />
-                        <Area type="monotone" dataKey="baseline" name="Baseline" stroke="rgba(255,255,255,0.25)" fill="url(#baseGrad)" strokeWidth={1} isAnimationActive animationDuration={600} />
-                        <Area type="monotone" dataKey="weaverframe" name="With WeaverFrame" stroke="#c9a84c" fill="url(#goldGrad)" strokeWidth={2} isAnimationActive animationDuration={900} />
-                      </AreaChart>
-                    </ResponsiveContainer>
+                    <Suspense fallback={<div className="h-[180px] w-full bg-white/[0.02] rounded-lg animate-pulse flex items-center justify-center text-white/30 text-xs font-mono">Loading Growth Projections...</div>}>
+                      <LazyRoiProjectionChart chartData={chartData} />
+                    </Suspense>
                   </div>
                 </div>
 
