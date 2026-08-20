@@ -41,7 +41,7 @@ export function CustomCursor() {
           x: mousePosition.x - 18,
           y: mousePosition.y - 18,
         }}
-        transition={{ type: "spring", stiffness: 350, damping: 28, mass: 0.1 }}
+        transition={{ type: "spring", stiffness: 450, damping: 40, mass: 0.1 }}
       />
     </>
   );

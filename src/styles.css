@@ -104,6 +104,7 @@
     background-color: var(--color-background);
     color: var(--color-foreground);
     min-height: 100%;
+    overscroll-behavior-y: none; /* Prevents edge bounce */
   }
 
   body {

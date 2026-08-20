@@ -22,9 +22,6 @@ export default defineConfig({
   vite: {
     optimizeDeps: {
       include: [
-        "three",
-        "@react-three/fiber",
-        "@react-three/drei",
         "lenis",
         "framer-motion",
         "recharts",

@@ -22,7 +22,6 @@ import {
   updateBillingProfile,
 } from "@/lib/dashboard";
 import { Loader2, Check, X, AlertCircle, Download } from "lucide-react";
-import { jsPDF } from "jspdf";
 
 export const Route = createFileRoute("/settings")({
   beforeLoad: async ({ context }) => {
@@ -127,8 +126,9 @@ function SettingsPage() {
   const [fundingSuccess, setFundingSuccess] = useState(false);
 
 
-  const downloadInvoicePDF = (date: string, amount: string, status: string) => {
+  const downloadInvoicePDF = async (date: string, amount: string, status: string) => {
     const company = loadedProfile.companyName || "Your Company LLC";
+    const { jsPDF } = await import("jspdf");
     const doc = new jsPDF();
     doc.setFont("helvetica", "bold");
     doc.setFontSize(20);

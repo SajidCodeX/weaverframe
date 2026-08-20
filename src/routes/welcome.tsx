@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import React, { useRef, useState, useEffect, useMemo, Suspense } from "react";
-import { motion, useScroll, useTransform, useSpring, useMotionValue, AnimatePresence, useInView } from "framer-motion";
+import {  motion, useScroll, useTransform, useSpring, useMotionValue, AnimatePresence, useInView , m, LazyMotion, domAnimation } from "framer-motion";
 import Lenis from "lenis";
 import useEmblaCarousel from "embla-carousel-react";
 import {
@@ -62,15 +62,15 @@ const LazyRoiProjectionChart = React.lazy(() => import("../components/RoiProject
 // ── KINETIC TEXT REVEAL ───────────────────────────────────────────────────────
 const KineticText = ({ text, className = "" }: { text: string; delay?: number; className?: string }) => {
   return (
-    <motion.span
+    <m.span
       initial={{ opacity: 0, y: 16 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
-      transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
       className={`inline-block ${className}`}
     >
       {text}
-    </motion.span>
+    </m.span>
   );
 };
 
@@ -173,13 +173,14 @@ function WelcomePage() {
 
     const initLenis = () => {
       lenis = new Lenis({
-        duration: 1.1,
-        easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+        duration: 0.4,
+        easing: (t) => 1 - Math.pow(1 - t, 4), // Material-like easeOutQuart
         orientation: "vertical",
         gestureOrientation: "vertical",
         smoothWheel: true,
-        wheelMultiplier: 0.95,
+        wheelMultiplier: 1.0,
         touchMultiplier: 1.5,
+        smoothTouch: false, // Native mobile scroll
       });
       lenisRef.current = lenis;
 
@@ -218,8 +219,8 @@ function WelcomePage() {
     if (lenisRef.current) {
       lenisRef.current.scrollTo(targetId, {
         offset: -85,
-        duration: 1.2,
-        easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+        duration: 0.4,
+        easing: (t) => 1 - Math.pow(1 - t, 4),
       });
     } else {
       const el = document.querySelector(targetId);
@@ -428,11 +429,12 @@ function WelcomePage() {
   };
 
   return (
+    <LazyMotion features={domAnimation}>
     <div className="min-h-screen overflow-x-hidden relative bg-[#060608] text-[#f8f8f8] font-sans selection:bg-[#e5d9c5] selection:text-black">
       <CustomCursor />
 
       {/* ── CINEMATIC READING PROGRESS BAR ── */}
-      <motion.div
+      <m.div
         className="fixed top-0 left-0 right-0 h-[2.5px] bg-gradient-to-r from-[#c9a84c] via-[#fce6b8] to-[#c9a84c] z-[100] origin-left pointer-events-none shadow-[0_0_12px_rgba(201,168,76,0.6)]"
         style={{ scaleX: scrollYProgress }}
       />
@@ -443,7 +445,7 @@ function WelcomePage() {
 
       {/* ── TOP FLOATING GLASSMORPHIC CAPSULE NAVBAR ── */}
       <div className="fixed top-5 left-0 right-0 z-50 flex justify-center px-4 sm:px-6 pointer-events-none">
-        <header className="w-full max-w-[1260px] bg-[#060608]/80 backdrop-blur-2xl border border-white/[0.12] hover:border-[#e5d9c5]/35 rounded-full px-5 sm:px-7 py-2.5 flex items-center justify-between pointer-events-auto shadow-[0_20px_50px_rgba(0,0,0,0.9),0_0_25px_rgba(201,168,76,0.06)] transition-all duration-300">
+        <header className="w-full max-w-[1260px] bg-[#060608]/80 backdrop-blur-md border border-white/[0.12] hover:border-[#e5d9c5]/35 rounded-full px-5 sm:px-7 py-2.5 flex items-center justify-between pointer-events-auto shadow-[0_20px_50px_rgba(0,0,0,0.9),0_0_25px_rgba(201,168,76,0.06)] transition-all duration-300">
           {/* Brand Logo */}
           <Link to="/welcome" className="flex items-center gap-3 group shrink-0">
             <div className="size-8 rounded-full border border-white/20 bg-white/[0.06] flex items-center justify-center font-nevera text-sm font-bold text-[#e5d9c5] group-hover:border-[#e5d9c5] group-hover:scale-105 transition-all">
@@ -501,11 +503,11 @@ function WelcomePage() {
       {/* ── MOBILE NAVIGATION DRAWER ── */}
       <AnimatePresence>
         {isMobileMenuOpen && (
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: -20, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.96 }}
-            className="fixed top-20 left-4 right-4 z-50 bg-[#0c0d12]/95 backdrop-blur-2xl border border-white/15 rounded-3xl p-6 shadow-2xl flex flex-col space-y-4 lg:hidden pointer-events-auto"
+            className="fixed top-20 left-4 right-4 z-50 bg-[#0c0d12]/95 backdrop-blur-md border border-white/15 rounded-3xl p-6 shadow-2xl flex flex-col space-y-4 lg:hidden pointer-events-auto"
           >
             <nav className="flex flex-col space-y-3 font-mono text-xs tracking-widest uppercase text-white/80">
               <a
@@ -577,7 +579,7 @@ function WelcomePage() {
                 Request Private Demo
               </button>
             </div>
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
 
@@ -601,10 +603,10 @@ function WelcomePage() {
         <div className="w-full max-w-[1680px] mx-auto px-6 md:px-12 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center z-10">
           
           {/* LEFT COLUMN: Editorial Typography with Scroll Parallax */}
-          <motion.div style={{ y: heroParallaxY }} className="lg:col-span-5 space-y-7 pt-2 z-20">
+          <m.div style={{ y: heroParallaxY }} className="lg:col-span-5 space-y-7 pt-2 z-20">
             
             {/* Status Pill */}
-            <motion.div
+            <m.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6 }}
@@ -614,7 +616,7 @@ function WelcomePage() {
               <span className="text-[10px] font-mono uppercase tracking-[0.24em] text-[#e5d9c5] font-semibold">
                 Autonomous 24/7 AI Lead Concierge
               </span>
-            </motion.div>
+            </m.div>
 
             {/* Main Headline */}
             <h1 className="font-nevera text-4xl sm:text-5xl lg:text-[62px] leading-[1.18] font-normal text-white tracking-normal">
@@ -626,20 +628,20 @@ function WelcomePage() {
             </h1>
 
             {/* Subtitle */}
-            <motion.p
+            <m.p
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, delay: 0.25 }}
+              transition={{ duration: 0.4, delay: 0.15, ease: [0.4, 0, 0.2, 1] }}
               className="text-sm sm:text-base font-light text-white/75 leading-relaxed max-w-lg"
             >
               WeaverFrame engages high-ticket luxury home buyers in <strong className="text-white font-medium">&lt; 45 seconds</strong> across WhatsApp, SMS, and Email. It screens seven-figure budgets, verifies land ownership, and schedules qualified site consultations directly to your team.
-            </motion.p>
+            </m.p>
 
             {/* Magnetic Action Buttons */}
-            <motion.div
+            <m.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, delay: 0.4 }}
+              transition={{ duration: 0.4, delay: 0.25, ease: [0.4, 0, 0.2, 1] }}
               className="flex flex-col sm:flex-row gap-3.5 sm:items-center pt-1"
             >
               <MagneticButton>
@@ -658,7 +660,7 @@ function WelcomePage() {
               >
                 Test Live Radar ↓
               </a>
-            </motion.div>
+            </m.div>
 
             {/* Animated Trust Metrics */}
             <div className="grid grid-cols-3 gap-4 pt-6 border-t border-white/[0.1] max-w-md">
@@ -681,30 +683,33 @@ function WelcomePage() {
                 <div className="text-[9px] uppercase font-mono tracking-widest text-white/50 mt-1">Pipeline Qualified</div>
               </div>
             </div>
-          </motion.div>
+          </m.div>
 
           {/* RIGHT COLUMN: Massive Frameless Exploded Villa Visual */}
           <div className="lg:col-span-7 relative flex items-center justify-center">
             {/* Ambient Lighting Glow Behind Image */}
             <div className="absolute inset-0 bg-radial from-[#c9a84c]/[0.08] via-transparent to-transparent rounded-full blur-3xl pointer-events-none scale-125" />
 
-            <motion.div
+            <m.div
               initial={{ opacity: 0, scale: 0.95, y: 15 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
               className="relative w-full flex items-center justify-center group"
             >
-              <picture className="w-full max-w-[1150px] 2xl:max-w-[1300px] flex justify-center">
+              {/* Fake GPU-friendly Shadow */}
+              <div className="absolute top-[10%] left-[10%] right-[10%] bottom-[10%] bg-black/95 blur-[80px] rounded-[100px] pointer-events-none transition-transform duration-700 group-hover:scale-[1.03]" />
+              
+              <picture className="w-full max-w-[1150px] 2xl:max-w-[1300px] flex justify-center relative z-10">
                 <source srcSet="/images/exploded-villa.webp" type="image/webp" />
                 <img
                   src="/images/exploded-villa.png"
                   alt="WeaverFrame Exploded Luxury Architecture"
                   fetchPriority="high"
                   decoding="async"
-                  className="w-full h-auto object-contain select-none pointer-events-none drop-shadow-[0_30px_70px_rgba(0,0,0,0.95)] transition-transform duration-700 group-hover:scale-[1.03]"
+                  className="w-full h-auto object-contain select-none pointer-events-none transition-transform duration-700 group-hover:scale-[1.03]"
                 />
               </picture>
-            </motion.div>
+            </m.div>
           </div>
 
         </div>
@@ -756,7 +761,7 @@ function WelcomePage() {
         </div>
 
         {/* Live Radar Terminal Screen */}
-        <div className="rounded-2xl border border-[#e5d9c5]/30 bg-[#0c0d12]/90 backdrop-blur-2xl p-6 sm:p-10 shadow-[0_20px_50px_rgba(0,0,0,0.85)] relative overflow-hidden">
+        <div className="rounded-2xl border border-[#e5d9c5]/30 bg-[#0c0d12]/90 backdrop-blur-md p-6 sm:p-10 shadow-[0_20px_50px_rgba(0,0,0,0.85)] relative overflow-hidden">
           {/* Top Window Chrome Bar */}
           <div className="flex items-center justify-between pb-5 mb-6 border-b border-white/[0.08]">
             <div className="flex items-center gap-2">
@@ -824,7 +829,7 @@ function WelcomePage() {
 
               <div className="space-y-4 pt-2">
                 {currentScenario.transcript.map((msg, i) => (
-                  <motion.div
+                  <m.div
                     key={i}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -843,7 +848,7 @@ function WelcomePage() {
                     >
                       {msg.text}
                     </div>
-                  </motion.div>
+                  </m.div>
                 ))}
               </div>
             </div>
@@ -913,7 +918,7 @@ function WelcomePage() {
               badge: "Zero-Code Sync"
             },
           ].map((pillar, idx) => (
-            <motion.div
+            <m.div
               key={pillar.num}
               initial={{ opacity: 0, y: 25 }}
               whileInView={{ opacity: 1, y: 0 }}
@@ -944,7 +949,7 @@ function WelcomePage() {
                 <span>Integrated Operating System</span>
                 <ChevronRight className="size-3 text-[#e5d9c5]" />
               </div>
-            </motion.div>
+            </m.div>
           ))}
         </div>
       </section>
@@ -987,7 +992,7 @@ function WelcomePage() {
 
             {/* Right Interactive Calculator */}
             <div className="lg:col-span-7">
-              <div className="p-8 sm:p-10 rounded-2xl border border-[#e5d9c5]/30 bg-[#0c0d12]/90 backdrop-blur-2xl shadow-[0_20px_60px_rgba(0,0,0,0.9)]">
+              <div className="p-8 sm:p-10 rounded-2xl border border-[#e5d9c5]/30 bg-[#0c0d12]/90 backdrop-blur-md shadow-[0_20px_60px_rgba(0,0,0,0.9)]">
                 <div className="flex items-center justify-between pb-6 border-b border-white/[0.08] mb-8">
                   <div className="flex items-center gap-3">
                     <Sliders className="size-5 text-[#e5d9c5]" />
@@ -1247,11 +1252,11 @@ function WelcomePage() {
         <div className="overflow-hidden cursor-grab active:cursor-grabbing" ref={emblaRef}>
           <div className="flex gap-6">
             {caseStudies.map((cs) => (
-              <motion.div
+              <m.div
                 key={cs.id}
                 whileHover={{ y: -6, scale: 1.015 }}
                 transition={{ duration: 0.3 }}
-                className={`flex-none w-[90vw] sm:w-[500px] lg:w-[460px] p-8 sm:p-10 rounded-2xl border border-white/[0.12] bg-gradient-to-br ${cs.accent} via-[#0c0d12]/95 to-[#08090c] backdrop-blur-2xl flex flex-col justify-between min-h-[380px] shadow-2xl hover:border-[#e5d9c5]/50 transition-all group`}
+                className={`flex-none w-[90vw] sm:w-[500px] lg:w-[460px] p-8 sm:p-10 rounded-2xl border border-white/[0.12] bg-gradient-to-br ${cs.accent} via-[#0c0d12]/95 to-[#08090c] backdrop-blur-md flex flex-col justify-between min-h-[380px] shadow-2xl hover:border-[#e5d9c5]/50 transition-all group`}
               >
                 <div>
                   <div className="flex items-center justify-between mb-8">
@@ -1292,7 +1297,7 @@ function WelcomePage() {
                     </div>
                   </div>
                 </div>
-              </motion.div>
+              </m.div>
             ))}
           </div>
         </div>
@@ -1317,7 +1322,7 @@ function WelcomePage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch relative z-10">
           {/* Plan 1: Starter */}
-          <div className="p-8 sm:p-10 rounded-2xl border border-white/[0.08] bg-[#0c0d12]/80 backdrop-blur-xl flex flex-col justify-between hover:border-white/30 transition-all hover:bg-[#0e0f15]">
+          <div className="p-8 sm:p-10 rounded-2xl border border-white/[0.08] bg-[#0c0d12]/80 backdrop-blur-sm flex flex-col justify-between hover:border-white/30 transition-all hover:bg-[#0e0f15]">
             <div>
               <span className="text-xs font-mono tracking-widest uppercase text-white/40 block mb-2 font-semibold">Boutique</span>
               <h3 className="font-nevera text-2xl text-white mb-2">Starter</h3>
@@ -1355,7 +1360,7 @@ function WelcomePage() {
           </div>
 
           {/* Plan 2: Professional (Dominant Featured Hero Card) */}
-          <div className="p-8 sm:p-10 rounded-2xl border-2 border-[#e5d9c5] flex flex-col justify-between relative shadow-[0_25px_60px_rgba(201,168,76,0.18)] bg-[#121319] backdrop-blur-2xl group lg:-translate-y-4 lg:scale-[1.03] transition-all">
+          <div className="p-8 sm:p-10 rounded-2xl border-2 border-[#e5d9c5] flex flex-col justify-between relative shadow-[0_25px_60px_rgba(201,168,76,0.18)] bg-[#121319] backdrop-blur-md group lg:-translate-y-4 lg:scale-[1.03] transition-all">
             {/* Ambient Gold Halo */}
             <div className="absolute -inset-1 bg-gradient-to-b from-[#e5d9c5]/30 via-[#c9a84c]/15 to-transparent rounded-3xl blur-xl opacity-90 pointer-events-none" />
 
@@ -1405,7 +1410,7 @@ function WelcomePage() {
           </div>
 
           {/* Plan 3: Enterprise */}
-          <div className="p-8 sm:p-10 rounded-2xl border border-white/[0.08] bg-[#0c0d12]/80 backdrop-blur-xl flex flex-col justify-between hover:border-white/30 transition-all hover:bg-[#0e0f15]">
+          <div className="p-8 sm:p-10 rounded-2xl border border-white/[0.08] bg-[#0c0d12]/80 backdrop-blur-sm flex flex-col justify-between hover:border-white/30 transition-all hover:bg-[#0e0f15]">
             <div>
               <span className="text-xs font-mono tracking-widest uppercase text-white/40 block mb-2 font-semibold">Multi-Location</span>
               <h3 className="font-nevera text-2xl text-white mb-2">Enterprise</h3>
@@ -1565,8 +1570,8 @@ function WelcomePage() {
       {/* ── PRIVATE DEMO MODAL ── */}
       <AnimatePresence>
         {isDemoModalOpen && (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl animate-in fade-in duration-200">
-            <motion.div
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+            <m.div
               initial={{ opacity: 0, scale: 0.95, y: 15 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 15 }}
@@ -1690,10 +1695,11 @@ function WelcomePage() {
                   </form>
                 </>
               )}
-            </motion.div>
+            </m.div>
           </div>
         )}
       </AnimatePresence>
     </div>
+    </LazyMotion>
   );
 }
