@@ -610,13 +610,13 @@ function LeadsPage() {
             </button>
             <button
               onClick={exportToCSV}
-              className="inline-flex items-center gap-1 text-xs border border-border rounded-md px-2.5 py-1.5 text-foreground hover:bg-secondary transition-colors whitespace-nowrap"
+              className="inline-flex items-center gap-1.5 text-xs border border-white/[0.1] bg-[#0c0d14] rounded-lg px-3 py-1.5 text-white/80 hover:text-white hover:border-[#e5d9c5]/40 transition-colors whitespace-nowrap cursor-pointer"
             >
-              <Download className="size-3.5" /> Export CSV
+              <Download className="size-3.5 text-white/50" /> Export CSV
             </button>
             <button
               onClick={() => setIsAddModalOpen(true)}
-              className="inline-flex items-center gap-1 text-xs bg-primary text-primary-foreground rounded-md px-2.5 py-1.5 font-medium hover:bg-primary/90 focus:ring-0 focus:outline-none transition-colors duration-75 whitespace-nowrap"
+              className="inline-flex items-center gap-1.5 text-xs bg-[#e5d9c5] text-black font-semibold rounded-lg px-3.5 py-1.5 hover:bg-white transition-all duration-200 shadow-sm shadow-[#e5d9c5]/15 whitespace-nowrap cursor-pointer"
             >
               <Plus className="size-3.5" /> Add Lead
             </button>
@@ -690,7 +690,7 @@ function LeadsPage() {
           <>
             <div className="overflow-x-auto overflow-y-auto flex-1 min-h-0 border-t border-border custom-scrollbar">
               <table className="w-full text-sm">
-                <thead className="bg-secondary/50">
+                <thead className="sticky top-0 z-20 bg-secondary/95 backdrop-blur border-b border-border shadow-xs">
                   <tr className="text-center text-xs text-muted-foreground uppercase tracking-wider">
                     <th className="px-4 py-3 font-medium text-center">#</th>
                     <th className="px-4 py-3 font-medium text-center">Name</th>
@@ -714,7 +714,7 @@ function LeadsPage() {
                       <tr
                         key={lead.id}
                         onClick={() => setSelected(lead)}
-                        className={`border-t border-border cursor-pointer transition-all duration-150 hover:bg-white/[0.03] hover:border-l-2 hover:border-l-white/20 ${i % 2 ? "bg-card" : "bg-card/60"}`}
+                        className={`border-t border-border cursor-pointer transition-colors duration-100 hover:bg-white/[0.06] ${i % 2 ? "bg-card" : "bg-card/60"}`}
                       >
                         <td className="px-4 py-3 font-mono text-muted-foreground text-xs text-center">{String(globalIndex + 1).padStart(2, "0")}</td>
                         <td className="px-4 py-3 font-medium text-foreground text-center">
@@ -769,9 +769,9 @@ function LeadsPage() {
                           </div>
                         </td>
                         <td className="px-4 py-3 text-center">
-                          <div className="flex justify-center">
-                            <AiStatus status={lead.aiStatus} />
-                          </div>
+                            <span className="px-2 py-1 bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-wider rounded border border-primary/20">
+                              {lead.aiStatus || 'STANDBY'}
+                            </span>
                         </td>
                         <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-center gap-1">
@@ -1202,7 +1202,7 @@ function EmailSimulatorModal({ lead, onClose }: { lead: any; onClose: () => void
       });
       // Update lead status to "Emailed" if it's still New
       if (lead.status === 'New') {
-        setOptimisticLeads(prev => prev.map((l: any) => l.id === lead.id ? { ...l, status: 'Emailed' } : l));
+        // setOptimisticLeads(prev => prev.map((l: any) => l.id === lead.id ? { ...l, status: 'Emailed' } : l));
         await updateLead({ data: { id: lead.id, status: 'Emailed' } });
       }
       setIsSending(false);
@@ -1608,7 +1608,7 @@ function KanbanColumn({ column, leads, ...cardProps }: KanbanColumnProps) {
   return (
     <div className={`flex flex-col flex-1 min-w-0 rounded-xl border-t-2 ${column.accent} bg-card/60 border border-border overflow-hidden`}>
       {/* Column Header */}
-      <div className={`px-3 py-2.5 ${column.headerBg} border-b border-border flex items-center justify-between`}>
+      <div className={`px-3 py-2.5 ${column.headerBg} border-b border-border flex items-center justify-between shrink-0`}>
         <div className="flex items-center gap-2">
           <span className="text-base leading-none">{column.icon}</span>
           <span className={`text-xs font-semibold uppercase tracking-wider ${column.headerText}`}>

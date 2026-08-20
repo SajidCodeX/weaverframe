@@ -12,7 +12,8 @@ import {
   setLeadAiToggle,
   getIntegrationsStatus,
   summarizeConversation,
-  simulateLeadMessage
+  simulateLeadMessage,
+  generatePortalToken
 } from "@/lib/dashboard";
 import {
   MessageSquare,
@@ -33,9 +34,17 @@ import {
   ChevronRight,
   ChevronDown,
   ExternalLink,
-  BrainCircuit
+  BrainCircuit,
+  MoreVertical
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 
 export const Route = createFileRoute("/messages")({
   loader: async ({ context }) => {
@@ -140,6 +149,14 @@ function MessagesPage() {
       setConversationsList(initialConversations);
     }
   }, [initialConversations]);
+
+  // Poll conversations every 15s so online status stays fresh (WhatsApp-style)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      router.invalidate();
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [router]);
 
   // Track selected lead & active conversation
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
@@ -292,6 +309,28 @@ function MessagesPage() {
     isUserScrolledUpRef.current = isFarFromBottom;
     if (!isFarFromBottom) {
       setNewMessagesCount(0);
+    }
+  };
+
+  const handleCopyPortalLink = async () => {
+    if (!activeChat) return;
+    try {
+      let token = selectedThread?.portalToken || activeChat.lead.portalToken;
+      if (!token) {
+        const activeRole = sessionStorage.getItem('active_role') ?? undefined;
+        // activeChat.lead has id from DB but might just be the mapped thread which has leadId
+        const targetLeadId = selectedThread?.leadId || activeChat.lead.id || activeChat.lead.leadId;
+        token = await generatePortalToken({ data: { leadId: targetLeadId, activeRole } });
+        if (selectedThread) selectedThread.portalToken = token;
+      }
+      const link = `${window.location.origin}/portal/${token}`;
+      await navigator.clipboard.writeText(link);
+      toast.success("Client portal link copied!", {
+        description: "Anyone with this link can chat with you as this lead."
+      });
+    } catch (e) {
+      toast.error("Failed to copy link");
+      console.error(e);
     }
   };
 
@@ -534,9 +573,25 @@ function MessagesPage() {
     if (e) e.preventDefault();
     if (!selectedLeadId || !newMessageText.trim() || isSending) return;
 
-    setIsSending(true);
-    const originalText = newMessageText;
+    const originalText = newMessageText.trim();
     setNewMessageText("");
+    setIsSending(true);
+
+    const tempId = `opt-${Date.now()}`;
+    const optimisticMessage = {
+      id: tempId,
+      sender: "user" as const,
+      content: originalText,
+      createdAt: new Date().toISOString(),
+      isRead: true
+    };
+
+    // Optimsitic UI Update INSTANTLY
+    setActiveChat(prev => {
+      if (!prev) return null;
+      return { ...prev, messages: [...prev.messages, optimisticMessage] };
+    });
+    setTimeout(scrollToBottom, 20);
 
     try {
       const res = await sendMessage({
@@ -546,33 +601,32 @@ function MessagesPage() {
         }
       });
 
-      // Update state optimistically with the user message
+      // Update state with actual DB response (replace temp message)
       setActiveChat(prev => {
         if (!prev) return null;
-        const updatedMsgs = [
-          ...prev.messages,
-          {
+        const updatedMsgs = prev.messages.map(m => m.id === tempId ? {
             id: res.userMessage.id,
             sender: "user" as const,
             content: res.userMessage.content,
             createdAt: new Date().toISOString(),
             isRead: true
-          }
-        ];
+        } : m);
 
         if ((window as any)._messagesCache) {
           (window as any)._messagesCache.set(selectedLeadId, updatedMsgs);
         }
 
-        return {
-          ...prev,
-          messages: updatedMsgs
-        };
+        return { ...prev, messages: updatedMsgs };
       });
 
       await router.invalidate();
     } catch (err) {
       console.error("Failed to send message:", err);
+      // Rollback optimistic update
+      setActiveChat(prev => {
+        if (!prev) return null;
+        return { ...prev, messages: prev.messages.filter(m => m.id !== tempId) };
+      });
       setNewMessageText(originalText);
       toast.error("Failed to send message. Please try again.");
     } finally {
@@ -949,12 +1003,16 @@ function MessagesPage() {
                   <div>
                     <h3 className="font-semibold text-xs text-foreground tracking-tight flex items-center gap-2">
                       {selectedThread.leadName}
-                      <span className={`inline-block size-2 rounded-full ${selectedThread.isOnline ? "bg-success" : "bg-neutral-600"}`} />
+                      {selectedThread.isOnline && (
+                        <span className="inline-block size-2 rounded-full bg-green-500 animate-pulse" title="Lead is actively viewing the portal" />
+                      )}
                     </h3>
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
+                    <div className="flex items-center gap-1.5 text-xs mt-0.5 h-4">
                       {selectedThread.isOnline ? (
-                        <span className="text-success">Active now</span>
-                      ) : null}
+                        <span className="text-green-500 font-medium">Online (Portal)</span>
+                      ) : (
+                        <span className="text-muted-foreground">Offline</span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -967,69 +1025,84 @@ function MessagesPage() {
                         <Mail className="size-3.5" />
                       </a>
                     )}
+                    <button
+                      onClick={handleCopyPortalLink}
+                      className="p-2 bg-secondary border border-border rounded-md hover:bg-secondary/80 hover:text-white transition-colors"
+                      title="Copy Portal Link"
+                    >
+                      <ExternalLink className="size-3.5" />
+                    </button>
                   </div>
 
                   <div className="w-px h-6 bg-border" />
 
                   {/* Header action shortcuts */}
-                  <div className="flex items-center gap-2">
-                    {/* Premium AI Concierge Pill Toggle */}
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        if (!selectedLeadId) return;
-                        const nextVal = !isAiActive;
-                        setAiToggleMap(prev => ({ ...prev, [selectedLeadId]: nextVal }));
-                        try {
-                          await setLeadAiToggle({ data: { leadId: selectedLeadId, active: nextVal } });
-                        } catch (err) {
-                          console.error("Failed to persist AI toggle state:", err);
-                          setAiToggleMap(prev => ({ ...prev, [selectedLeadId]: isAiActive }));
-                        }
-                      }}
-                      className={`px-3 py-1.5 text-[11px] font-semibold rounded-md border flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer ${isAiActive
-                        ? "bg-white/10 text-success border-success/30 hover:bg-white/15"
-                        : "bg-white/[0.02] text-muted-foreground border-white/[0.05] hover:text-white"
-                        }`}
-                      title={isAiActive ? "Pause AI Concierge Automated replies" : "Activate AI Concierge Automated replies"}
-                    >
-                      <Sparkles className={`size-3.5 ${isAiActive ? "text-success animate-pulse" : "text-muted-foreground"}`} />
-                      {isAiActive ? "AI Concierge: Active" : "AI Concierge: Paused"}
-                    </button>
-
-                    <button
-                      onClick={() => setIsPortfolioModalOpen(true)}
-                      disabled={isSending}
-                      className="px-3 py-1.5 bg-secondary text-white text-[11px] font-medium rounded-md border border-border hover:bg-secondary/80 flex items-center gap-1.5 transition-colors disabled:opacity-50"
-                    >
-                      <FileText className="size-3.5 text-muted-foreground" /> Portfolios
-                    </button>
-
-                    <button
-                      onClick={handleSummarizeChat}
-                      disabled={isSummarizing || !activeChat || activeChat.messages.length === 0}
-                      className="px-3 py-1.5 bg-secondary text-primary text-[11px] font-medium rounded-md border border-primary/20 hover:bg-secondary/80 flex items-center gap-1.5 transition-colors disabled:opacity-50"
-                    >
-                      {isSummarizing ? <Loader2 className="size-3.5 animate-spin" /> : <BrainCircuit className="size-3.5" />}
-                      Summarize Chat
-                    </button>
-
-                    {canSimulate && (
-                      <button
-                        onClick={() => setIsSimulateOpen(true)}
-                        className="px-3 py-1.5 bg-secondary text-primary text-[11px] font-medium rounded-md border border-primary/20 hover:bg-secondary/80 flex items-center gap-1.5 transition-colors"
-                      >
-                        <MessageSquare className="size-3.5" /> Simulate Reply
+                  {/* Header action shortcuts */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button className="p-1.5 rounded-md hover:bg-white/5 transition-colors text-muted-foreground hover:text-white">
+                        <MoreVertical className="size-4.5" />
                       </button>
-                    )}
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56 bg-[#0a0a0c] border border-border">
+                      <DropdownMenuItem
+                        onClick={async (e) => {
+                          e.preventDefault();
+                          if (!selectedLeadId) return;
+                          const nextVal = !isAiActive;
+                          setAiToggleMap(prev => ({ ...prev, [selectedLeadId]: nextVal }));
+                          try {
+                            await setLeadAiToggle({ data: { leadId: selectedLeadId, active: nextVal } });
+                          } catch (err) {
+                            console.error("Failed to persist AI toggle state:", err);
+                            setAiToggleMap(prev => ({ ...prev, [selectedLeadId]: isAiActive }));
+                          }
+                        }}
+                        className="flex items-center gap-2 cursor-pointer hover:bg-white/5 focus:bg-white/5"
+                      >
+                        <Sparkles className={`size-4 ${isAiActive ? "text-success animate-pulse" : "text-muted-foreground"}`} />
+                        <span>{isAiActive ? "Pause AI Concierge" : "Activate AI Concierge"}</span>
+                      </DropdownMenuItem>
 
-                    <button
-                      onClick={() => setIsSchedulingOpen(true)}
-                      className="px-3 py-1.5 bg-white text-black text-[11px] font-semibold rounded-md hover:bg-white/95 flex items-center gap-1.5 transition-colors"
-                    >
-                      <Calendar className="size-3.5 text-black" /> Schedule Site Visit
-                    </button>
-                  </div>
+                      <DropdownMenuItem
+                        onClick={() => setIsPortfolioModalOpen(true)}
+                        disabled={isSending}
+                        className="flex items-center gap-2 cursor-pointer hover:bg-white/5 focus:bg-white/5"
+                      >
+                        <FileText className="size-4 text-muted-foreground" />
+                        <span>Portfolios</span>
+                      </DropdownMenuItem>
+
+                      <DropdownMenuItem
+                        onClick={handleSummarizeChat}
+                        disabled={isSummarizing || !activeChat || activeChat.messages.length === 0}
+                        className="flex items-center gap-2 cursor-pointer hover:bg-white/5 focus:bg-white/5"
+                      >
+                        {isSummarizing ? <Loader2 className="size-4 animate-spin text-muted-foreground" /> : <BrainCircuit className="size-4 text-muted-foreground" />}
+                        <span>Summarize Chat</span>
+                      </DropdownMenuItem>
+
+                      {canSimulate && (
+                        <DropdownMenuItem
+                          onClick={() => setIsSimulateOpen(true)}
+                          className="flex items-center gap-2 cursor-pointer hover:bg-white/5 focus:bg-white/5"
+                        >
+                          <MessageSquare className="size-4 text-muted-foreground" />
+                          <span>Simulate Reply</span>
+                        </DropdownMenuItem>
+                      )}
+
+                      <DropdownMenuSeparator className="bg-border" />
+
+                      <DropdownMenuItem
+                        onClick={() => setIsSchedulingOpen(true)}
+                        className="flex items-center gap-2 cursor-pointer text-primary focus:bg-primary/10 focus:text-primary hover:bg-primary/10 hover:text-primary"
+                      >
+                        <Calendar className="size-4" />
+                        <span>Schedule Site Visit</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
 
@@ -1289,6 +1362,17 @@ function MessagesPage() {
                       <p className="text-[11px] text-muted-foreground mt-1 max-w-xs leading-relaxed">
                         Send a message to kick off direct communication. All follow-ups will log and track instantly.
                       </p>
+                    </div>
+                  )}
+
+                  {/* Typing Indicator for simulated replies */}
+                  {isSimulating && (
+                    <div className="flex flex-col items-start w-full group animate-in slide-in-from-bottom-2 duration-150 mt-2 mb-2">
+                      <div className="relative p-3 rounded-2xl text-[13px] bg-[#151720] border border-white/10 text-white rounded-tl-none opacity-100 shadow-xl flex items-center gap-1.5 h-10 w-16">
+                        <span className="w-1.5 h-1.5 rounded-full bg-white/40 animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                        <span className="w-1.5 h-1.5 rounded-full bg-white/40 animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                        <span className="w-1.5 h-1.5 rounded-full bg-white/40 animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                      </div>
                     </div>
                   )}
 

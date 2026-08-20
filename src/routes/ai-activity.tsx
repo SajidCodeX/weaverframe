@@ -22,7 +22,7 @@ export const Route = createFileRoute("/ai-activity")({
       { name: "description", content: "AI conversation log and scripts." },
     ],
   }),
-  staleTime: 60_000, // 60s — fresh data, instant revisits within a minute
+  staleTime: 60_000,
   pendingMs: 0,
   pendingComponent: () => <RoutePending title="Loading AI Activity..." type="ai-activity" />,
   component: AIPage,
@@ -38,7 +38,7 @@ function Stat({
   label: string;
   value: string;
   sub: string;
-  icon: React.ElementType;
+  icon: any;
   color: string;
 }) {
   return (

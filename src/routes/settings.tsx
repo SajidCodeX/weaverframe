@@ -22,7 +22,6 @@ import {
   updateBillingProfile,
 } from "@/lib/dashboard";
 import { Loader2, Check, X, AlertCircle, Download } from "lucide-react";
-import { jsPDF } from "jspdf";
 
 export const Route = createFileRoute("/settings")({
   beforeLoad: async ({ context }) => {
@@ -75,7 +74,15 @@ export const Route = createFileRoute("/settings")({
   component: SettingsPage,
 });
 
-const sections = ["Builder Profile", "Lead Qualification Rules", "Notifications", "Integrations", "Billing", "Appearance", "Blocked Users"] as const;
+const sections = [
+  "Builder Profile",
+  "Lead Qualification Rules",
+  "Notifications",
+  "Integrations",
+  "Billing",
+  "Appearance",
+  // "Blocked Users"
+] as const;
 
 function SettingsPage() {
   const loaderData = useLoaderData({ from: "/settings" }) || {};
@@ -119,8 +126,9 @@ function SettingsPage() {
   const [fundingSuccess, setFundingSuccess] = useState(false);
 
 
-  const downloadInvoicePDF = (date: string, amount: string, status: string) => {
+  const downloadInvoicePDF = async (date: string, amount: string, status: string) => {
     const company = loadedProfile.companyName || "Your Company LLC";
+    const { jsPDF } = await import("jspdf");
     const doc = new jsPDF();
     doc.setFont("helvetica", "bold");
     doc.setFontSize(20);
@@ -145,10 +153,11 @@ function SettingsPage() {
     doc.line(20, 115, 190, 115);
 
     doc.setFont("helvetica", "normal");
-    doc.text("WeaverFrame SaaS Monthly Platform Licensing", 20, 125);
-    doc.text("- Travis County permit feed streaming & ingestion", 25, 135);
-    doc.text("- Advanced AI nurture concierge", 25, 145);
-    doc.text("- Google Business reputation optimization", 25, 155);
+    doc.text("WeaverFrame AI Lead Conversion OS Platform License", 20, 125);
+    // doc.text("- Travis County permit feed streaming & ingestion", 25, 135);
+    doc.text("- 24/7 AI Lead Concierge & Automated Qualification", 25, 135);
+    doc.text("- Live Multi-Channel Pipeline & WhatsApp/SMS Concierge", 25, 145);
+    // doc.text("- Google Business reputation optimization", 25, 155);
     doc.text("$3,000.00", 170, 125);
 
     doc.line(20, 170, 190, 170);
@@ -166,26 +175,46 @@ function SettingsPage() {
 
   // ── Builder Profile State ───────────────────────────────────────────────────
   const [profileForm, setProfileForm] = useState({
-    companyName: loadedProfile.companyName || "Your Company LLC",
-    primaryContact: loadedProfile.primaryContact || "Your Name",
-    email: loadedProfile.email || "youremail@example.com",
-    phone: loadedProfile.phone || "+1 512-555-0100",
-    businessAddress: loadedProfile.businessAddress || "1100 S Lamar Blvd, Austin, TX 78704",
-    targetZipCodes: loadedProfile.targetZipCodes || "78704, 78703, 78731, 78613, 78641",
+    companyName: loadedProfile.companyName || "",
+    primaryContact: loadedProfile.primaryContact || "",
+    email: loadedProfile.email || "",
+    phone: loadedProfile.phone || "",
+    businessAddress: loadedProfile.businessAddress || "",
+    targetZipCodes: loadedProfile.targetZipCodes || "",
     avgHomePrice: loadedProfile.avgHomePrice || "$700,000",
     homesPerYear: loadedProfile.homesPerYear || "42",
+    timezone: loadedProfile.timezone || "Asia/Kolkata",
+    aiContext: loadedProfile.aiContext || "",
   });
+
+  useEffect(() => {
+    if (loadedProfile && Object.keys(loadedProfile).length > 0) {
+      setProfileForm({
+        companyName: loadedProfile.companyName || "",
+        primaryContact: loadedProfile.primaryContact || "",
+        email: loadedProfile.email || "",
+        phone: loadedProfile.phone || "",
+        businessAddress: loadedProfile.businessAddress || "",
+        targetZipCodes: loadedProfile.targetZipCodes || "",
+        avgHomePrice: loadedProfile.avgHomePrice || "$700,000",
+        homesPerYear: loadedProfile.homesPerYear || "42",
+        timezone: loadedProfile.timezone || "Asia/Kolkata",
+        aiContext: loadedProfile.aiContext || "",
+      });
+    }
+  }, [loadedProfile]);
+
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileSaved, setProfileSaved] = useState(false);
 
   const handleSaveProfile = async () => {
-    // Unique Zip Code Validation
-    const zips = profileForm.targetZipCodes.split(',').map((z: string) => z.trim()).filter(Boolean);
-    const uniqueZips = new Set(zips);
-    if (uniqueZips.size !== zips.length) {
-      alert("Error: Duplicate zip codes are not allowed in Target Zip Codes. Please remove duplicates.");
-      return;
-    }
+    // // Unique Zip Code Validation (Scraper remnant - commented out)
+    // const zips = profileForm.targetZipCodes.split(',').map((z: string) => z.trim()).filter(Boolean);
+    // const uniqueZips = new Set(zips);
+    // if (uniqueZips.size !== zips.length) {
+    //   alert("Error: Duplicate zip codes are not allowed in Target Zip Codes. Please remove duplicates.");
+    //   return;
+    // }
 
     // Mandatory Field Verification
     if (!profileForm.companyName.trim() || !profileForm.primaryContact.trim() || !profileForm.email.trim() || !profileForm.phone.trim() || !profileForm.businessAddress.trim()) {
@@ -213,6 +242,13 @@ function SettingsPage() {
     setIsSavingProfile(true);
     try {
       await saveBuilderProfile({ data: profileForm });
+      if (typeof window !== 'undefined') {
+        const { invalidateClientSession } = await import('./__root');
+        invalidateClientSession({ 
+          companyName: profileForm.companyName, 
+          displayName: profileForm.primaryContact 
+        });
+      }
       await router.invalidate();
       setProfileSaved(true);
       setTimeout(() => setProfileSaved(false), 2500);
@@ -232,6 +268,19 @@ function SettingsPage() {
     specificZipOnly: loadedQualRules.specificZipOnly ?? true,
     minLeadScore: loadedQualRules.minLeadScore ?? 60,
   });
+
+  useEffect(() => {
+    if (loadedQualRules && Object.keys(loadedQualRules).length > 0) {
+      setQualForm({
+        minBudget: loadedQualRules.minBudget || "$500,000",
+        maxTimeline: loadedQualRules.maxTimeline || "12",
+        preApprovalRequired: loadedQualRules.preApprovalRequired ?? false,
+        specificZipOnly: loadedQualRules.specificZipOnly ?? true,
+        minLeadScore: loadedQualRules.minLeadScore ?? 60,
+      });
+    }
+  }, [loadedQualRules]);
+
   const [isSavingQual, setIsSavingQual] = useState(false);
   const [qualSaved, setQualSaved] = useState(false);
 
@@ -258,6 +307,20 @@ function SettingsPage() {
     channel: loadedNotif.channel || "Both",
     quietHours: loadedNotif.quietHours ?? true,
   });
+
+  useEffect(() => {
+    if (loadedNotif && Object.keys(loadedNotif).length > 0) {
+      setNotifForm({
+        newLead: loadedNotif.newLead ?? true,
+        leadReplies: loadedNotif.leadReplies ?? true,
+        hotLead: loadedNotif.hotLead ?? true,
+        apptBooked: loadedNotif.apptBooked ?? true,
+        channel: loadedNotif.channel || "Both",
+        quietHours: loadedNotif.quietHours ?? true,
+      });
+    }
+  }, [loadedNotif]);
+
   const [isSavingNotif, setIsSavingNotif] = useState(false);
   const [notifSaved, setNotifSaved] = useState(false);
 
@@ -277,6 +340,13 @@ function SettingsPage() {
 
   // ── Webhook URL State ───────────────────────────────────────────────────
   const [webhookUrl, setWebhookUrl] = useState(loadedWebhookUrl || 'https://your-app.com/webhook/buildersedge');
+
+  useEffect(() => {
+    if (loadedWebhookUrl) {
+      setWebhookUrl(loadedWebhookUrl);
+    }
+  }, [loadedWebhookUrl]);
+
   const [isSavingWebhook, setIsSavingWebhook] = useState(false);
   const [webhookSaved, setWebhookSaved] = useState(false);
 
@@ -315,6 +385,25 @@ function SettingsPage() {
     });
     return creds;
   });
+
+  useEffect(() => {
+    if (loadedStatuses && Object.keys(loadedStatuses).length > 0) {
+      const statuses: Record<string, boolean> = {
+        google: false, houzz: false, facebook: false, twilio: false, hubspot: false, ghl: false
+      };
+      const creds: Record<string, Record<string, string>> = {
+        google: {}, twilio: {}, hubspot: {}, houzz: {}, facebook: {}, ghl: {}
+      };
+      Object.keys(loadedStatuses).forEach(key => {
+        if (loadedStatuses[key]) {
+          statuses[key] = loadedStatuses[key].isConnected;
+          creds[key] = loadedStatuses[key].credentials || {};
+        }
+      });
+      setConnectionStatus(statuses);
+      setCredentials(creds);
+    }
+  }, [loadedStatuses]);
 
   const [isSaving, setIsSaving] = useState<Record<string, boolean>>({});
 
@@ -375,17 +464,17 @@ function SettingsPage() {
 
 
   const integrationsList = [
-    {
-      id: "google",
-      name: "Google Business Reviews API",
-      desc: "Monitor Google Reviews in real-time, generate keyword-rich responses, and publish instantly.",
-      icon: "G",
-      fields: [
-        { key: "clientId", label: "Google OAuth Client ID", type: "text", required: true, placeholder: "e.g. oauth-client.apps.googleusercontent.com" },
-        { key: "clientSecret", label: "OAuth Client Secret", type: "password", required: true, placeholder: "Enter client secret key" },
-        { key: "locationId", label: "Google Location ID", type: "text", required: true, placeholder: "e.g. accounts/12345/locations/67890" }
-      ]
-    },
+    // {
+    //   id: "google",
+    //   name: "Google Business Reviews API",
+    //   desc: "Monitor Google Reviews in real-time, generate keyword-rich responses, and publish instantly.",
+    //   icon: "G",
+    //   fields: [
+    //     { key: "clientId", label: "Google OAuth Client ID", type: "text", required: true, placeholder: "e.g. oauth-client.apps.googleusercontent.com" },
+    //     { key: "clientSecret", label: "OAuth Client Secret", type: "password", required: true, placeholder: "Enter client secret key" },
+    //     { key: "locationId", label: "Google Location ID", type: "text", required: true, placeholder: "e.g. accounts/12345/locations/67890" }
+    //   ]
+    // },
     {
       id: "twilio",
       name: "Twilio SMS Outreach Gateway",
@@ -406,30 +495,30 @@ function SettingsPage() {
         { key: "accessToken", label: "Private App Access Token", type: "password", required: true, placeholder: "e.g. pat-na1-xxxxxxxxxxxxxxxxxxxx", colSpan: 2 }
       ]
     },
-    {
-      id: "houzz",
-      name: "Houzz Professional Reviews",
-      desc: "Automatically route Houzz 5-Star reviews to boost local visibility and organic Houzz profile rank.",
-      icon: "Hz",
-      fields: [
-        { key: "apiKey", label: "Houzz Partner API Key", type: "password", required: true, placeholder: "Enter Partner API Key" },
-        { key: "profileUrl", label: "Houzz Profile URL", type: "text", required: true, placeholder: "e.g. houzz.com/pro/yourcompany" }
-      ]
-    },
-    {
-      id: "facebook",
-      name: "Facebook Page & Recommendations API",
-      desc: "Sync Facebook client reviews, recommendations, and local check-in mentions to our dashboard.",
-      icon: "F",
-      fields: [
-        { key: "pageId", label: "Facebook Page ID", type: "text", required: true, placeholder: "e.g. 102459806497" },
-        { key: "accessToken", label: "Page Access Token", type: "password", required: true, placeholder: "Enter Page Access Token", colSpan: 2 }
-      ]
-    },
+    // {
+    //   id: "houzz",
+    //   name: "Houzz Professional Reviews",
+    //   desc: "Automatically route Houzz 5-Star reviews to boost local visibility and organic Houzz profile rank.",
+    //   icon: "Hz",
+    //   fields: [
+    //     { key: "apiKey", label: "Houzz Partner API Key", type: "password", required: true, placeholder: "Enter Partner API Key" },
+    //     { key: "profileUrl", label: "Houzz Profile URL", type: "text", required: true, placeholder: "e.g. houzz.com/pro/yourcompany" }
+    //   ]
+    // },
+    // {
+    //   id: "facebook",
+    //   name: "Facebook Page & Recommendations API",
+    //   desc: "Sync Facebook client reviews, recommendations, and local check-in mentions to our dashboard.",
+    //   icon: "F",
+    //   fields: [
+    //     { key: "pageId", label: "Facebook Page ID", type: "text", required: true, placeholder: "e.g. 102459806497" },
+    //     { key: "accessToken", label: "Page Access Token", type: "password", required: true, placeholder: "Enter Page Access Token", colSpan: 2 }
+    //   ]
+    // },
     {
       id: "ghl",
       name: "GoHighLevel (GHL) Sync",
-      desc: "Trigger review requests and AI conversational actions directly inside GHL sub-accounts.",
+      desc: "Sync contacts, pipeline stages, and AI conversation actions directly inside GHL sub-accounts.",
       icon: "GHL",
       fields: [
         { key: "apiKey", label: "GHL Location API Key (v2)", type: "password", required: true, placeholder: "Enter GHL Location API Key", colSpan: 2 }
@@ -461,10 +550,46 @@ function SettingsPage() {
               <Row label={<>Email <span className="text-danger">*</span></>}><Input type="email" value={profileForm.email} onChange={e => setProfileForm(p => ({ ...p, email: e.target.value }))} /></Row>
               <Row label={<>Phone <span className="text-danger">*</span></>}><Input type="tel" value={profileForm.phone} onChange={e => setProfileForm(p => ({ ...p, phone: e.target.value }))} /></Row>
               <Row label={<>Business address <span className="text-danger">*</span></>}><Input value={profileForm.businessAddress} onChange={e => setProfileForm(p => ({ ...p, businessAddress: e.target.value }))} /></Row>
-              <Row label="Target zip codes"><Input value={profileForm.targetZipCodes} onChange={e => setProfileForm(p => ({ ...p, targetZipCodes: e.target.value }))} /></Row>
-              <div className="grid grid-cols-2 gap-4">
+              {/* <Row label="Target zip codes"><Input value={profileForm.targetZipCodes} onChange={e => setProfileForm(p => ({ ...p, targetZipCodes: e.target.value }))} /></Row> */}
+              {/* <div className="grid grid-cols-2 gap-4">
                 <Row label="Avg home price"><Input value={profileForm.avgHomePrice} onChange={e => setProfileForm(p => ({ ...p, avgHomePrice: e.target.value }))} /></Row>
                 <Row label="Homes built / year"><Input value={profileForm.homesPerYear} onChange={e => setProfileForm(p => ({ ...p, homesPerYear: e.target.value }))} /></Row>
+              </div> */}
+
+              <div className="mt-4 pt-4 border-t border-border">
+                <h4 className="text-sm font-semibold text-foreground mb-4">AI Concierge Preferences</h4>
+                <Row label="Timezone">
+                  <CustomSelect
+                    options={[
+                      { value: "America/New_York", label: "Eastern Time (EST/EDT)" },
+                      { value: "America/Chicago", label: "Central Time (CST/CDT)" },
+                      { value: "America/Denver", label: "Mountain Time (MST/MDT)" },
+                      { value: "America/Los_Angeles", label: "Pacific Time (PST/PDT)" },
+                      { value: "Europe/London", label: "London (GMT/BST)" },
+                      { value: "Asia/Kolkata", label: "India Standard Time (IST)" },
+                    ]}
+                    value={profileForm.timezone}
+                    onChange={(val) => setProfileForm(p => ({ ...p, timezone: val }))}
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Used by the AI to convert meeting requests into correct UTC times for your calendar.
+                  </p>
+                </Row>
+                
+                <div className="mt-4 flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-foreground uppercase tracking-widest">
+                    AI Knowledge Base / Builder Defaults
+                  </label>
+                  <textarea
+                    value={profileForm.aiContext}
+                    onChange={e => setProfileForm(p => ({ ...p, aiContext: e.target.value }))}
+                    placeholder="e.g. Office hours: Mon-Sat 9am-6pm. We specialize in luxury custom homes & modern architectural estates. Consultation locations: Office or virtual video call."
+                    className="w-full bg-[#0c0d12] border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-primary transition-colors text-white resize-y min-h-[100px]"
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    Provide default operating hours, meeting locations, or policies. The AI will use this context when answering leads and booking appointments.
+                  </p>
+                </div>
               </div>
               <Save onClick={handleSaveProfile} isSaving={isSavingProfile} saved={profileSaved} />
 
@@ -532,7 +657,7 @@ function SettingsPage() {
               <Row label="Minimum budget"><Input value={qualForm.minBudget} onChange={e => setQualForm(p => ({ ...p, minBudget: e.target.value }))} /></Row>
               <Row label="Maximum timeline (months)"><Input value={qualForm.maxTimeline} onChange={e => setQualForm(p => ({ ...p, maxTimeline: e.target.value }))} /></Row>
               <Toggle label="Pre-approval required" checked={qualForm.preApprovalRequired} onChange={v => setQualForm(p => ({ ...p, preApprovalRequired: v }))} />
-              <Toggle label="Specific zip codes only" checked={qualForm.specificZipOnly} onChange={v => setQualForm(p => ({ ...p, specificZipOnly: v }))} />
+              {/* <Toggle label="Specific zip codes only" checked={qualForm.specificZipOnly} onChange={v => setQualForm(p => ({ ...p, specificZipOnly: v }))} /> */}
               <div>
                 <label className="text-xs text-muted-foreground uppercase tracking-wider">Minimum lead score to notify builder</label>
                 <div className="flex items-center gap-3 mt-2">
@@ -637,12 +762,12 @@ function SettingsPage() {
 
                            <div className="flex items-center justify-between pt-2 border-t border-border/20">
                              <span className="text-[10px] text-muted-foreground font-sans">
-                               {i.id === "google" && "🔑 Synchronizes and auto-replies to Google Business reviews."}
-                               {i.id === "houzz" && "🔑 Tracks 5-star Houzz review routing progress."}
-                               {i.id === "facebook" && "🔑 Fetches social page check-ins and recommendations."}
+                               {/* {i.id === "google" && "🔑 Synchronizes and auto-replies to Google Business reviews."} */}
+                               {/* {i.id === "houzz" && "🔑 Tracks 5-star Houzz review routing progress."} */}
+                               {/* {i.id === "facebook" && "🔑 Fetches social page check-ins and recommendations."} */}
                                {i.id === "twilio" && "💬 Powers automated SMS dialogue with real builder phone number."}
                                {i.id === "hubspot" && "🔄 Automatically syncs qualified leads directly to pipeline deals."}
-                               {i.id === "ghl" && "🔄 Integrates review automation triggers with sub-account workflows."}
+                               {i.id === "ghl" && "🔄 Synchronizes custom fields, contact pipelines, and AI actions inside GHL."}
 
                              </span>
                              <div className="flex gap-2">
@@ -684,7 +809,7 @@ function SettingsPage() {
                   />
                 </Row>
                 <p className="text-[10px] text-muted-foreground">
-                  Sends raw payload of newly captured permits and qualified builder leads to external endpoints.
+                  Sends raw webhook payload of newly captured and qualified builder leads to external endpoints.
                 </p>
                 <Save onClick={handleSaveWebhook} isSaving={isSavingWebhook} saved={webhookSaved} />
               </div>
@@ -694,7 +819,7 @@ function SettingsPage() {
           {active === "Billing" && (
             <div className="space-y-5 relative">
               <H>Billing</H>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <Card className="p-4">
                   <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Plan</div>
                   <div className="mt-1">
@@ -705,14 +830,14 @@ function SettingsPage() {
                         await updateBillingProfile({ data: { plan: val } as any });
                       }}
                       options={[
-                        {label: "Professional", value: "professional"},
-                        {label: "Enterprise", value: "enterprise"},
-                        {label: "MRR Plan", value: "mrr"}
+                        {label: "Starter ($1,500/mo)", value: "starter"},
+                        {label: "Professional ($3,000/mo)", value: "professional"},
+                        {label: "Enterprise ($5,000/mo)", value: "enterprise"}
                       ]}
                     />
                   </div>
                   <div className="font-mono text-xl text-foreground mt-3">
-                    {billingPlan === "mrr" ? "$10,000" : billingPlan === "enterprise" ? "$5,000" : "$3,000"}<span className="text-xs text-muted-foreground">/mo</span>
+                    {billingPlan === "starter" ? "$1,500" : billingPlan === "enterprise" ? "$5,000" : "$3,000"}<span className="text-xs text-muted-foreground">/mo</span>
                   </div>
                 </Card>
                 <Card className="p-4">
@@ -720,11 +845,11 @@ function SettingsPage() {
                   <div className="text-foreground font-medium mt-1">Jun 1, 2026</div>
                   <div className="text-xs text-muted-foreground mt-2">Auto-renew on</div>
                 </Card>
-                <Card className="p-4">
+                {/* <Card className="p-4">
                   <div className="text-xs uppercase tracking-wider text-muted-foreground">Ad spend balance</div>
                   <div className="font-mono text-2xl text-foreground mt-1">${adSpendBalance}</div>
                   <button onClick={() => setIsAddFundsOpen(true)} className="text-xs text-primary mt-2 hover:underline cursor-pointer">Add funds</button>
-                </Card>
+                </Card> */}
               </div>
               <div>
                 <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Payment method</div>
@@ -773,147 +898,18 @@ function SettingsPage() {
               </div>
 
               {/* ADD FUNDS MODAL */}
-              {isAddFundsOpen && (
+              {/* {isAddFundsOpen && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-100">
                   <Card className="w-full max-w-md bg-[#0B0B0C] border border-white/[0.08] rounded-xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
-                    <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-[#101011]">
-                      <div>
-                        <h3 className="font-semibold text-xs text-white uppercase tracking-wider font-mono">
-                          Add Ad Spend Funds
-                        </h3>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">
-                          Charge to payment method: {paymentMethod}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => {
-                          setIsAddFundsOpen(false);
-                          setFundingSuccess(false);
-                        }}
-                        className="p-1 text-muted-foreground hover:text-white rounded-md hover:bg-white/[0.04] transition-colors"
-                      >
-                        <X className="size-4" />
-                      </button>
-                    </div>
-
-                    <div className="p-5 space-y-4">
-                      {fundingSuccess ? (
-                        <div className="py-6 flex flex-col items-center justify-center text-center gap-2.5 animate-in zoom-in-95">
-                          <div className="size-12 rounded-full bg-success/15 border border-success/30 flex items-center justify-center text-success animate-bounce">
-                            <Check className="size-6" />
-                          </div>
-                          <h4 className="text-xs font-bold text-white uppercase tracking-wider font-mono">
-                            Funds Added Successfully!
-                          </h4>
-                          <p className="text-[10px] text-muted-foreground leading-relaxed">
-                            Added ${customFundingAmount || fundingAmount} to your ad spend balance. Your new balance is ${adSpendBalance}.
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="space-y-4">
-                          <div className="space-y-1.5">
-                            <label className="block text-[9px] uppercase tracking-widest text-muted-foreground font-mono font-bold">
-                              Select Package
-                            </label>
-                            <div className="grid grid-cols-2 gap-2">
-                              {[
-                                { val: "250", label: "$250" },
-                                { val: "500", label: "$500" },
-                                { val: "1000", label: "$1,000" },
-                                { val: "2500", label: "$2,500" }
-                              ].map((pkg) => (
-                                <button
-                                  key={pkg.val}
-                                  type="button"
-                                  onClick={() => {
-                                    setFundingAmount(pkg.val);
-                                    setCustomFundingAmount("");
-                                  }}
-                                  className={`py-3 rounded-lg border text-xs font-semibold tracking-wide transition-all cursor-pointer ${
-                                    fundingAmount === pkg.val && !customFundingAmount
-                                      ? "bg-primary/10 border-primary text-primary"
-                                      : "bg-[#141414] border-white/[0.05] hover:border-white/10 text-muted-foreground hover:text-white"
-                                  }`}
-                                >
-                                  {pkg.label}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div className="space-y-1.5">
-                            <label className="block text-[9px] uppercase tracking-widest text-muted-foreground font-mono font-bold">
-                              Or Enter Custom Amount ($)
-                            </label>
-                            <input
-                              type="number"
-                              value={customFundingAmount}
-                              onChange={(e) => {
-                                setCustomFundingAmount(e.target.value);
-                                setFundingAmount("");
-                              }}
-                              placeholder="e.g. 1500"
-                              className="w-full bg-[#141414] border border-border focus:border-primary/60 rounded-md px-3 py-2 text-xs text-white focus:outline-none font-mono"
-                            />
-                          </div>
-
-                          <div className="border-t border-border pt-4 mt-2 flex items-center justify-end gap-2.5">
-                            <button
-                              type="button"
-                              onClick={() => setIsAddFundsOpen(false)}
-                              className="px-4 py-2 text-xs font-semibold text-muted-foreground hover:text-white hover:bg-white/[0.02] rounded-md transition-colors"
-                            >
-                              Cancel
-                            </button>
-                            
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                const amt = Number(customFundingAmount || fundingAmount);
-                                if (isNaN(amt) || amt <= 0) return;
-                                setIsFunding(true);
-                                try {
-                                  const nextBalance = adSpendBalance + amt;
-                                  await updateBillingProfile({ data: { adSpendBalance: nextBalance } });
-                                  await router.invalidate();
-                                  setFundingSuccess(true);
-                                  setTimeout(() => {
-                                    setIsAddFundsOpen(false);
-                                    setFundingSuccess(false);
-                                    setCustomFundingAmount("");
-                                  }, 2000);
-                                } catch (err) {
-                                  console.error("Failed to add funds:", err);
-                                  alert("Failed to add funds. Please try again.");
-                                } finally {
-                                  setIsFunding(false);
-                                }
-                              }}
-                              disabled={isFunding || (!fundingAmount && !customFundingAmount)}
-                              className="px-4 py-2 bg-white text-black text-xs font-bold rounded-md hover:bg-white/90 transition-colors disabled:opacity-40 flex items-center gap-1.5 cursor-pointer"
-                            >
-                              {isFunding ? (
-                                <>
-                                  <Loader2 className="size-3.5 animate-spin text-black" /> Processing...
-                                </>
-                              ) : (
-                                <>
-                                  Charge Card
-                                </>
-                              )}
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                    ...
                   </Card>
                 </div>
-              )}
+              )} */}
 
             </div>
           )}
 
-          {active === "Blocked Users" && (
+          {/* {active === "Blocked Users" && (
             <div className="space-y-4">
               <H>Blocked Users</H>
               <p className="text-xs text-muted-foreground">Manage leads and contacts that you have blocked from messaging you.</p>
@@ -932,7 +928,7 @@ function SettingsPage() {
                 ))}
               </div>
             </div>
-          )}
+          )} */}
 
         </Card>
       </div>

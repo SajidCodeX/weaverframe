@@ -20,6 +20,15 @@ export default defineConfig({
     serverFns: { disableCsrfMiddlewareWarning: true }
   },
   vite: {
+    optimizeDeps: {
+      include: [
+        "lenis",
+        "framer-motion",
+        "recharts",
+        "embla-carousel-react",
+        "lucide-react",
+      ],
+    },
     build: {
       rollupOptions: {
         external: ["ws"],

@@ -90,6 +90,7 @@ function Kpi({
   trendValue,
   extra,
   highlight,
+  isGold = false,
 }: {
   label: string;
   value: string;
@@ -98,31 +99,33 @@ function Kpi({
   trendValue?: string;
   extra?: React.ReactNode;
   highlight?: boolean;
+  isGold?: boolean;
 }) {
   return (
-    <Card className="p-5" highlight={highlight}>
-      <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-widest">
-        {label}
+    <Card className={`p-5 relative overflow-hidden transition-all duration-300 ${highlight ? 'border-white/15' : ''}`} highlight={highlight}>
+      <div className="text-[10px] font-mono font-medium text-muted-foreground uppercase tracking-widest flex items-center justify-between">
+        <span>{label}</span>
+        {isGold && <span className="size-1.5 rounded-full bg-[#e5d9c5] shadow-[0_0_8px_rgba(229,217,197,0.8)]" />}
       </div>
-      <div className="mt-3 flex items-baseline gap-2">
-        <span className="font-display text-3xl font-semibold text-foreground">
+      <div className="mt-3.5 flex items-baseline gap-2.5">
+        <span className={`font-nevera text-3xl sm:text-4xl font-normal tracking-tight ${isGold ? 'text-gold-gradient' : 'text-white'}`}>
           {value}
         </span>
         {trend === "up" && (
-          <span className="flex items-center gap-0.5 text-xs text-success font-medium bg-success/10 px-1.5 py-0.5 rounded border border-success/20">
+          <span className="flex items-center gap-0.5 text-[11px] font-mono text-emerald-400 font-semibold bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
             <ArrowUp className="size-3" />
             {trendValue || "Up"}
           </span>
         )}
         {trend === "down" && (
-          <span className="flex items-center gap-0.5 text-xs text-destructive font-medium bg-destructive/10 px-1.5 py-0.5 rounded border border-destructive/20">
+          <span className="flex items-center gap-0.5 text-[11px] font-mono text-rose-400 font-semibold bg-rose-500/10 px-2 py-0.5 rounded-full border border-rose-500/20">
             <ArrowUp className="size-3 rotate-180" />
             {trendValue || "Down"}
           </span>
         )}
       </div>
-      <div className="mt-1.5 text-xs text-muted-foreground">{sub}</div>
-      {extra && <div className="mt-3">{extra}</div>}
+      <div className="mt-2 text-xs text-muted-foreground font-light">{sub}</div>
+      {extra && <div className="mt-3.5">{extra}</div>}
     </Card>
   );
 }
@@ -177,7 +180,7 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
   return (
     <>
       {/* KPI row */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Kpi
           highlight
           label="New Leads (Last 30d)"
@@ -191,11 +194,11 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
           value={qualifiedLeads.toString()}
           sub={`${totalLeads > 0 ? Math.round((qualifiedLeads / totalLeads) * 100) : 0}% qualification rate`}
           extra={
-            <div className="h-1 bg-secondary rounded-full overflow-hidden">
+            <div className="h-1.5 bg-[#101014] rounded-full overflow-hidden border border-white/[0.04]">
               <div
                 className="h-full rounded-full bar-animated"
                 style={{
-                  background: "linear-gradient(90deg, #ffffffff, #0A84FF)",
+                  background: "linear-gradient(90deg, #34d399, #e5d9c5)",
                   ["--bar-pct" as string]: `${totalLeads > 0 ? Math.round((qualifiedLeads / totalLeads) * 100) : 0}%`,
                 }}
               />
@@ -207,13 +210,14 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
           value={appointmentsSet.toString()}
           sub={`From ${qualifiedLeads} qualified leads`}
           extra={
-            <span className="inline-flex text-xs px-2 py-0.5 rounded-md badge-success font-medium">
-              {qualifiedLeads > 0 ? Math.round((appointmentsSet / qualifiedLeads) * 100) : 0}% → Appt
+            <span className="inline-flex text-[11px] font-mono px-2 py-0.5 rounded-md badge-success font-semibold">
+              {qualifiedLeads > 0 ? Math.round((appointmentsSet / qualifiedLeads) * 100) : 0}% → Appt Confirmed
             </span>
           }
         />
         <Kpi
           highlight
+          isGold
           label="Est. Pipeline Value"
           value={pipelineValueStr}
           sub={pipelineSub}
@@ -290,15 +294,15 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
             subtitle="Pipeline health & momentum"
             action={
               <div className="text-right">
-                <div className="text-2xl font-display font-bold text-foreground leading-none mb-0.5">{totalLeads}</div>
-                <div className="text-[9px] uppercase tracking-wider font-semibold text-muted-foreground">Total Leads</div>
+                <div className="text-2xl sm:text-3xl font-nevera font-normal text-white leading-none mb-1">{totalLeads}</div>
+                <div className="text-[9px] uppercase tracking-widest font-mono text-[#e5d9c5]/80">Total Leads</div>
               </div>
             }
           />
           <div className="p-5 flex-1 flex flex-col">
 
             {/* Breakdown Table Header */}
-            <div className="grid grid-cols-12 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground pb-3 border-b border-border">
+            <div className="grid grid-cols-12 text-[10px] uppercase tracking-wider font-mono font-medium text-muted-foreground pb-3 border-b border-border">
               <span className="col-span-3">Tier</span>
               <span className="col-span-2 text-right">Leads</span>
               <span className="col-span-3 text-right">Trend (7d)</span>
@@ -315,18 +319,18 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
                 const points = row.trend.map((d: any, i: any) => `${i * (100 / 6)},${20 - ((d - min) / range) * 20}`).join(" ");
 
                 return (
-                  <div key={row.label} className="grid grid-cols-12 items-center py-5 border-b border-border/40 last:border-0">
+                  <div key={row.label} className="grid grid-cols-12 items-center py-4 border-b border-border/40 last:border-0 hover:bg-white/[0.02] px-1 rounded-lg transition-colors">
                     {/* Tier */}
-                    <div className="col-span-3 flex flex-col gap-1">
+                    <div className="col-span-3 flex flex-col gap-0.5">
                       <div className="flex items-center gap-2">
                         <div className="size-2 rounded-full" style={{ backgroundColor: row.color, boxShadow: `0 0 10px ${row.color}80` }} />
-                        <span className="text-sm font-semibold text-foreground">{row.label}</span>
+                        <span className="text-xs font-semibold text-foreground">{row.label}</span>
                       </div>
-                      <span className="text-[10px] text-muted-foreground font-medium pl-4">{row.budget} avg</span>
+                      <span className="text-[9.5px] font-mono text-muted-foreground pl-4">{row.budget} avg</span>
                     </div>
 
                     {/* Leads Count */}
-                    <div className="col-span-2 text-right font-display text-xl font-bold text-foreground">
+                    <div className="col-span-2 text-right font-nevera text-lg text-white">
                       {row.count}
                     </div>
 
@@ -345,11 +349,11 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
                     </div>
 
                     {/* Share Progress Bar */}
-                    <div className="col-span-4 flex items-center justify-end gap-3">
+                    <div className="col-span-4 flex items-center justify-end gap-2.5">
                       <span className="text-xs font-mono font-bold text-right w-8" style={{ color: row.color }}>
                         {row.pct}%
                       </span>
-                      <div className="w-16 h-1.5 bg-secondary rounded-full overflow-hidden shrink-0">
+                      <div className="w-16 h-1.5 bg-[#14151e] rounded-full overflow-hidden shrink-0 border border-white/[0.04]">
                         <div
                           className="h-full rounded-full"
                           style={{
@@ -365,14 +369,14 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
             </div>
 
             {/* Quick Stats Footer */}
-            <div className="mt-auto pt-5 grid grid-cols-2 gap-3">
-              <div className="p-4 rounded-xl border border-border/50 bg-secondary/30 flex flex-col justify-between">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-2">Avg Time to Book</div>
-                <div className="text-2xl font-display font-semibold text-foreground">{avgDaysToBook} <span className="text-sm text-muted-foreground font-sans font-medium">days</span></div>
+            <div className="mt-auto pt-4 grid grid-cols-2 gap-3">
+              <div className="p-3.5 rounded-xl border border-white/[0.08] bg-[#0f1016] flex flex-col justify-between hover:border-[#e5d9c5]/30 transition-colors">
+                <div className="text-[9.5px] font-mono text-muted-foreground uppercase tracking-widest mb-1.5">Avg Time to Book</div>
+                <div className="text-2xl font-nevera font-normal text-white">{avgDaysToBook} <span className="text-xs text-muted-foreground font-sans">days</span></div>
               </div>
-              <div className="p-4 rounded-xl border border-border/50 bg-secondary/30 flex flex-col justify-between">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-2">AI Qual. Rate</div>
-                <div className="text-2xl font-display font-semibold text-foreground">{aiQualRate}%</div>
+              <div className="p-3.5 rounded-xl border border-white/[0.08] bg-[#0f1016] flex flex-col justify-between hover:border-[#e5d9c5]/30 transition-colors">
+                <div className="text-[9.5px] font-mono text-muted-foreground uppercase tracking-widest mb-1.5">AI Qual. Rate</div>
+                <div className="text-2xl font-nevera font-normal text-white">{aiQualRate}%</div>
               </div>
             </div>
 
@@ -390,13 +394,13 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
           <div className="flex items-stretch gap-0">
             {funnel.map((s: any, i: any) => {
               const colors = [
-                { accent: "#BF5AF2", grad: "#BF5AF2, #8B5CF6" },
-                { accent: "#0A84FF", grad: "#0A84FF, #38BDF8" },
-                { accent: "#30D158", grad: "#30D158, #34D399" },
-                { accent: "#FF9F0A", grad: "#FF9F0A, #FCD34D" },
-                { accent: "#FF453A", grad: "#FF453A, #F87171" },
+                { accent: "#e5d9c5", grad: "#ffffff, #e5d9c5" },
+                { accent: "#c9a84c", grad: "#e5d9c5, #c9a84c" },
+                { accent: "#34d399", grad: "#34d399, #10b981" },
+                { accent: "#fbbf24", grad: "#fbbf24, #f59e0b" },
+                { accent: "#f87171", grad: "#f87171, #ef4444" },
               ];
-              const c = colors[i];
+              const c = colors[i] || colors[0];
               const getLinkProps = (label: string) => {
                 if (label === 'AI Qualified') return { to: '/leads' as const, search: { stage: 'Qualified' } };
                 if (label === 'Builder Notified') return { to: '/leads' as const, search: { stage: 'Builder Notified' } };
@@ -410,33 +414,32 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
                   {/* Stage card */}
                   <Link
                     {...linkProps}
-                    className="flex-1 rounded-xl border border-border cursor-pointer transition-colors duration-200 hover:border-white/20 block no-underline"
-                    style={{ background: "var(--card)" }}
+                    className="flex-1 rounded-xl border border-white/[0.08] hover:border-[#e5d9c5]/40 bg-[#0a0a0d] cursor-pointer transition-all duration-200 block no-underline shadow-sm group hover:-translate-y-0.5"
                   >
                     <div className="p-4">
                       {/* Stage number + pct */}
-                      <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center justify-between mb-2.5">
                         <span
-                          className="text-[10px] font-bold px-1.5 py-0.5 rounded font-mono"
-                          style={{ background: `${c.accent}20`, color: c.accent }}
+                          className="text-[10px] font-bold px-2 py-0.5 rounded-full font-mono border"
+                          style={{ background: `${c.accent}15`, color: c.accent, borderColor: `${c.accent}30` }}
                         >
                           {String(i + 1).padStart(2, "0")}
                         </span>
-                        <span className="font-mono text-[10px] text-muted-foreground">{s.pct}%</span>
+                        <span className="font-mono text-[10px] text-muted-foreground font-semibold">{s.pct}%</span>
                       </div>
 
                       {/* Big count */}
-                      <div className="font-display text-3xl font-bold" style={{ color: c.accent }}>
+                      <div className="font-nevera text-3xl font-normal transition-transform group-hover:scale-[1.03] origin-left" style={{ color: c.accent }}>
                         {s.value}
                       </div>
 
                       {/* Label */}
-                      <div className="mt-1.5 text-[11px] font-medium text-muted-foreground leading-tight">
+                      <div className="mt-1 text-xs font-medium text-white/80 leading-tight">
                         {s.label}
                       </div>
 
                       {/* Progress bar */}
-                      <div className="mt-3 h-1 bg-secondary rounded-full overflow-hidden">
+                      <div className="mt-3 h-1.5 bg-[#14151e] rounded-full overflow-hidden border border-white/[0.04]">
                         <div
                           className="h-full rounded-full bar-animated"
                           style={{
@@ -449,7 +452,7 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
                       {/* Drop-off (skip first) */}
                       {i > 0 && (
                         <div className="mt-2 text-[10px] text-muted-foreground font-mono">
-                          ↓ {100 - s.pct}% dropped
+                          ↓ {100 - s.pct}% drop-off
                         </div>
                       )}
                     </div>

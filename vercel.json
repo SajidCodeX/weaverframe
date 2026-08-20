@@ -1,4 +1,4 @@
 {
   "framework": null,
-  "buildCommand": "vite build --config vite.config.vercel.ts && node scripts/vercel-postbuild.mjs"
+  "buildCommand": "npx prisma generate && vite build --config vite.config.vercel.ts && node scripts/vercel-postbuild.mjs"
 }

@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as TeamRouteImport } from './routes/team'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ReviewsRouteImport } from './routes/reviews'
@@ -21,6 +22,7 @@ import { Route as AppointmentsRouteImport } from './routes/appointments'
 import { Route as AiActivityRouteImport } from './routes/ai-activity'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
+import { Route as PortalTokenRouteImport } from './routes/portal.$token'
 import { Route as InviteTokenRouteImport } from './routes/invite.$token'
 import { Route as ApiRateRouteImport } from './routes/api.rate'
 import { Route as AdminUsersRouteImport } from './routes/admin/users'
@@ -29,6 +31,11 @@ import { Route as AdminBuildersRouteImport } from './routes/admin/builders'
 import { Route as AdminBillingRouteImport } from './routes/admin/billing'
 import { Route as ApiCronSyncLeadsRouteImport } from './routes/api.cron.sync-leads'
 
+const WelcomeRoute = WelcomeRouteImport.update({
+  id: '/welcome',
+  path: '/welcome',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TeamRoute = TeamRouteImport.update({
   id: '/team',
   path: '/team',
@@ -89,6 +96,11 @@ const AdminIndexRoute = AdminIndexRouteImport.update({
   path: '/admin/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PortalTokenRoute = PortalTokenRouteImport.update({
+  id: '/portal/$token',
+  path: '/portal/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const InviteTokenRoute = InviteTokenRouteImport.update({
   id: '/invite/$token',
   path: '/invite/$token',
@@ -137,12 +149,14 @@ export interface FileRoutesByFullPath {
   '/reviews': typeof ReviewsRoute
   '/settings': typeof SettingsRoute
   '/team': typeof TeamRoute
+  '/welcome': typeof WelcomeRoute
   '/admin/billing': typeof AdminBillingRoute
   '/admin/builders': typeof AdminBuildersRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
   '/api/rate': typeof ApiRateRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/portal/$token': typeof PortalTokenRoute
   '/admin/': typeof AdminIndexRoute
   '/api/cron/sync-leads': typeof ApiCronSyncLeadsRoute
 }
@@ -158,12 +172,14 @@ export interface FileRoutesByTo {
   '/reviews': typeof ReviewsRoute
   '/settings': typeof SettingsRoute
   '/team': typeof TeamRoute
+  '/welcome': typeof WelcomeRoute
   '/admin/billing': typeof AdminBillingRoute
   '/admin/builders': typeof AdminBuildersRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
   '/api/rate': typeof ApiRateRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/portal/$token': typeof PortalTokenRoute
   '/admin': typeof AdminIndexRoute
   '/api/cron/sync-leads': typeof ApiCronSyncLeadsRoute
 }
@@ -180,12 +196,14 @@ export interface FileRoutesById {
   '/reviews': typeof ReviewsRoute
   '/settings': typeof SettingsRoute
   '/team': typeof TeamRoute
+  '/welcome': typeof WelcomeRoute
   '/admin/billing': typeof AdminBillingRoute
   '/admin/builders': typeof AdminBuildersRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
   '/api/rate': typeof ApiRateRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/portal/$token': typeof PortalTokenRoute
   '/admin/': typeof AdminIndexRoute
   '/api/cron/sync-leads': typeof ApiCronSyncLeadsRoute
 }
@@ -203,12 +221,14 @@ export interface FileRouteTypes {
     | '/reviews'
     | '/settings'
     | '/team'
+    | '/welcome'
     | '/admin/billing'
     | '/admin/builders'
     | '/admin/settings'
     | '/admin/users'
     | '/api/rate'
     | '/invite/$token'
+    | '/portal/$token'
     | '/admin/'
     | '/api/cron/sync-leads'
   fileRoutesByTo: FileRoutesByTo
@@ -224,12 +244,14 @@ export interface FileRouteTypes {
     | '/reviews'
     | '/settings'
     | '/team'
+    | '/welcome'
     | '/admin/billing'
     | '/admin/builders'
     | '/admin/settings'
     | '/admin/users'
     | '/api/rate'
     | '/invite/$token'
+    | '/portal/$token'
     | '/admin'
     | '/api/cron/sync-leads'
   id:
@@ -245,12 +267,14 @@ export interface FileRouteTypes {
     | '/reviews'
     | '/settings'
     | '/team'
+    | '/welcome'
     | '/admin/billing'
     | '/admin/builders'
     | '/admin/settings'
     | '/admin/users'
     | '/api/rate'
     | '/invite/$token'
+    | '/portal/$token'
     | '/admin/'
     | '/api/cron/sync-leads'
   fileRoutesById: FileRoutesById
@@ -267,18 +291,27 @@ export interface RootRouteChildren {
   ReviewsRoute: typeof ReviewsRoute
   SettingsRoute: typeof SettingsRoute
   TeamRoute: typeof TeamRoute
+  WelcomeRoute: typeof WelcomeRoute
   AdminBillingRoute: typeof AdminBillingRoute
   AdminBuildersRoute: typeof AdminBuildersRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
   AdminUsersRoute: typeof AdminUsersRoute
   ApiRateRoute: typeof ApiRateRoute
   InviteTokenRoute: typeof InviteTokenRoute
+  PortalTokenRoute: typeof PortalTokenRoute
   AdminIndexRoute: typeof AdminIndexRoute
   ApiCronSyncLeadsRoute: typeof ApiCronSyncLeadsRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/welcome': {
+      id: '/welcome'
+      path: '/welcome'
+      fullPath: '/welcome'
+      preLoaderRoute: typeof WelcomeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/team': {
       id: '/team'
       path: '/team'
@@ -363,6 +396,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/portal/$token': {
+      id: '/portal/$token'
+      path: '/portal/$token'
+      fullPath: '/portal/$token'
+      preLoaderRoute: typeof PortalTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/invite/$token': {
       id: '/invite/$token'
       path: '/invite/$token'
@@ -427,12 +467,14 @@ const rootRouteChildren: RootRouteChildren = {
   ReviewsRoute: ReviewsRoute,
   SettingsRoute: SettingsRoute,
   TeamRoute: TeamRoute,
+  WelcomeRoute: WelcomeRoute,
   AdminBillingRoute: AdminBillingRoute,
   AdminBuildersRoute: AdminBuildersRoute,
   AdminSettingsRoute: AdminSettingsRoute,
   AdminUsersRoute: AdminUsersRoute,
   ApiRateRoute: ApiRateRoute,
   InviteTokenRoute: InviteTokenRoute,
+  PortalTokenRoute: PortalTokenRoute,
   AdminIndexRoute: AdminIndexRoute,
   ApiCronSyncLeadsRoute: ApiCronSyncLeadsRoute,
 }

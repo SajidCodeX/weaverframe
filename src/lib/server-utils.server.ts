@@ -285,11 +285,12 @@ export const requireAuth = async (activeRole?: string): Promise<AuthSession> => 
       where: { id: session.userId },
       select: { 
         id: true, 
+        displayName: true,
         isActive: true, 
         deletedAt: true,
         builderRole: true,
         builder: {
-          select: { isActive: true, deletedAt: true }
+          select: { companyName: true, isActive: true, deletedAt: true }
         }
       }
     })
@@ -302,6 +303,13 @@ export const requireAuth = async (activeRole?: string): Promise<AuthSession> => 
       throw new Error('UNAUTHORIZED')
     }
     
+    if (user.displayName) {
+      session.displayName = user.displayName;
+    }
+    if (user.builder?.companyName) {
+      session.companyName = user.builder.companyName;
+    }
+
     if (session.role === 'builder') {
       session.builderRole = (user.builderRole || 'sales') as any
     }

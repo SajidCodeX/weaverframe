@@ -906,9 +906,9 @@ export const generateGroqCompletion = createServerFn({ method: 'POST' })
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          model: "llama-3.1-8b-instant",
+          model: "llama-3.3-70b-versatile",
           messages: messages,
-          temperature: 0.7,
+          temperature: 0.1, // Lower temperature to avoid hallucination
           max_tokens: 1024,
           top_p: 1,
           stream: false
@@ -937,37 +937,76 @@ export const simulateAIChatReply = createServerFn({ method: 'POST' })
     const db = await getTenantDb();
 
     try {
-      // Fetch builder details for personalization
-      const builder = await db.builder.findUnique({ where: { id: session.builderId || '' } });
-      const companyName = builder?.companyName || "your local custom builder";
-      const contactName = builder?.contactName || "the team";
+      const builderId = session.builderId || '';
+      const replyData = await generateAiReplyCore(db, leadId, builderId, userMessage, chatHistory, data.isSimulated);
+      return replyData;
+    } catch (error) {
+      console.error("Error in simulateAIChatReply:", error);
+      throw error;
+    }
+  });
 
-      // Fetch lead to personalize prompt
-      const lead = await db.lead.findUnique({ where: { id: leadId } });
-      const leadName = lead ? lead.name : "Client";
-      const leadCounty = lead ? lead.county : "your area";
+export async function generateAiReplyCore(
+  db: any,
+  leadId: string,
+  builderId: string,
+  userMessage: string,
+  chatHistory: Array<{ role: 'user' | 'assistant'; content: string }>,
+  isSimulated = false
+) {
+  // Fetch builder details for personalization
+  const builder = await db.builder.findUnique({ where: { id: builderId } });
+  const companyName = builder?.companyName || "your local custom builder";
+  const contactName = builder?.contactName || "the team";
+  const builderPhone = builder?.phone || "our main line";
+  const builderEmail = builder?.email || "our contact email";
 
-      // Fetch upcoming active appointments for this builder to check calendar availability
-      const upcomingAppts = await db.appointment.findMany({
-        where: {
-          builderId: session.builderId || '',
-          status: { in: ['Confirmed', 'Pending'] }
-        },
-        include: { lead: true },
-        orderBy: { dateTime: 'asc' },
-        take: 10
-      });
+  const settingsObj = builder?.settings ? JSON.parse(builder.settings) : {};
+  const builderProfile = settingsObj.builder_profile || {};
+  const timezone = builderProfile.timezone || "Asia/Kolkata";
+  const aiContext = builderProfile.aiContext || "";
 
-      const apptScheduleStr = upcomingAppts.length > 0
-        ? upcomingAppts.map(a => `- ${new Date(a.dateTime).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}: ${a.type} with ${a.lead?.name || 'Client'} (${a.location})`).join('\n')
-        : "No upcoming booked meetings currently in calendar.";
+  // Format current date/time in the builder's timezone
+  const now = new Date();
+  const currentLocalTimeStr = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true
+  }).format(now);
 
-      const systemPrompt = `You are Alex, the premium AI Concierge for ${companyName}. Your supervisor is ${contactName}. 
-Your persona is knowledgeable, highly professional, polite, and responsive. You text like a smart, natural human sales executive.
+  // Fetch lead to personalize prompt
+  const lead = await db.lead.findUnique({ where: { id: leadId } });
+  const leadName = lead ? lead.name : "Client";
+  const leadCounty = lead ? lead.county : "your area";
+
+  // Fetch FUTURE active appointments for this builder to check calendar availability
+  const upcomingAppts = await db.appointment.findMany({
+    where: {
+      builderId,
+      status: { in: ['Confirmed', 'Pending'] },
+      dateTime: { gte: new Date() }  // Only include future appointments — past ones are irrelevant
+    },
+    include: { lead: true },
+    orderBy: { dateTime: 'asc' },
+    take: 10
+  });
+
+  const apptScheduleStr = upcomingAppts.length > 0
+    ? upcomingAppts.map((a: any) => `- ${new Date(a.dateTime).toLocaleString('en-US', { timeZone: timezone, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}: ${a.type} with ${a.lead?.name || 'Client'} (${a.location})`).join('\n')
+    : "No upcoming booked meetings currently in calendar.";
+
+  const systemPrompt = `You are Alex, the premium AI Concierge for ${companyName}. Your supervisor is ${contactName}. 
+Your persona is knowledgeable, highly professional, polite, and responsive. You text like a smart, natural human sales executive via SMS.
+
+CURRENT DATE & TIME: ${currentLocalTimeStr} (Timezone: ${timezone})
+All your calendar reasoning must be based on this current time.
+
+BUILDER KNOWLEDGE BASE & POLICIES:
+${aiContext ? aiContext : "No specific policies provided. Use standard best practices for custom home builders."}
 
 CRITICAL CONVERSATION & GREETING RULES:
 - DO NOT start your message with greetings like "Hello [Name]", "Hi [Name]", "Hey [Name]", or "Good morning" if replying in an ongoing, continuous chat thread. In a continuous back-and-forth text conversation, respond DIRECTLY to the lead's question or statement without repeating "Hello/Hi", exactly like a human texting on WhatsApp or SMS.
 - ONLY include a greeting (e.g. "Hello [Name]") if this is the very first outreach message to a lead or if starting a brand new topic after a long period of inactivity.
+- ANSWER DIRECTLY: If the client asks a direct question (e.g., "tell me about your company"), answer it directly. DO NOT ignore their question to push a calendar invite.
 
 CALENDAR & APPOINTMENT AVAILABILITY RULES:
 - You have LIVE access to the builder's real-time booked appointment calendar.
@@ -975,16 +1014,18 @@ CALENDAR & APPOINTMENT AVAILABILITY RULES:
 ${apptScheduleStr}
 
 DATE, DAY & TIME CLARIFICATION RULES:
-1. If the client asks for a meeting, call, or site visit WITHOUT specifying a clear DATE or DAY OF THE WEEK (e.g. if they only mention time like "Can we meet at 4 PM?", "4 baje milna hai", or "Call me at 3 PM"):
-   - DO NOT assume today, tomorrow, or any specific date.
-   - Politely ask the client to confirm WHICH DATE or DAY OF THE WEEK they are aiming for at that time (e.g., *"I'd be happy to schedule a site visit! Could you please let me know which date or day of the week (e.g. this Saturday or next Monday) works best for you at 4 PM?"*).
-2. If the client specifies BOTH a DATE/DAY AND A TIME (e.g. "Tomorrow at 4 PM", "This Saturday at 11 AM", "July 30th at 2 PM"):
-   - Check the Builder's Currently Booked Schedule above for time conflicts on that date.
-   - If there is a conflict: *"Let me check our builder calendar... It looks like we already have a site visit booked at that exact time on [Day]. Would [Alternative Time 30-60 mins before/after] work for you instead?"*
-   - If the slot is free: *"Let me check our builder calendar... Great, [Day/Date] at [Requested Time] is completely open! I've reserved that slot for your site visit."*
+1. ONLY report a time conflict if the client's requested date and time EXACTLY matches a meeting listed in the "Builder's Currently Booked Schedule" above.
+2. If the client asks for a time that is NOT explicitly listed in the schedule above, IT IS FREE. YOU MUST CONFIRM IT.
+3. NEVER say a slot is unavailable unless it is listed in the schedule.
+4. If the client asks for a meeting but doesn't specify a date or time, politely ask them what day and time works best for them.
+
+ANTI-HALLUCINATION & FORMATTING RULES:
+- NEVER make up or invent phone numbers, email addresses, or website links. ONLY use the exact contact information provided in the "Lead Context" below.
+- Do NOT use markdown syntax for links (e.g., NEVER use [text](mailto:email)). Just output the plain text email or phone number. This is an SMS conversation.
+- ACT LIKE A REAL HUMAN. DO NOT explain your internal reasoning to the client. NEVER say phrases like "I've checked our schedule", "Since [Date] is outside our operating hours knowledge", or "According to my calendar". Just naturally offer the slot ("Yes, 11 AM works perfectly! What's a good location?").
 
 Your goal is to perform a 2-part task:
-1. Formulate an elegant, direct, helpful response to the client (under 2-3 sentences, optimal for SMS/WhatsApp), focusing directly on their inquiry. Finish with a single helpful call-to-action (e.g. asking a qualifying question or suggesting a quick phone call to discuss their project).
+1. Formulate an elegant, direct, helpful response to the client (under 2-3 sentences, optimal for SMS/WhatsApp). Keep the conversation flowing naturally. If appropriate, you may ask a natural qualifying question, but do NOT aggressively push for a phone call if they are just asking for basic information.
 2. Analyze the client's latest message intent and classify it into one of these categories:
    - "HOT": The client wants to build, is planning to start construction soon (e.g. within 6 months), wants a phone call, or is looking for a builder.
    - "COLD": The client is doing it themselves, has already hired another builder, is not interested, or told you to stop messaging them.
@@ -993,109 +1034,184 @@ Your goal is to perform a 2-part task:
 You must respond ONLY with a valid JSON object matching this TypeScript type:
 {
   "replyText": string, // The SMS reply text to send to the client
-  "intent": "HOT" | "COLD" | "WARM" // The classified intent of the client's reply
+  "intent": "HOT" | "COLD" | "WARM", // The classified intent of the client's reply
+  "bookingDetails": { "isoDateTime": string, "type": string } | null // ONLY set this if you are CONFIRMING a specific date and time for a meeting/call/site visit. Use ISO 8601 format for isoDateTime mapped exactly to the UTC equivalent of the requested local time in the builder's timezone (${timezone}). Set to null otherwise.
 }
+
+Example of when to set bookingDetails:
+- Lead says: "Yes, August 15th at 4 PM works!" and builder is in America/Chicago (UTC-5) → convert 4 PM local to UTC: set bookingDetails: { "isoDateTime": "2026-08-15T21:00:00.000Z", "type": "Site visit" }
+- Lead says: "November 11th at 11 AM" and builder is in America/Chicago (UTC-5) → set bookingDetails: { "isoDateTime": "2026-11-11T17:00:00.000Z", "type": "Site visit" }
+- Lead is just asking about pricing or general info → set bookingDetails: null
+- IMPORTANT: isoDateTime must always be the UTC equivalent. Subtract the timezone offset from the local time. America/Chicago is UTC-6 (CST) or UTC-5 (CDT). Asia/Kolkata is UTC+5:30.
 
 Lead Context:
 - Client Name: ${leadName}
 - Target County: ${leadCounty}
 - Company: ${companyName}
+- Company Phone: ${builderPhone}
+- Company Email: ${builderEmail}
 
 Do not output any introductory or conversational text outside of the raw JSON object.`;
 
-      const formattedMessages = [
-        { role: 'system' as const, content: systemPrompt },
-        ...chatHistory,
-        { role: 'user' as const, content: userMessage }
-      ];
+  const formattedMessages = [
+    { role: 'system' as const, content: systemPrompt },
+    ...chatHistory,
+    { role: 'user' as const, content: userMessage }
+  ];
 
-      // Call Groq Completion
-      const rawResponse = await generateGroqCompletion({ data: { messages: formattedMessages } });
+  // Call Groq API directly (avoids server-fn-to-server-fn HTTP overhead which breaks in portal context)
+  const GROQ_API_KEY = process.env.GROQ_API_KEY;
+  let rawResponse = "";
 
-      let replyText = "";
-      let intent: 'HOT' | 'COLD' | 'WARM' = 'WARM';
-
-      try {
-        const rawJsonMatch = rawResponse.match(/\{[\s\S]*\}/);
-        if (rawJsonMatch) {
-          const parsed = JSON.parse(rawJsonMatch[0]);
-          replyText = parsed.replyText || parsed.reply || rawResponse;
-          intent = parsed.intent || 'WARM';
-        } else {
-          const parsed = JSON.parse(rawResponse);
-          replyText = parsed.replyText || parsed.reply || rawResponse;
-          intent = parsed.intent || 'WARM';
-        }
-      } catch (e) {
-        console.warn("Failed to parse structured JSON from Alex AI. Performing fallback parsing:", e);
-        replyText = rawResponse;
-
-        // Safety Heuristic Matcher
-        const lowerMsg = userMessage.toLowerCase();
-        if (lowerMsg.includes("yes") || lowerMsg.includes("start") || lowerMsg.includes("months") || lowerMsg.includes("soon") || lowerMsg.includes("tour")) {
-          intent = 'HOT';
-        } else if (lowerMsg.includes("no") || lowerMsg.includes("myself") || lowerMsg.includes("hired") || lowerMsg.includes("stop")) {
-          intent = 'COLD';
-        } else {
-          intent = 'WARM';
-        }
-      }
-
-      // Strip redundant repetitive greetings (e.g. "Hello Aman,", "Hi Aman,", "Aman,") in continuous conversation
-      if (chatHistory.length > 0 && replyText) {
-        const firstName = leadName ? leadName.split(' ')[0] : '';
-        const greetingRegex = new RegExp(`^(Hello|Hi|Hey|Good morning|Good afternoon|${firstName})\\s*([A-Za-z0-9]+)?\\s*[,!.:-]\\s*`, 'i');
-        replyText = replyText.replace(greetingRegex, '').trim();
-        if (replyText.length > 0) {
-          replyText = replyText.charAt(0).toUpperCase() + replyText.slice(1);
-        }
-      }
-
-      // Determine DB updates based on intent
-      let dbStatus = "Replied";
-      let dbScoreTier = "Warm";
-      let activityText = "";
-
-      if (intent === 'HOT') {
-        dbStatus = "Qualified";
-        dbScoreTier = "Hot";
-        activityText = `🟢 AI marked Lead as Qualified & Hot (High intent to build).`;
-      } else if (intent === 'COLD') {
-        dbStatus = "Closed Lost";
-        dbScoreTier = "Cold";
-        activityText = `🔴 AI marked Lead as Disqualified & Cold (Competitor hired / Self-build).`;
-      } else {
-        dbStatus = "Appointment";
-        dbScoreTier = "Warm";
-        activityText = `🟡 AI marked Lead as Nurturing & Warm (Budget / Planning phase).`;
-      }
-
-      // Save Activity in database
-      if (!data.isSimulated) {
-        await db.activity.create({
-          data: {
-            builderId: session.builderId || '',
-            leadId,
-            action: activityText
-          }
-        });
-
-        // Update Lead Status & Score Tier in database
-        await db.lead.update({
-          where: { id: leadId },
-          data: {
-            status: dbStatus,
-            scoreTier: dbScoreTier
-          }
-        });
-      }
-
-      return { replyText };
-    } catch (error) {
-      console.error("Error in simulateAIChatReply:", error);
-      throw error;
+  if (!GROQ_API_KEY || GROQ_API_KEY.trim() === "") {
+    // Fallback mock if no API key
+    const lastUserMsg = userMessage.toLowerCase();
+    if (lastUserMsg.includes("meet") || lastUserMsg.includes("schedule") || lastUserMsg.includes("slot")) {
+      rawResponse = JSON.stringify({ replyText: "That slot works great — I've reserved it for you! What location works best for you?", intent: "HOT", bookingDetails: null });
+    } else {
+      rawResponse = JSON.stringify({ replyText: "Thank you for reaching out! Our custom homes in Austin start at $500K. Would you like to schedule a walkthrough?", intent: "WARM", bookingDetails: null });
     }
-  })
+  } else {
+    try {
+      const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${GROQ_API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: "llama-3.3-70b-versatile",
+          messages: formattedMessages,
+          temperature: 0.1,
+          max_tokens: 1024,
+          top_p: 1,
+          stream: false
+        })
+      });
+      if (!groqResponse.ok) {
+        const errText = await groqResponse.text();
+        throw new Error(`Groq API ${groqResponse.status}: ${errText}`);
+      }
+      const groqData = await groqResponse.json();
+      rawResponse = groqData.choices?.[0]?.message?.content || "";
+    } catch (groqError) {
+      console.error("Groq API error in generateAiReplyCore:", groqError);
+      throw groqError;
+    }
+  }
+
+  let replyText = "";
+  let intent: 'HOT' | 'COLD' | 'WARM' = 'WARM';
+  let bookingDetails: { isoDateTime: string; type: string } | null = null;
+
+  try {
+    const rawJsonMatch = rawResponse.match(/\{[\s\S]*\}/);
+    if (rawJsonMatch) {
+      const parsed = JSON.parse(rawJsonMatch[0]);
+      replyText = parsed.replyText || parsed.reply || rawResponse;
+      intent = parsed.intent || 'WARM';
+      bookingDetails = parsed.bookingDetails || null;
+    } else {
+      const parsed = JSON.parse(rawResponse);
+      replyText = parsed.replyText || parsed.reply || rawResponse;
+      intent = parsed.intent || 'WARM';
+      bookingDetails = parsed.bookingDetails || null;
+    }
+  } catch (e) {
+    console.warn("Failed to parse structured JSON from Alex AI. Performing fallback parsing:", e);
+    replyText = rawResponse;
+
+    // Safety Heuristic Matcher
+    const lowerMsg = userMessage.toLowerCase();
+    if (lowerMsg.includes("yes") || lowerMsg.includes("start") || lowerMsg.includes("months") || lowerMsg.includes("soon") || lowerMsg.includes("tour")) {
+      intent = 'HOT';
+    } else if (lowerMsg.includes("no") || lowerMsg.includes("myself") || lowerMsg.includes("hired") || lowerMsg.includes("stop")) {
+      intent = 'COLD';
+    } else {
+      intent = 'WARM';
+    }
+  }
+
+  // Strip redundant repetitive greetings (e.g. "Hello Aman,", "Hi Aman,", "Aman,") in continuous conversation
+  if (chatHistory.length > 0 && replyText) {
+    const firstName = leadName ? leadName.split(' ')[0] : '';
+    const greetingRegex = new RegExp(`^(Hello|Hi|Hey|Good morning|Good afternoon|${firstName})\\s*([A-Za-z0-9]+)?\\s*[,!.:-]\\s*`, 'i');
+    replyText = replyText.replace(greetingRegex, '').trim();
+    if (replyText.length > 0) {
+      replyText = replyText.charAt(0).toUpperCase() + replyText.slice(1);
+    }
+  }
+
+  // Determine DB updates based on intent
+  let dbStatus = "Replied";
+  let dbScoreTier = "Warm";
+  let activityText = "";
+
+  if (intent === 'HOT') {
+    dbStatus = "Qualified";
+    dbScoreTier = "Hot";
+    activityText = `🟢 AI marked Lead as Qualified & Hot (High intent to build).`;
+  } else if (intent === 'COLD') {
+    dbStatus = "Closed Lost";
+    dbScoreTier = "Cold";
+    activityText = `🔴 AI marked Lead as Disqualified & Cold (Competitor hired / Self-build).`;
+  } else {
+    dbStatus = "Appointment";
+    dbScoreTier = "Warm";
+    activityText = `🟡 AI marked Lead as Nurturing & Warm (Budget / Planning phase).`;
+  }
+
+  // Save Activity in database
+  if (!isSimulated) {
+    await db.activity.create({
+      data: {
+        builderId,
+        leadId,
+        action: activityText
+      }
+    });
+
+    // Update Lead Status & Score Tier in database
+    await db.lead.update({
+      where: { id: leadId },
+      data: {
+        status: dbStatus,
+        scoreTier: dbScoreTier
+      }
+    });
+
+    // AUTO-BOOK APPOINTMENT: If AI confirmed a specific slot, create it in the database
+    if (bookingDetails && bookingDetails.isoDateTime) {
+      try {
+        const bookingDate = new Date(bookingDetails.isoDateTime);
+        if (!isNaN(bookingDate.getTime())) {
+          await db.appointment.create({
+            data: {
+              builderId,
+              leadId,
+              type: bookingDetails.type || 'Site visit',
+              dateTime: bookingDate,
+              location: 'TBD — Confirmed via AI Portal Chat',
+              status: 'Pending',
+              notes: `Auto-booked by AI Concierge via client portal conversation.`
+            }
+          });
+          await db.activity.create({
+            data: {
+              builderId,
+              leadId,
+              action: `📅 AI Concierge auto-booked a ${bookingDetails.type || 'Site visit'} on ${bookingDate.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })} via client portal.`
+            }
+          });
+        }
+      } catch (bookingErr) {
+        console.error('Failed to auto-create appointment from AI confirmation:', bookingErr);
+      }
+    }
+  }
+
+  return { replyText };
+}
 
 export const summarizeConversation = createServerFn({ method: 'POST' })
   .inputValidator((data: { leadId: string }) => data)
@@ -1439,6 +1555,24 @@ export const cancelAppointment = createServerFn({ method: 'POST' })
     }
   })
 
+export const generatePortalToken = createServerFn({ method: 'POST' })
+  .inputValidator((data: { leadId: string; activeRole?: string | null }) => data)
+  .handler(async ({ data }) => {
+    const { getTenantDb, requireAuth } = await import('./server-utils.server');
+    const session = await requireAuth(data?.activeRole ?? undefined);
+    const db = await getTenantDb(session);
+    
+    // Generate a random 32 char hex string
+    const token = Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+    
+    await db.lead.update({
+      where: { id: data.leadId },
+      data: { portalToken: token }
+    });
+    
+    return token;
+  });
+
 export const getConversations = createServerFn({ method: 'POST' })
   .inputValidator((data: { activeRole?: string | null } | undefined) => data)
   .handler(async ({ data }) => {
@@ -1474,8 +1608,9 @@ export const getConversations = createServerFn({ method: 'POST' })
       const lastMsg = l.messages[0]
       const unreadCount = l._count.messages
       
-      const isRecentlyActive = lastMsg && lastMsg.sender === 'lead' && 
-          (new Date().getTime() - new Date(lastMsg.createdAt).getTime()) < 1000 * 60 * 30;
+      // Check if lead polled the portal within the last 30 seconds
+      const isRecentlyActive = l.portalVisitedAt && 
+          (new Date().getTime() - new Date(l.portalVisitedAt).getTime()) < 1000 * 30;
 
       return {
         leadId: l.id,
@@ -1489,6 +1624,7 @@ export const getConversations = createServerFn({ method: 'POST' })
         lastMessageTime: lastMsg ? lastMsg.createdAt.toISOString() : l.createdAt.toISOString(),
         unreadCount,
         isOnline: !!isRecentlyActive,
+        portalToken: l.portalToken,
       }
     })
 
@@ -2096,36 +2232,43 @@ export const exportLeadsToCsv = createServerFn({ method: 'POST' })
 // We reuse the Integration table with reserved platformId keys so no new
 // Prisma migration is required.
 
-async function readSettingJson(platformId: string): Promise<Record<string, any>> {
-  const { getTenantDb, requireAuth } = await import('./server-utils.server');
-  const session = await requireAuth()
-  const db = await getTenantDb()
+export async function readSettingJson(platformId: string, preResolvedSession?: any): Promise<Record<string, any>> {
+  const { requireAuth } = await import('./server-utils.server');
+  const { getDb } = await import('./db');
   try {
+    const session = preResolvedSession ?? await requireAuth()
+    const db = await getDb()
+    const builderId = session.role === 'admin' ? (session.actingAsBuilderId || session.builderId) : session.builderId;
+    if (!builderId) return {}
     const builder = await db.builder.findUnique({
-      where: { id: session.builderId || '' }
+      where: { id: builderId }
     })
     if (!builder || !builder.settings) return {}
-    const settingsObj = JSON.parse(builder.settings)
+    const settingsObj = typeof builder.settings === 'string' ? JSON.parse(builder.settings) : (builder.settings || {})
     return settingsObj[platformId] || {}
   } catch {
     return {}
   }
 }
 
-async function writeSettingJson(platformId: string, value: Record<string, any>) {
-  const { getTenantDb, requireAuth } = await import('./server-utils.server');
-  const session = await requireAuth()
-  const db = await getTenantDb()
+export async function writeSettingJson(platformId: string, value: Record<string, any>, preResolvedSession?: any) {
+  const { requireAuth } = await import('./server-utils.server');
+  const { getDb } = await import('./db');
+  const session = preResolvedSession ?? await requireAuth()
+  const db = await getDb()
+  
+  const builderId = session.role === 'admin' ? (session.actingAsBuilderId || session.builderId) : session.builderId;
+  if (!builderId) throw new Error('No active builder ID found for settings update');
   
   const builder = await db.builder.findUnique({
-    where: { id: session.builderId || '' }
+    where: { id: builderId }
   })
   
-  const settingsObj = builder?.settings ? JSON.parse(builder.settings) : {}
+  const settingsObj = builder?.settings ? (typeof builder.settings === 'string' ? JSON.parse(builder.settings) : builder.settings) : {}
   settingsObj[platformId] = value
   
   await db.builder.update({
-    where: { id: session.builderId || '' },
+    where: { id: builderId },
     data: { settings: JSON.stringify(settingsObj) }
   })
 }
@@ -2138,9 +2281,9 @@ export const getBuilderProfile = createServerFn({ method: 'POST' })
   const session = await requireAuth(data?.activeRole ?? undefined);
   const db = await getDb();
   
-  const savedProfile = await readSettingJson('builder_profile');
+  const builderId = session.role === 'admin' ? (session.actingAsBuilderId || session.builderId) : session.builderId;
+  const savedProfile = await readSettingJson('builder_profile', session);
   
-  const builderId = session.role === 'admin' ? session.actingAsBuilderId : session.builderId;
   const builder = await db.builder.findUnique({
     where: { id: builderId || '' },
     include: { users: { where: { id: session.userId } } }
@@ -2149,14 +2292,16 @@ export const getBuilderProfile = createServerFn({ method: 'POST' })
   const user = builder?.users[0];
   
   return {
-    companyName: savedProfile.companyName || builder?.companyName || "Your Company LLC",
-    primaryContact: savedProfile.primaryContact || builder?.contactName || user?.displayName || "Your Name",
-    email: savedProfile.email || builder?.email || user?.email || "youremail@example.com",
-    phone: savedProfile.phone || builder?.phone || "+1 512-555-0100",
+    companyName: builder?.companyName || savedProfile.companyName || "Your Company LLC",
+    primaryContact: builder?.contactName || savedProfile.primaryContact || user?.displayName || "Your Name",
+    email: builder?.email || savedProfile.email || user?.email || "youremail@example.com",
+    phone: builder?.phone || savedProfile.phone || "+1 512-555-0100",
     businessAddress: savedProfile.businessAddress || "1100 S Lamar Blvd, Austin, TX 78704",
     targetZipCodes: savedProfile.targetZipCodes || "78704, 78703, 78731, 78613, 78641",
     avgHomePrice: savedProfile.avgHomePrice || "$700,000",
     homesPerYear: savedProfile.homesPerYear || "42",
+    timezone: savedProfile.timezone || "Asia/Kolkata",
+    aiContext: savedProfile.aiContext || "",
   };
 })
 
@@ -2200,6 +2345,10 @@ export const saveBuilderProfile = createServerFn({ method: 'POST' })
         displayName: profileData.primaryContact,
       };
       await setAuthCookie(nextSession as any);
+      
+      const { invalidateSessionCache } = await import('./auth');
+      invalidateSessionCache(session.userId);
+      invalidateCache("dashboard_");
       
       return { success: true }
     } catch (err: any) {

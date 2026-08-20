@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useRouterState, useRouteContext } from "@tanstack/react-router";
 import {
   Home,
@@ -21,13 +22,13 @@ import { stopBuilderPreview } from "@/lib/admin";
 
 const builderItems = [
   { to: "/",             label: "Overview",     icon: Home,          exact: true },
+  { to: "/messages",     label: "Inbox",        icon: MessageSquare },
   { to: "/leads",        label: "Leads",        icon: Users },
-  { to: "/reviews",      label: "Reviews",      icon: Star },
-  { to: "/ai-activity",  label: "AI Activity",  icon: Bot,           badge: true },
   { to: "/appointments", label: "Appointments", icon: Calendar },
-  { to: "/messages",     label: "Messages",     icon: MessageSquare },
-  { to: "/reports",      label: "Reports",      icon: BarChart3 },
-  { to: "/team",         label: "Team",         icon: Users },
+  { to: "/ai-activity",  label: "AI Brain",     icon: Bot,           badge: true },
+  // { to: "/reviews",      label: "Reviews",      icon: Star },
+  // { to: "/reports",      label: "Reports",      icon: BarChart3 },
+  // { to: "/team",         label: "Team",         icon: Users },
   { to: "/settings",     label: "Settings",     icon: Settings },
 ];
 
@@ -86,37 +87,49 @@ export function Sidebar({
     window.location.href = '/admin/builders';
   };
 
+  const [isHovered, setIsHovered] = useState(false);
+  
+  // The sidebar is visually collapsed ONLY if it is pinned collapsed AND not hovered
+  const actuallyCollapsed = isCollapsed && !isHovered;
+
   return (
     <aside
-      className={`fixed inset-y-0 left-0 bg-sidebar border-r border-border flex flex-col z-20 transition-all duration-300 ${
-        isCollapsed ? "w-[70px]" : "w-[240px]"
-      }`}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      className={`fixed inset-y-0 left-0 bg-sidebar border-r border-border flex flex-col z-50 transition-all duration-300 ${
+        actuallyCollapsed ? "w-[70px]" : "w-[240px]"
+      } ${isHovered && isCollapsed ? "shadow-2xl border-r-white/10" : ""}`}
     >
 
 
       {/* ── Logo (Click to Toggle) ── */}
       <div
         onClick={onToggle}
-        title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
-        className={`h-[60px] flex items-center px-5 border-b border-border transition-all duration-300 cursor-pointer hover:bg-white/[0.02] select-none ${
-          isCollapsed ? "justify-center" : "gap-3"
+        title={actuallyCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+        className={`h-[64px] flex items-center px-4 border-b border-border transition-all duration-300 cursor-pointer hover:bg-white/[0.02] select-none ${
+          actuallyCollapsed ? "justify-center" : "gap-3"
         }`}
       >
-        {/* Layers icon logo */}
-        <div className="size-8 rounded-lg bg-gradient-to-br from-[#0a0a0a] to-[#1a1a1a] border border-[#222] shadow-[0_0_15px_rgba(255,255,255,0.05)] flex items-center justify-center shrink-0">
-          <Layers className="w-4 h-4 text-white" />
+        {/* Brand Monogram */}
+        <div className="size-8 rounded-lg bg-gradient-to-br from-[#141417] to-[#08080a] border border-[#e5d9c5]/25 shadow-[0_0_15px_rgba(201,168,76,0.12)] flex items-center justify-center font-nevera text-sm font-bold text-[#e5d9c5] shrink-0">
+          W
         </div>
-        <span
-          className={`font-display text-base font-semibold tracking-[0.08em] uppercase text-foreground transition-all duration-300 origin-left ${
-            isCollapsed ? "opacity-0 w-0 scale-x-0 overflow-hidden ml-0" : "opacity-100 w-auto scale-x-100 ml-0"
+        <div
+          className={`transition-all duration-300 origin-left ${
+            actuallyCollapsed ? "opacity-0 w-0 scale-x-0 overflow-hidden ml-0" : "opacity-100 w-auto scale-x-100 ml-0"
           }`}
         >
-          WeaverFrame
-        </span>
+          <span className="font-nevera text-sm tracking-[0.14em] uppercase text-white font-semibold block leading-none">
+            WeaverFrame
+          </span>
+          <span className="text-[8.5px] font-mono tracking-widest text-[#e5d9c5]/70 uppercase block mt-1">
+            Architecture & AI OS
+          </span>
+        </div>
       </div>
 
       {/* ── Nav ── */}
-      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto custom-scrollbar">
+      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto custom-scrollbar">
         {(items as any[]).map((item: any) => {
           const active = item.exact
             ? pathname === item.to
@@ -129,25 +142,25 @@ export function Sidebar({
               to={item.to}
               preload="intent"
               preloadDelay={50}
-              className={`group relative flex items-center rounded-md text-sm transition-all duration-300 ${
+              className={`group relative flex items-center rounded-lg text-xs font-medium tracking-wide transition-all duration-200 ${
                 active ? "nav-active" : "nav-inactive"
-              } px-3 py-2 ${isCollapsed ? "gap-0" : "gap-3"}`}
-              title={isCollapsed ? item.label : undefined}
+              } px-3 py-2.5 ${actuallyCollapsed ? "gap-0" : "gap-3"}`}
+              title={actuallyCollapsed ? item.label : undefined}
             >
               {/* Active left indicator */}
               {active && (
-                <span className="absolute left-0 top-[6px] bottom-[6px] w-[2px] rounded-r-full bg-white" />
+                <span className="absolute left-0 top-[6px] bottom-[6px] w-[3px] rounded-r-full bg-[#e5d9c5] shadow-[0_0_10px_rgba(229,217,197,0.7)]" />
               )}
 
               <Icon
-                className={`size-4 shrink-0 transition-colors duration-150 ${
-                  active ? "text-foreground" : "text-[#454545] group-hover:text-[#D0D0D0]"
+                className={`size-4 shrink-0 transition-colors duration-200 ${
+                  active ? "text-[#e5d9c5]" : "text-muted-foreground group-hover:text-white"
                 }`}
               />
 
               <span
                 className={`transition-all duration-300 origin-left truncate ${
-                  isCollapsed ? "opacity-0 w-0 scale-x-0 overflow-hidden" : "opacity-100 w-auto scale-x-100"
+                  actuallyCollapsed ? "opacity-0 w-0 scale-x-0 overflow-hidden" : "opacity-100 w-auto scale-x-100"
                 }`}
               >
                 {item.label}
@@ -155,9 +168,9 @@ export function Sidebar({
 
               {/* AI Activity live badge */}
               {item.badge && (
-                <span className={`relative flex size-2 shrink-0 transition-all duration-300 ${isCollapsed ? "absolute top-1.5 right-1.5" : ""}`}>
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-60" />
-                  <span className="relative inline-flex rounded-full size-2 bg-success" />
+                <span className={`relative flex size-2 shrink-0 transition-all duration-300 ${actuallyCollapsed ? "absolute top-1.5 right-1.5" : "ml-auto"}`}>
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
+                  <span className="relative inline-flex rounded-full size-2 bg-emerald-400" />
                 </span>
               )}
             </Link>
@@ -166,22 +179,23 @@ export function Sidebar({
       </nav>
 
       {/* ── Footer: Company + User ── */}
-      <div className="p-3 border-t border-border flex flex-col gap-2 overflow-hidden">
+      <div className="p-3 border-t border-border flex flex-col gap-2 overflow-hidden bg-[#060608]">
         {/* Company block */}
         <div
           className={`px-2 py-1.5 transition-all duration-300 origin-top overflow-hidden ${
-            isCollapsed ? "opacity-0 max-h-0 py-0 mb-0" : "opacity-100 max-h-[100px] mb-1"
+            actuallyCollapsed ? "opacity-0 max-h-0 py-0 mb-0" : "opacity-100 max-h-[100px] mb-1"
           }`}
         >
-          <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-widest">
-            {isAdminView ? 'Administration' : 'Company'}
+          <div className="text-[9px] font-mono text-muted-foreground uppercase tracking-widest flex items-center justify-between">
+            <span>{isAdminView ? 'Administration' : 'Estate Builder OS'}</span>
+            <span className="size-1 rounded-full bg-[#e5d9c5]" />
           </div>
-          <div className="text-sm text-foreground font-medium mt-0.5 truncate">
-            {isAdminView ? "WeaverFrame" : (session?.companyName || 'Company Name')}
+          <div className="text-xs text-foreground font-semibold mt-0.5 truncate tracking-wide">
+            {isAdminView ? "WeaverFrame HQ" : (session?.companyName || 'Company Name')}
           </div>
         </div>
 
-        {isAdminPreviewingBuilder && !isCollapsed && (
+        {isAdminPreviewingBuilder && !actuallyCollapsed && (
           <button
             onClick={handleExitPreview}
             className="w-full inline-flex items-center justify-center gap-1.5 text-xs px-2 py-1.5 rounded-md border border-warning/30 bg-warning/10 text-warning hover:bg-warning/20 transition-colors"
@@ -194,41 +208,43 @@ export function Sidebar({
 
         {/* Profile row */}
         <div
-          className={`flex items-center rounded-md hover:bg-white/[0.04] transition-all duration-300 overflow-hidden px-2 py-2 ${
-            isCollapsed ? "gap-0" : "gap-3"
+          className={`flex items-center rounded-lg hover:bg-white/[0.04] transition-all duration-200 overflow-hidden px-2 py-2 border border-transparent hover:border-white/[0.06] ${
+            actuallyCollapsed ? "gap-0" : "gap-3"
           }`}
-          title={isCollapsed ? "Profile" : undefined}
+          title={actuallyCollapsed ? "Profile" : undefined}
         >
           <div className="relative shrink-0">
-            <div className="size-9 rounded-full bg-white/10 border border-white/15 text-foreground flex items-center justify-center text-sm font-semibold font-display">
+            <div className="size-8 rounded-full bg-[#101014] border border-[#e5d9c5]/30 text-[#e5d9c5] flex items-center justify-center text-xs font-bold font-nevera shadow-sm shadow-[#e5d9c5]/10">
                {isAdminView ? 'AD' : (session?.displayName ? session.displayName[0].toUpperCase() : 'U')}
             </div>
             {/* Online dot with premium pulse animation */}
-            <span className="absolute -bottom-0.5 -right-0.5 flex size-2.5 shrink-0">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-60 ring-2 ring-sidebar" />
-              <span className="relative inline-flex rounded-full size-2.5 bg-success ring-2 ring-sidebar" />
+            <span className="absolute -bottom-0.5 -right-0.5 flex size-2 shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60 ring-2 ring-sidebar" />
+              <span className="relative inline-flex rounded-full size-2 bg-emerald-400 ring-2 ring-sidebar" />
             </span>
           </div>
 
           <div
             className={`min-w-0 transition-all duration-300 origin-left flex-1 ${
-              isCollapsed ? "opacity-0 w-0 scale-x-0 overflow-hidden" : "opacity-100 w-auto scale-x-100"
+              actuallyCollapsed ? "opacity-0 w-0 scale-x-0 overflow-hidden" : "opacity-100 w-auto scale-x-100"
             }`}
           >
-            <div className="text-sm text-foreground truncate font-medium">
+            <div className="text-xs text-foreground truncate font-medium">
               {isAdminView ? 'SajidAli Ansari' : (session?.displayName || 'User')}
             </div>
-            <div className="text-xs text-muted-foreground capitalize">{isAdminView ? 'Superuser' : (session?.builderRole === 'sales' ? 'Sales Agent' : session?.builderRole || 'Owner')}</div>
+            <div className="text-[10px] text-[#e5d9c5]/80 capitalize font-mono tracking-wider">
+              {isAdminView ? 'Superuser' : (session?.builderRole === 'sales' ? 'Sales Exec' : session?.builderRole || 'Owner')}
+            </div>
           </div>
           
           <button 
             onClick={handleLogout}
             className={`shrink-0 p-1.5 text-muted-foreground hover:text-white rounded-md hover:bg-white/10 transition-colors ${
-              isCollapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100 w-auto"
+              actuallyCollapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100 w-auto"
             }`}
             title="Log out"
           >
-            <LogOut className="size-4" />
+            <LogOut className="size-3.5" />
           </button>
         </div>
       </div>
