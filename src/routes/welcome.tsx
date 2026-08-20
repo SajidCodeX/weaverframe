@@ -163,6 +163,8 @@ function WelcomePage() {
     setMounted(true);
   }, []);
 
+  const lenisRef = useRef<Lenis | null>(null);
+
   // Lenis Smooth Scroll Engine (120 FPS High Performance) - Deferred to prioritize instant interactivity
   useEffect(() => {
     let lenis: Lenis | null = null;
@@ -171,7 +173,7 @@ function WelcomePage() {
 
     const initLenis = () => {
       lenis = new Lenis({
-        duration: 0.9,
+        duration: 1.1,
         easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
         orientation: "vertical",
         gestureOrientation: "vertical",
@@ -179,6 +181,7 @@ function WelcomePage() {
         wheelMultiplier: 0.95,
         touchMultiplier: 1.5,
       });
+      lenisRef.current = lenis;
 
       function raf(time: number) {
         lenis?.raf(time);
@@ -205,8 +208,27 @@ function WelcomePage() {
       }
       if (reqId) cancelAnimationFrame(reqId);
       lenis?.destroy();
+      lenisRef.current = null;
     };
   }, []);
+
+  // Smooth Scroll Section Handler
+  const scrollToSection = (e: React.MouseEvent<HTMLAnchorElement>, targetId: string) => {
+    e.preventDefault();
+    if (lenisRef.current) {
+      lenisRef.current.scrollTo(targetId, {
+        offset: -85,
+        duration: 1.2,
+        easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+      });
+    } else {
+      const el = document.querySelector(targetId);
+      if (el) {
+        const top = el.getBoundingClientRect().top + window.pageYOffset - 85;
+        window.scrollTo({ top, behavior: "smooth" });
+      }
+    }
+  };
 
   // Mouse coordinate tracker for Hero WebGL Particle Parallax
   const heroMouseRef = useRef({ x: 0, y: 0 });
@@ -441,11 +463,11 @@ function WelcomePage() {
 
           {/* Centered Clean Navigation */}
           <nav className="hidden lg:flex items-center gap-7 xl:gap-8 text-[11px] font-medium tracking-[0.16em] uppercase text-white/70">
-            <a href="#radar" className="hover:text-[#e5d9c5] transition-colors whitespace-nowrap">Live Radar</a>
-            <a href="#pillars" className="hover:text-[#e5d9c5] transition-colors whitespace-nowrap">Platform</a>
-            <a href="#calculator" className="hover:text-[#e5d9c5] transition-colors whitespace-nowrap">ROI Modeler</a>
-            <a href="#cases" className="hover:text-[#e5d9c5] transition-colors whitespace-nowrap">Case Studies</a>
-            <a href="#pricing" className="hover:text-[#e5d9c5] transition-colors whitespace-nowrap">Pricing</a>
+            <a href="#radar" onClick={(e) => scrollToSection(e, "#radar")} className="hover:text-[#e5d9c5] transition-colors whitespace-nowrap">Live Radar</a>
+            <a href="#pillars" onClick={(e) => scrollToSection(e, "#pillars")} className="hover:text-[#e5d9c5] transition-colors whitespace-nowrap">Platform</a>
+            <a href="#calculator" onClick={(e) => scrollToSection(e, "#calculator")} className="hover:text-[#e5d9c5] transition-colors whitespace-nowrap">ROI Modeler</a>
+            <a href="#cases" onClick={(e) => scrollToSection(e, "#cases")} className="hover:text-[#e5d9c5] transition-colors whitespace-nowrap">Case Studies</a>
+            <a href="#pricing" onClick={(e) => scrollToSection(e, "#pricing")} className="hover:text-[#e5d9c5] transition-colors whitespace-nowrap">Pricing</a>
           </nav>
 
           {/* Right Action Buttons */}
@@ -490,35 +512,50 @@ function WelcomePage() {
             <nav className="flex flex-col space-y-3 font-mono text-xs tracking-widest uppercase text-white/80">
               <a
                 href="#radar"
-                onClick={() => setIsMobileMenuOpen(false)}
+                onClick={(e) => {
+                  setIsMobileMenuOpen(false);
+                  scrollToSection(e, "#radar");
+                }}
                 className="py-2 border-b border-white/5 hover:text-[#e5d9c5]"
               >
                 Live Radar
               </a>
               <a
                 href="#pillars"
-                onClick={() => setIsMobileMenuOpen(false)}
+                onClick={(e) => {
+                  setIsMobileMenuOpen(false);
+                  scrollToSection(e, "#pillars");
+                }}
                 className="py-2 border-b border-white/5 hover:text-[#e5d9c5]"
               >
                 Platform Architecture
               </a>
               <a
                 href="#calculator"
-                onClick={() => setIsMobileMenuOpen(false)}
+                onClick={(e) => {
+                  setIsMobileMenuOpen(false);
+                  scrollToSection(e, "#calculator");
+                }}
                 className="py-2 border-b border-white/5 hover:text-[#e5d9c5]"
               >
                 ROI Modeler
               </a>
               <a
                 href="#cases"
-                onClick={() => setIsMobileMenuOpen(false)}
+                onClick={(e) => {
+                  setIsMobileMenuOpen(false);
+                  scrollToSection(e, "#cases");
+                }}
                 className="py-2 border-b border-white/5 hover:text-[#e5d9c5]"
               >
                 Case Studies
               </a>
               <a
                 href="#pricing"
-                onClick={() => setIsMobileMenuOpen(false)}
+                onClick={(e) => {
+                  setIsMobileMenuOpen(false);
+                  scrollToSection(e, "#pricing");
+                }}
                 className="py-2 hover:text-[#e5d9c5]"
               >
                 Pricing
@@ -618,7 +655,8 @@ function WelcomePage() {
               </MagneticButton>
               <a
                 href="#radar"
-                className="w-full sm:w-auto px-7 py-4 border border-white/20 bg-white/[0.02] text-white text-xs font-bold uppercase tracking-widest hover:border-[#e5d9c5] hover:text-[#e5d9c5] transition-all text-center backdrop-blur-sm"
+                onClick={(e) => scrollToSection(e, "#radar")}
+                className="w-full sm:w-auto px-7 py-4 border border-white/20 bg-white/[0.02] text-white text-xs font-bold uppercase tracking-widest hover:border-[#e5d9c5] hover:text-[#e5d9c5] transition-all text-center backdrop-blur-sm cursor-pointer"
               >
                 Test Live Radar ↓
               </a>
