@@ -1,6 +1,5 @@
-﻿import React, { useRef, useMemo } from "react";
+import React, { useRef, useMemo } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { Points, PointMaterial } from "@react-three/drei";
 import * as THREE from "three";
 
 function ParticleConstellation({ mouseRef }: { mouseRef: React.MutableRefObject<{ x: number; y: number }> }) {
@@ -37,8 +36,18 @@ function ParticleConstellation({ mouseRef }: { mouseRef: React.MutableRefObject<
   });
 
   return (
-    <Points ref={pointsRef} positions={positions} colors={colors} stride={3}>
-      <PointMaterial
+    <points ref={pointsRef}>
+      <bufferGeometry>
+        <bufferAttribute
+          attach="attributes-position"
+          args={[positions, 3]}
+        />
+        <bufferAttribute
+          attach="attributes-color"
+          args={[colors, 3]}
+        />
+      </bufferGeometry>
+      <pointsMaterial
         vertexColors
         size={0.022}
         sizeAttenuation
@@ -47,7 +56,7 @@ function ParticleConstellation({ mouseRef }: { mouseRef: React.MutableRefObject<
         depthWrite={false}
         blending={THREE.AdditiveBlending}
       />
-    </Points>
+    </points>
   );
 }
 

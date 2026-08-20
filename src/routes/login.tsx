@@ -328,11 +328,14 @@ function LoginRoute() {
             transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
             className="relative z-10 w-full max-w-[620px] 2xl:max-w-[700px]"
           >
-            <img
-              src="/images/exploded-villa.png"
-              alt="WeaverFrame Exploded Luxury Architecture"
-              className="w-full h-auto object-contain drop-shadow-[0_30px_70px_rgba(0,0,0,0.95)] select-none pointer-events-none"
-            />
+            <picture className="w-full">
+              <source srcSet="/images/exploded-villa.webp" type="image/webp" />
+              <img
+                src="/images/exploded-villa.png"
+                alt="WeaverFrame Exploded Luxury Architecture"
+                className="w-full h-auto object-contain drop-shadow-[0_30px_70px_rgba(0,0,0,0.95)] select-none pointer-events-none"
+              />
+            </picture>
           </motion.div>
 
           {/* Floating Metric Pill 1: Response Time */}

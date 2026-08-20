@@ -132,18 +132,14 @@ const LuxuryMarquee = () => {
 
   return (
     <div className="w-full overflow-hidden bg-[#e5d9c5] text-[#080808] py-4 whitespace-nowrap flex items-center relative z-20 shadow-2xl">
-      <motion.div
-        animate={{ x: [0, -1200] }}
-        transition={{ repeat: Infinity, duration: 24, ease: "linear" }}
-        className="flex items-center space-x-12 font-mono"
-      >
-        {[...items, ...items, ...items].map((item, idx) => (
+      <div className="flex items-center space-x-12 font-mono animate-marquee will-change-transform">
+        {[...items, ...items, ...items, ...items].map((item, idx) => (
           <React.Fragment key={idx}>
             <span className="text-xs font-extrabold tracking-[0.28em] uppercase">{item}</span>
             <span className="size-2 rounded-full bg-[#080808]" />
           </React.Fragment>
         ))}
-      </motion.div>
+      </div>
     </div>
   );
 };
@@ -662,13 +658,16 @@ function WelcomePage() {
               transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
               className="relative w-full flex items-center justify-center group"
             >
-              <img
-                src="/images/exploded-villa.png"
-                alt="WeaverFrame Exploded Luxury Architecture"
-                fetchPriority="high"
-                decoding="async"
-                className="w-full max-w-[1150px] 2xl:max-w-[1300px] h-auto object-contain select-none pointer-events-none drop-shadow-[0_30px_70px_rgba(0,0,0,0.95)] transition-transform duration-700 group-hover:scale-[1.03]"
-              />
+              <picture className="w-full max-w-[1150px] 2xl:max-w-[1300px] flex justify-center">
+                <source srcSet="/images/exploded-villa.webp" type="image/webp" />
+                <img
+                  src="/images/exploded-villa.png"
+                  alt="WeaverFrame Exploded Luxury Architecture"
+                  fetchPriority="high"
+                  decoding="async"
+                  className="w-full h-auto object-contain select-none pointer-events-none drop-shadow-[0_30px_70px_rgba(0,0,0,0.95)] transition-transform duration-700 group-hover:scale-[1.03]"
+                />
+              </picture>
             </motion.div>
           </div>
 
