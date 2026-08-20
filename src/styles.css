@@ -10,10 +10,6 @@
   font-display: swap;
 }
 
-html {
-  scroll-behavior: smooth;
-}
-
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {

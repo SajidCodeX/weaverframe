@@ -233,11 +233,9 @@ function WelcomePage() {
   // Mouse coordinate tracker for Hero WebGL Particle Parallax
   const heroMouseRef = useRef({ x: 0, y: 0 });
 
-  // Scroll Progress & Spring-Smoothed Parallax
+  // Scroll Progress & Direct Hardware-Accelerated Parallax
   const { scrollY, scrollYProgress } = useScroll();
-  const progressScaleX = useSpring(scrollYProgress, { stiffness: 120, damping: 26, restDelta: 0.001 });
-  const rawParallax = useTransform(scrollY, [0, 700], [0, -35]);
-  const heroParallaxY = useSpring(rawParallax, { stiffness: 140, damping: 25, restDelta: 0.001 });
+  const heroParallaxY = useTransform(scrollY, [0, 700], [0, -30]);
 
   // Embla Carousel Hook for Case Studies
   const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true, align: "start", dragFree: true });
@@ -436,12 +434,12 @@ function WelcomePage() {
       {/* ── CINEMATIC READING PROGRESS BAR ── */}
       <motion.div
         className="fixed top-0 left-0 right-0 h-[2.5px] bg-gradient-to-r from-[#c9a84c] via-[#fce6b8] to-[#c9a84c] z-[100] origin-left pointer-events-none shadow-[0_0_12px_rgba(201,168,76,0.6)]"
-        style={{ scaleX: progressScaleX }}
+        style={{ scaleX: scrollYProgress }}
       />
 
       {/* Ambient Lighting Orbs */}
-      <div className="fixed top-0 left-1/3 w-[600px] h-[600px] bg-radial from-[#c9a84c]/[0.08] to-transparent rounded-full blur-3xl pointer-events-none z-0" />
-      <div className="fixed bottom-0 right-1/4 w-[700px] h-[700px] bg-radial from-[#e5d9c5]/[0.05] to-transparent rounded-full blur-3xl pointer-events-none z-0" />
+      <div className="absolute top-0 left-1/3 w-[600px] h-[600px] bg-radial from-[#c9a84c]/[0.08] to-transparent rounded-full blur-3xl pointer-events-none z-0" />
+      <div className="absolute bottom-0 right-1/4 w-[700px] h-[700px] bg-radial from-[#e5d9c5]/[0.05] to-transparent rounded-full blur-3xl pointer-events-none z-0" />
 
       {/* ── TOP FLOATING GLASSMORPHIC CAPSULE NAVBAR ── */}
       <div className="fixed top-5 left-0 right-0 z-50 flex justify-center px-4 sm:px-6 pointer-events-none">
