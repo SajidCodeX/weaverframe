@@ -242,8 +242,8 @@ function ReportsPage() {
       const actLower = a.action.toLowerCase();
       return actLower.includes('ai engine') || 
              actLower.includes('ai concierge') || 
-             actLower.includes('automated sms') || 
-             actLower.includes('sms outreach') || 
+             actLower.includes('automated email') || 
+             actLower.includes('email outreach') || 
              actLower.includes('nurture message');
     }).length;
 

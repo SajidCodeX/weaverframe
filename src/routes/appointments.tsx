@@ -1193,7 +1193,7 @@ function ApptPage() {
                 </div>
 
                 <label className="flex items-center justify-between text-[11px] py-0.5 select-none cursor-pointer">
-                  <span className="text-muted-foreground font-semibold">Send SMS confirmation</span>
+                  <span className="text-muted-foreground font-semibold">Send Email confirmation</span>
                   <input 
                     type="checkbox" 
                     checked={sendSms}

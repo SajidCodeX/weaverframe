@@ -831,7 +831,7 @@ function ReviewsPage() {
                   <Check className="size-4 shrink-0 mt-0.5" />
                   <div>
                     <span className="font-bold">Review Request Dispatched!</span>
-                    <p className="text-[10px] mt-0.5 opacity-90 leading-snug">SMS & Email invite sent to the client. Sandbox has loaded this request!</p>
+                    <p className="text-[10px] mt-0.5 opacity-90 leading-snug">Email review invite sent to the client. Sandbox has loaded this request!</p>
                   </div>
                 </div>
               )}

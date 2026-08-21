@@ -441,7 +441,7 @@ function LeadsPage() {
       {smsResult && (
         <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 rounded-lg shadow-none border text-sm font-medium animate-in fade-in slide-in-from-bottom-4 duration-200 ${smsResult.ok ? 'bg-success/10 border-success/30 text-success' : 'bg-secondary border-border text-foreground'}`}>
           <Check className="size-4" />
-          {smsResult.ok ? 'SMS sent via Twilio!' : 'SMS outreach logged — configure Twilio in Settings to send live.'}
+          {smsResult.ok ? 'Email outreach dispatched successfully!' : 'Email outreach logged to lead timeline.'}
         </div>
       )}
       {retriggerResult !== null && (
@@ -660,8 +660,8 @@ function LeadsPage() {
                 }
               }}
               onSendSms={(lead) => {
-                const defaultMsg = `Hi ${lead.firstName}, this is Your Company. We noticed your recent permit application in ${lead.county}. Have you selected a builder yet? Reply YES or NO.`;
-                const msg = prompt(`SMS message to ${lead.firstName}:`, defaultMsg);
+                const defaultMsg = `Hi ${lead.firstName}, this is Your Company. We noticed your recent permit application in ${lead.county}. Have you selected a builder yet? Reply to this email to let us know.`;
+                const msg = prompt(`Email message to ${lead.firstName}:`, defaultMsg);
                 if (!msg) return;
                 setSmsSending(lead.id);
                 setSmsResult(null);
@@ -852,8 +852,8 @@ function LeadsPage() {
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       setActiveMoreLead(null);
-                                      const defaultMsg = `Hi ${lead.firstName}, this is Your Company. We noticed your recent permit application in ${lead.county}. Have you selected a builder yet? Reply YES or NO.`;
-                                      const msg = prompt(`SMS message to ${lead.firstName}:`, defaultMsg);
+                                      const defaultMsg = `Hi ${lead.firstName}, this is Your Company. We noticed your recent permit application in ${lead.county}. Have you selected a builder yet? Reply to this email to let us know.`;
+                                      const msg = prompt(`Email message to ${lead.firstName}:`, defaultMsg);
                                       if (!msg) return;
                                       setSmsSending(lead.id);
                                       setSmsResult(null);
@@ -864,7 +864,7 @@ function LeadsPage() {
                                     }}
                                     className="w-full text-left text-xs px-2.5 py-1.5 rounded hover:bg-white/[0.04] text-foreground transition-colors"
                                   >
-                                    Send SMS
+                                    Send Email
                                   </button>
                                   <button
                                     onClick={async (e) => {
@@ -1862,7 +1862,7 @@ function LeadKanbanCard({ lead, column, isPrivacyMode, onSelectLead, onEmailLead
                   onClick={() => { setMenuOpen(false); onSendSms(lead); }}
                   className="w-full text-left text-xs px-2.5 py-1.5 rounded hover:bg-white/[0.04] text-foreground transition-colors flex items-center gap-1.5"
                 >
-                  <MessageSquare className="size-3" /> Send SMS
+                  <Mail className="size-3" /> Send Email
                 </button>
                 <button
                   onClick={() => { setMenuOpen(false); onRetrigger(lead); }}

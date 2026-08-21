@@ -493,7 +493,7 @@ function AIPage() {
                   Ready to deploy updates to your AI Brain?
                 </h3>
                 <p className="text-[11px] text-muted-foreground">
-                  Changes take effect immediately across all SMS conversations and the live sandbox.
+                  Changes take effect immediately across all Email conversations and the live sandbox.
                 </p>
               </div>
             </div>
@@ -1180,7 +1180,7 @@ function AIPage() {
                 Live AI Conversation Audit History
               </h3>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Inspect live lead SMS threads, verify AI intent classification, or clear logs.
+                Inspect live lead Email threads, verify AI intent classification, or clear logs.
               </p>
             </div>
             <span className="text-xs font-mono text-muted-foreground">
@@ -1271,7 +1271,7 @@ function AIPage() {
                 </div>
                 <div>
                   <h3 className="text-sm font-semibold text-foreground">
-                    {conversations[activeModalLeadId]?.leadName} &middot; SMS History
+                    {conversations[activeModalLeadId]?.leadName} &middot; Email History
                   </h3>
                   <span className="text-[11px] text-muted-foreground font-mono">
                     County: {conversations[activeModalLeadId]?.county || "Travis County"}

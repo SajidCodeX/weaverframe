@@ -52,16 +52,16 @@ export const getAdminStats = createServerFn({ method: 'GET' }).handler(async () 
   // Calculate MRR
   const totalMRR = builders.reduce((acc, b) => {
     if (b.plan === 'trial') return acc;
-    if (b.plan === 'enterprise') return acc + 999;
-    return acc + 299; // Default professional
+    if (b.plan === 'enterprise') return acc + 799;
+    return acc + 399; // Default professional
   }, 0)
 
   // Calculate previous MRR based on builders created before 30 days ago
   const previousBuilders = builders.filter(b => b.createdAt < thirtyDaysAgo);
   const previousMRR = previousBuilders.reduce((acc, b) => {
     if (b.plan === 'trial') return acc;
-    if (b.plan === 'enterprise') return acc + 999;
-    return acc + 299;
+    if (b.plan === 'enterprise') return acc + 799;
+    return acc + 399;
   }, 0)
 
   const calcTrend = (current: number, previous: number) => {

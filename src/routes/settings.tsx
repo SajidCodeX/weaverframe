@@ -83,6 +83,33 @@ const sections = [
   // "Blocked Users"
 ] as const;
 
+const clientPlanDetails: Record<string, { name: string; price: string; period: string; badge: string; description: string; features: string[] }> = {
+  trial: {
+    name: "Free Evaluation Trial",
+    price: "$0",
+    period: "/ 14 days",
+    badge: "EVALUATION",
+    description: "Sandbox evaluation with standard lead capture & simulation.",
+    features: ["Standard Lead Ingestion", "Automated AI Email Outreach"]
+  },
+  professional: {
+    name: "Professional Tier",
+    price: "$399",
+    period: "/ month",
+    badge: "ACTIVE TIER",
+    description: "Full AI Concierge, autonomous lead memory & live calendar scheduling.",
+    features: ["1,500 AI Msgs/Day", "Live Calendar Booking", "Full Lead Memory Graph"]
+  },
+  enterprise: {
+    name: "Enterprise Scale",
+    price: "$799",
+    period: "/ month",
+    badge: "ENTERPRISE",
+    description: "Unlimited team seats, multi-county permit sync & priority AI pipeline.",
+    features: ["Unlimited Team Seats", "County Permit Data Ingestion", "Priority AI Dispatch Pipeline"]
+  }
+};
+
 function SettingsPage() {
   const loaderData = useLoaderData({ from: "/settings" }) || {};
   const { integrationsStatus: loadedStatuses = {}, builderProfile: loadedProfile = {}, qualRules: loadedQualRules = {}, notifSettings: loadedNotif = {}, webhookUrl: loadedWebhookUrl = '', billingProfile: loadedBillingProfile = { adSpendBalance: 0, paymentMethod: "None", plan: "trial" } } = loaderData as any;
@@ -124,6 +151,8 @@ function SettingsPage() {
   const [isFunding, setIsFunding] = useState(false);
   const [fundingSuccess, setFundingSuccess] = useState(false);
 
+  const currentPlanKey = (billingPlan || loadedBillingProfile.plan || loadedProfile.plan || "professional").toLowerCase();
+  const currentPlan = clientPlanDetails[currentPlanKey] || clientPlanDetails.professional;
 
   const downloadInvoicePDF = async (date: string, amount: string, status: string) => {
     const company = loadedProfile.companyName || "Your Company LLC";
@@ -138,7 +167,7 @@ function SettingsPage() {
     doc.text(`Invoice Date: ${date}`, 20, 40);
     doc.text(`Client Name: ${company}`, 20, 50);
     doc.text(`Contract ID: WF-2026-904`, 20, 60);
-    doc.text(`Platform Fees: WeaverFrame SaaS Professional Plan`, 20, 70);
+    doc.text(`Platform Fees: WeaverFrame SaaS ${currentPlan.name}`, 20, 70);
     doc.text(`Payment Status: ${status} (Visa •••• 4242)`, 20, 80);
     doc.text(`Merchant: WeaverFrame Inc.`, 20, 90);
 
@@ -146,18 +175,16 @@ function SettingsPage() {
     doc.line(20, 100, 190, 100);
 
     doc.setFont("helvetica", "bold");
-    doc.text("Description", 20, 110);
+    doc.text("Plan Description", 20, 110);
     doc.text("Total", 170, 110);
     
     doc.line(20, 115, 190, 115);
 
     doc.setFont("helvetica", "normal");
-    doc.text("WeaverFrame AI Lead Conversion OS Platform License", 20, 125);
-    // doc.text("- Travis County permit feed streaming & ingestion", 25, 135);
+    doc.text(`WeaverFrame AI Lead Conversion OS (${currentPlan.name})`, 20, 125);
     doc.text("- 24/7 AI Lead Concierge & Automated Qualification", 25, 135);
-    doc.text("- Live Multi-Channel Pipeline & WhatsApp/SMS Concierge", 25, 145);
-    // doc.text("- Google Business reputation optimization", 25, 155);
-    doc.text("$3,000.00", 170, 125);
+    doc.text("- 24/7 Autonomous AI Email Concierge & Pipeline Sync", 25, 145);
+    doc.text(amount, 170, 125);
 
     doc.line(20, 170, 190, 170);
     doc.setFont("helvetica", "bold");
@@ -580,18 +607,6 @@ function SettingsPage() {
     //     { key: "clientSecret", label: "OAuth Client Secret", type: "password", required: true, placeholder: "Enter client secret key" },
     //     { key: "locationId", label: "Google Location ID", type: "text", required: true, placeholder: "e.g. accounts/12345/locations/67890" }
     //   ]
-    // },
-    {
-      id: "twilio",
-      name: "Twilio SMS Outreach Gateway",
-      desc: "Powers AI Concierge outreach SMS delivery. Syncs live client conversations directly inside our platform.",
-      icon: "T",
-      fields: [
-        { key: "accountSid", label: "Twilio Account SID", type: "text", required: true, placeholder: "e.g. ACxxxxxxxxxxxxxxxxxxxxxxxx" },
-        { key: "authToken", label: "Twilio Auth Token", type: "password", required: true, placeholder: "Enter Twilio Auth Token" },
-        { key: "phoneNumber", label: "Twilio Phone Number", type: "text", required: true, placeholder: "e.g. +15128903498" }
-      ]
-    },
     {
       id: "hubspot",
       name: "HubSpot CRM Sync",
@@ -651,7 +666,14 @@ function SettingsPage() {
           {active === "Builder Profile" && (
             <div className="space-y-4">
               <H>Builder Profile</H>
-              <Row label={<>Company name <span className="text-danger">*</span></>}><Input value={profileForm.companyName} onChange={e => setProfileForm(p => ({ ...p, companyName: e.target.value }))} /></Row>
+              <Row label="Company Organization">
+                <div className="flex items-center justify-between w-full bg-secondary/60 border border-border rounded-md px-3 py-2 text-sm text-foreground select-none">
+                  <span className="font-semibold text-foreground">{profileForm.companyName || "Organization Account"}</span>
+                  <span className="text-[10px] font-mono text-muted-foreground bg-card border border-border px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0">
+                    <Lock className="size-2.5" /> Managed by Platform Super-Admin
+                  </span>
+                </div>
+              </Row>
               <Row label={<>Primary contact <span className="text-danger">*</span></>}><Input value={profileForm.primaryContact} onChange={e => setProfileForm(p => ({ ...p, primaryContact: e.target.value }))} /></Row>
               <Row label={<>Email <span className="text-danger">*</span></>}><Input type="email" value={profileForm.email} onChange={e => setProfileForm(p => ({ ...p, email: e.target.value }))} /></Row>
               <Row label={<>Phone <span className="text-danger">*</span></>}><Input type="tel" value={profileForm.phone} onChange={e => setProfileForm(p => ({ ...p, phone: e.target.value }))} /></Row>
@@ -765,19 +787,12 @@ function SettingsPage() {
               <Toggle label="Lead replies to AI" checked={notifForm.leadReplies} onChange={v => setNotifForm(p => ({ ...p, leadReplies: v }))} />
               <Toggle label="Hot lead detected" checked={notifForm.hotLead} onChange={v => setNotifForm(p => ({ ...p, hotLead: v }))} />
               <Toggle label="Appointment booked" checked={notifForm.apptBooked} onChange={v => setNotifForm(p => ({ ...p, apptBooked: v }))} />
-              <div className="text-xs uppercase tracking-wider text-muted-foreground pt-4">Channels</div>
+              <div className="text-xs uppercase tracking-wider text-muted-foreground pt-4">Notification Channel</div>
               <div className="flex gap-2">
-                {["SMS", "Email", "Both"].map((c) => (
-                  <button
-                    key={c}
-                    onClick={() => setNotifForm(p => ({ ...p, channel: c }))}
-                    className={`px-3 py-1.5 rounded-md text-sm border transition-colors ${
-                      notifForm.channel === c
-                        ? "bg-primary/15 border-primary/40 text-primary"
-                        : "border-border text-muted-foreground hover:text-foreground"
-                    }`}
-                  >{c}</button>
-                ))}
+                <div className="px-3.5 py-1.5 rounded-md text-xs font-mono bg-primary/15 border border-primary/40 text-primary font-bold flex items-center gap-1.5">
+                  <Check className="size-3" />
+                  <span>Email (Direct In-App & Push)</span>
+                </div>
               </div>
               <Toggle label="Quiet hours (10 PM – 7 AM)" checked={notifForm.quietHours} onChange={v => setNotifForm(p => ({ ...p, quietHours: v }))} />
               <Save onClick={handleSaveNotif} isSaving={isSavingNotif} saved={notifSaved} />
@@ -1073,7 +1088,6 @@ function SettingsPage() {
                                {/* {i.id === "google" && "🔑 Synchronizes and auto-replies to Google Business reviews."} */}
                                {/* {i.id === "houzz" && "🔑 Tracks 5-star Houzz review routing progress."} */}
                                {/* {i.id === "facebook" && "🔑 Fetches social page check-ins and recommendations."} */}
-                               {i.id === "twilio" && "💬 Powers automated SMS dialogue with real builder phone number."}
                                {i.id === "hubspot" && "🔄 Automatically syncs qualified leads directly to pipeline deals."}
                                {i.id === "ghl" && "🔄 Synchronizes custom fields, contact pipelines, and AI actions inside GHL."}
 
@@ -1125,76 +1139,120 @@ function SettingsPage() {
           )}
 
           {active === "Billing" && (
-            <div className="space-y-5 relative">
-              <H>Billing</H>
-              <div className="grid grid-cols-2 gap-3">
-                <Card className="p-4">
-                  <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Plan</div>
-                  <div className="mt-1">
-                    <CustomSelect 
-                      value={billingPlan}
-                      onChange={async (val) => {
-                        setBillingPlan(val);
-                        await updateBillingProfile({ data: { plan: val } as any });
-                      }}
-                      options={[
-                        {label: "Starter ($1,500/mo)", value: "starter"},
-                        {label: "Professional ($3,000/mo)", value: "professional"},
-                        {label: "Enterprise ($5,000/mo)", value: "enterprise"}
-                      ]}
-                    />
-                  </div>
-                  <div className="font-mono text-xl text-foreground mt-3">
-                    {billingPlan === "starter" ? "$1,500" : billingPlan === "enterprise" ? "$5,000" : "$3,000"}<span className="text-xs text-muted-foreground">/mo</span>
-                  </div>
-                </Card>
-                <Card className="p-4">
-                  <div className="text-xs uppercase tracking-wider text-muted-foreground">Next billing</div>
-                  <div className="text-foreground font-medium mt-1">Jun 1, 2026</div>
-                  <div className="text-xs text-muted-foreground mt-2">Auto-renew on</div>
-                </Card>
-                {/* <Card className="p-4">
-                  <div className="text-xs uppercase tracking-wider text-muted-foreground">Ad spend balance</div>
-                  <div className="font-mono text-2xl text-foreground mt-1">${adSpendBalance}</div>
-                  <button onClick={() => setIsAddFundsOpen(true)} className="text-xs text-primary mt-2 hover:underline cursor-pointer">Add funds</button>
-                </Card> */}
-              </div>
-              <div>
-                <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Payment method</div>
-                <div className="flex items-center justify-between p-4 border border-border rounded-md">
-                  <span className="font-mono text-foreground">{paymentMethod}</span>
-                  <button 
-                    disabled
-                    title="Coming soon — secure payment setup in progress" 
-                    className="text-xs text-muted-foreground cursor-not-allowed opacity-50 flex items-center"
-                  >
-                    Add Payment Method
-                  </button>
+            <div className="space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-foreground">Subscription & Billing</h2>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Your organization's active subscription tier and billing cycle.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 self-start sm:self-auto">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-mono font-bold">
+                    <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+                    ACTIVE SUBSCRIPTION
+                  </span>
                 </div>
               </div>
-              <div>
-                <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Invoice history</div>
-                <table className="w-full text-sm border border-border rounded-md overflow-hidden">
-                  <thead className="bg-secondary/50 text-xs text-muted-foreground uppercase tracking-wider">
+
+              {/* Plan Presentation Cards (Read-Only) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Card className="p-5 border border-primary/40 bg-card shadow-sm flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <span className="text-[10.5px] uppercase tracking-wider text-muted-foreground font-mono font-semibold">
+                        Assigned Plan
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full text-[9.5px] font-mono font-bold bg-[#c9a84c]/20 text-[#c9a84c] dark:text-[#e5d9c5] border border-[#c9a84c]/40">
+                        {currentPlan.badge}
+                      </span>
+                    </div>
+
+                    <div className="text-lg font-bold text-foreground font-mono">
+                      {currentPlan.name}
+                    </div>
+
+                    <div className="flex items-baseline gap-1 my-2">
+                      <span className="font-nevera text-3xl font-normal text-foreground">
+                        {currentPlan.price}
+                      </span>
+                      <span className="text-xs font-mono text-muted-foreground">
+                        {currentPlan.period}
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-muted-foreground font-light mb-3">
+                      {currentPlan.description}
+                    </p>
+
+                    <div className="space-y-1.5 pt-3 border-t border-border/50 text-xs font-mono text-muted-foreground">
+                      {currentPlan.features.map((feat, idx) => (
+                        <div key={idx} className="flex items-center gap-1.5 text-[11px]">
+                          <CheckCircle2 className="size-3 text-primary shrink-0" />
+                          <span>{feat}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </Card>
+
+                <div className="space-y-4 flex flex-col justify-between">
+                  <Card className="p-5 border border-border bg-card shadow-sm">
+                    <div className="text-[10.5px] uppercase tracking-wider text-muted-foreground font-mono font-semibold mb-1">
+                      Next Billing Cycle
+                    </div>
+                    <div className="text-lg font-bold text-foreground font-mono mt-1">
+                      Jun 1, 2026
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground mt-2">
+                      <span className="size-1.5 rounded-full bg-emerald-500" />
+                      <span>Auto-renew enabled</span>
+                    </div>
+                  </Card>
+
+                  {/* Super-Admin Managed Notice */}
+                  <div className="p-4 rounded-xl border border-border bg-secondary/30 text-xs text-muted-foreground space-y-1.5">
+                    <div className="flex items-center gap-1.5 text-foreground font-semibold">
+                      <ShieldCheck className="size-4 text-[#c9a84c] dark:text-[#e5d9c5]" />
+                      <span>Managed by Platform Super-Admin</span>
+                    </div>
+                    <p className="text-[11px] leading-relaxed">
+                      Plan tier changes, license limits, and seats are managed centrally by the Super-Admin. For upgrades, reach out to <strong className="text-foreground">support@buildersedge.com</strong>.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Invoice History */}
+              <div className="pt-2">
+                <div className="text-xs uppercase tracking-wider text-muted-foreground font-mono font-semibold mb-2.5">
+                  Invoice & Billing History
+                </div>
+                <table className="w-full text-sm border border-border rounded-xl overflow-hidden bg-card">
+                  <thead className="bg-secondary/50 text-[10.5px] font-mono text-muted-foreground uppercase tracking-wider">
                     <tr className="text-left">
-                      <th className="px-4 py-2 font-medium">Date</th>
-                      <th className="px-4 py-2 font-medium">Amount</th>
-                      <th className="px-4 py-2 font-medium">Status</th>
-                      <th className="px-4 py-2 font-medium text-right">Action</th>
+                      <th className="px-4 py-2.5 font-medium">Date</th>
+                      <th className="px-4 py-2.5 font-medium">Amount</th>
+                      <th className="px-4 py-2.5 font-medium">Status</th>
+                      <th className="px-4 py-2.5 font-medium text-right">Receipt</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {[["May 1, 2026", "$3,000", "Paid"], ["Apr 1, 2026", "$3,000", "Paid"], ["Mar 1, 2026", "$3,000", "Paid"]].map(([d, a, s]) => (
-                      <tr key={d} className="border-t border-border">
-                        <td className="px-4 py-2 text-foreground">{d}</td>
-                        <td className="px-4 py-2 font-mono text-foreground">{a}</td>
-                        <td className="px-4 py-2">
-                          <span className="text-xs px-2 py-0.5 rounded badge-success">{s}</span>
+                  <tbody className="divide-y divide-border">
+                    {[
+                      ["May 1, 2026", currentPlan.price, "Paid"],
+                      ["Apr 1, 2026", currentPlan.price, "Paid"],
+                      ["Mar 1, 2026", currentPlan.price, "Paid"]
+                    ].map(([d, a, s]) => (
+                      <tr key={d} className="hover:bg-muted/20 transition-colors">
+                        <td className="px-4 py-2.5 text-foreground text-xs">{d}</td>
+                        <td className="px-4 py-2.5 font-mono text-foreground text-xs font-bold">{a}</td>
+                        <td className="px-4 py-2.5">
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-mono font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">{s}</span>
                         </td>
-                        <td className="px-4 py-2 text-right">
+                        <td className="px-4 py-2.5 text-right">
                           <button
                             onClick={() => downloadInvoicePDF(d, a, s)}
-                            className="inline-flex items-center gap-1 text-xs text-primary hover:underline font-semibold cursor-pointer"
+                            className="inline-flex items-center gap-1 text-xs text-primary hover:underline font-mono font-semibold cursor-pointer"
                           >
                             <Download className="size-3" /> Download Invoice
                           </button>
@@ -1204,16 +1262,6 @@ function SettingsPage() {
                   </tbody>
                 </table>
               </div>
-
-              {/* ADD FUNDS MODAL */}
-              {/* {isAddFundsOpen && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-100">
-                  <Card className="w-full max-w-md bg-[#0B0B0C] border border-white/[0.08] rounded-xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
-                    ...
-                  </Card>
-                </div>
-              )} */}
-
             </div>
           )}
 

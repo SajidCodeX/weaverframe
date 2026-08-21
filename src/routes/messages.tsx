@@ -273,6 +273,9 @@ function MessagesPage() {
   const loadedLeadIdRef = useRef<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [newMessageText, setNewMessageText] = useState("");
+  const [emailSubject, setEmailSubject] = useState("");
+  const [showCcDrawer, setShowCcDrawer] = useState(false);
+  const [ccEmail, setCcEmail] = useState("");
 
   // Input focus ref
   const inputRef = useRef<HTMLInputElement>(null);
@@ -1210,22 +1213,37 @@ function MessagesPage() {
                 </div>
               </div>
 
-              {/* CONTEXT BAR */}
-              <div className="px-6 py-2.5 bg-[#080808]/90 border-b border-border flex items-center justify-between shadow-sm relative z-20">
-                <div className="flex items-center gap-5 text-xs font-medium">
-                  <div className="flex flex-col">
-                    <span className="text-[9px] text-muted-foreground uppercase tracking-widest font-mono">Score</span>
-                    <span className={`mt-1 px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider uppercase ${selectedThread.scoreTier === 'Hot' ? 'bg-red-500/10 text-red-400 border border-red-500/20' : selectedThread.scoreTier === 'Warm' ? 'bg-warning/10 text-warning border border-warning/20' : 'bg-cold/10 text-cold border border-cold/20'}`}>{selectedThread.scoreTier}</span>
+              {/* EMAIL THREAD SUBJECT & METADATA BAR */}
+              <div className="px-6 py-2.5 bg-[#080808]/90 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm relative z-20">
+                <div className="flex items-center gap-4 text-xs font-medium min-w-0">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider font-semibold shrink-0">
+                      Subject:
+                    </span>
+                    <span className="text-xs font-semibold text-foreground truncate">
+                      {emailSubject || `Re: Custom Spec Home Inquiry · ${selectedThread.leadName}`}
+                    </span>
                   </div>
-                  <div className="w-px h-6 bg-border/50" />
-                  <div className="flex flex-col">
-                    <span className="text-[9px] text-muted-foreground uppercase tracking-widest font-mono">Status</span>
-                    <span className="text-foreground mt-1 text-[11px]">{selectedThread.status}</span>
+                  <div className="hidden md:flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-secondary/80 border border-border text-[10.5px] font-mono text-muted-foreground shrink-0">
+                    <Mail className="size-3 text-primary" />
+                    <span>{selectedThread.email || `${selectedThread.leadName?.toLowerCase().replace(/\s+/g, '')}@client.com`}</span>
                   </div>
-                  <div className="w-px h-6 bg-border/50" />
-                  <div className="flex flex-col">
-                    <span className="text-[9px] text-muted-foreground uppercase tracking-widest font-mono">Est. Budget</span>
-                    <span className="text-foreground mt-1 text-[11px]">${Math.round(selectedThread.estimatedBudget / 1000)}K</span>
+                </div>
+
+                <div className="flex items-center gap-3 text-xs font-medium shrink-0 self-end sm:self-auto">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[9px] text-muted-foreground uppercase tracking-widest font-mono">Score:</span>
+                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider uppercase ${selectedThread.scoreTier === 'Hot' ? 'bg-red-500/10 text-red-400 border border-red-500/20' : selectedThread.scoreTier === 'Warm' ? 'bg-warning/10 text-warning border border-warning/20' : 'bg-cold/10 text-cold border border-cold/20'}`}>{selectedThread.scoreTier}</span>
+                  </div>
+                  <div className="w-px h-4 bg-border/50" />
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[9px] text-muted-foreground uppercase tracking-widest font-mono">Budget:</span>
+                    <span className="text-foreground font-mono text-[11px] font-bold">${Math.round(selectedThread.estimatedBudget / 1000)}K</span>
+                  </div>
+                  <div className="w-px h-4 bg-border/50" />
+                  <div className="flex items-center gap-1 text-[10px] font-mono text-emerald-500/90 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                    <Check className="size-2.5" />
+                    <span>Company Email Gateway</span>
                   </div>
                 </div>
               </div>
@@ -1255,83 +1273,19 @@ function MessagesPage() {
                 </div>
               )}
 
-              {/* Fixed Viewport Background Layer for WhatsApp Wallpaper */}
-              <div className="flex-1 flex flex-col min-h-0 relative bg-[#050608] overflow-hidden">
-                {/* Native React SVG WhatsApp Doodle Overlay */}
-                <div className="absolute inset-0 pointer-events-none overflow-hidden z-0 select-none opacity-40">
-                  <svg className="w-full h-full text-white" xmlns="http://www.w3.org/2000/svg">
-                    <defs>
-                      {/* LAYER A — base density layer */}
-                      <pattern id="doodle-layer-a" width="190" height="190" patternUnits="userSpaceOnUse">
-                        <g stroke="currentColor" strokeWidth="1.1" fill="none" strokeLinecap="round" strokeLinejoin="round" opacity="0.9">
-                          <g transform="translate(14,22) rotate(-31) scale(0.58)"><path d="M3 10 L9 4 L15 10 V16 H12 V11 H6 V16 H3 Z" /></g>
-                          <g transform="translate(71,9) rotate(63) scale(0.71)"><path d="M5 2 H13 V16 H5 Z M7 5 H9 M11 5 H11.1 M7 8 H9 M11 8 H11.1" /></g>
-                          <g transform="translate(133,31) rotate(-12) scale(0.49)"><path d="M3 16 V2 H14 M6 2 V16 M3 6 H11 M3 10 H11 M14 2 V9 L11 12" /></g>
-                          <g transform="translate(196,18) rotate(84) scale(0.66)"><circle cx="5" cy="5" r="3" /><path d="M8 5 H15 V9 H13 V7 H11 V9 H8 Z" /></g>
-                          <g transform="translate(29,68) rotate(-58) scale(0.73)"><path d="M3 12 C3 7 6 4 9 4 C12 4 15 7 15 12 H1 V14 H17 V12 Z" /></g>
-                          <g transform="translate(88,79) rotate(19) scale(0.55)"><path d="M4 2 H14 V16 H4 Z M4 6 H8 M4 10 H8 M4 14 H8" /></g>
-                          <g transform="translate(151,61) rotate(-73) scale(0.62)"><path d="M4 3 H14 V6 H11 V15 H7 V6 H4 Z M4 4 L14 14 M14 4 L4 14" /></g>
-                          <g transform="translate(210,88) rotate(41) scale(0.68)"><path d="M9 2 L10.5 7 L16 8.5 L10.5 10 L9 15 L7.5 10 L2 8.5 L7.5 7 Z" /></g>
-                          <g transform="translate(9,122) rotate(27) scale(0.6)"><path d="M3 3 H15 C16 3 17 4 17 5 V11 C17 12 16 13 15 13 H10 L5 16 V13 H3 Z" /></g>
-                          <g transform="translate(66,135) rotate(-46) scale(0.77)"><path d="M2 13 H12 V9 H8 L5 5 H2 V9 Z M3 15 H15" /></g>
-                          <g transform="translate(126,118) rotate(69) scale(0.53)"><path d="M3 4 H15 V16 H3 Z M3 8 H15 M6 2 V5 M12 2 V5" /></g>
-                          <g transform="translate(184,140) rotate(-24) scale(0.64)"><path d="M2 10 H10 V5 H14 L17 10 V14 H2 Z" /></g>
-                          <g transform="translate(38,178) rotate(52) scale(0.7)"><path d="M9 2 L11 6.5 L16 7 L12 11 L13.5 16 L9 13.5 L4.5 16 L6 11 L2 7 Z" /></g>
-                          <g transform="translate(97,191) rotate(-88) scale(0.57)"><path d="M3 10 L9 4 L15 10 V16 H12 V11 H6 V16 H3 Z" /></g>
-                          <g transform="translate(159,203) rotate(15) scale(0.61)"><path d="M5 2 H13 V16 H5 Z M7 5 H9 M11 5 H11.1 M7 8 H9 M11 8 H11.1" /></g>
-                          <g transform="translate(219,168) rotate(-39) scale(0.72)"><path d="M3 12 C3 7 6 4 9 4 C12 4 15 7 15 12 H1 V14 H17 V12 Z" /></g>
-                          <g transform="translate(55,225) rotate(76) scale(0.5)"><path d="M4 2 H14 V16 H4 Z M4 6 H8 M4 10 H8 M4 14 H8" /></g>
-                          <g transform="translate(112,215) rotate(-19) scale(0.65)"><path d="M9 2 L10.5 7 L16 8.5 L10.5 10 L9 15 L7.5 10 L2 8.5 L7.5 7 Z" /></g>
-                          <g transform="translate(178,228) rotate(33) scale(0.59)"><path d="M3 16 V2 H14 M6 2 V16 M3 6 H11 M3 10 H11 M14 2 V9 L11 12" /></g>
-                          <g transform="translate(226,120) rotate(-64) scale(0.63)"><circle cx="5" cy="5" r="3" /><path d="M8 5 H15 V9 H13 V7 H11 V9 H8 Z" /></g>
-                        </g>
-                      </pattern>
-
-                      {/* LAYER B — different period, breaks alignment with A */}
-                      <pattern id="doodle-layer-b" width="137" height="167" patternUnits="userSpaceOnUse" x="61" y="94">
-                        <g stroke="currentColor" strokeWidth="1.1" fill="none" strokeLinecap="round" strokeLinejoin="round" opacity="0.55">
-                          <g transform="translate(20,30) rotate(44) scale(0.52)"><path d="M2 13 H12 V9 H8 L5 5 H2 V9 Z M3 15 H15" /></g>
-                          <g transform="translate(90,18) rotate(-71) scale(0.6)"><path d="M3 4 H15 V16 H3 Z M3 8 H15 M6 2 V5 M12 2 V5" /></g>
-                          <g transform="translate(148,45) rotate(22) scale(0.68)"><path d="M2 10 H10 V5 H14 L17 10 V14 H2 Z" /></g>
-                          <g transform="translate(35,95) rotate(-33) scale(0.57)"><path d="M3 2 H13 V16 H3 Z M6 5 H10 M6 8 H10" /></g>
-                          <g transform="translate(105,110) rotate(88) scale(0.63)"><path d="M9 2 L11 6.5 L16 7 L12 11 L13.5 16 L9 13.5 L4.5 16 L6 11 L2 7 Z" /></g>
-                          <g transform="translate(155,135) rotate(-9) scale(0.5)"><path d="M3 10 L9 4 L15 10 V16 H12 V11 H6 V16 H3 Z" /></g>
-                          <g transform="translate(18,165) rotate(57) scale(0.66)"><path d="M4 3 H14 V6 H11 V15 H7 V6 H4 Z M4 4 L14 14 M14 4 L4 14" /></g>
-                          <g transform="translate(80,180) rotate(-48) scale(0.54)"><circle cx="5" cy="5" r="3" /><path d="M8 5 H15 V9 H13 V7 H11 V9 H8 Z" /></g>
-                          <g transform="translate(135,190) rotate(30) scale(0.6)"><path d="M3 3 H15 C16 3 17 4 17 5 V11 C17 12 16 13 15 13 H10 L5 16 V13 H3 Z" /></g>
-                        </g>
-                      </pattern>
-
-                      {/* LAYER C — third, slower period for max irregularity */}
-                      <pattern id="doodle-layer-c" width="155" height="124" patternUnits="userSpaceOnUse" x="29" y="118">
-                        <g stroke="currentColor" strokeWidth="1.1" fill="none" strokeLinecap="round" strokeLinejoin="round" opacity="0.4">
-                          <g transform="translate(25,20) rotate(-55) scale(0.55)"><path d="M5 2 H13 V16 H5 Z M7 5 H9 M11 5 H11.1 M7 8 H9 M11 8 H11.1" /></g>
-                          <g transform="translate(100,12) rotate(38) scale(0.62)"><path d="M3 16 V2 H14 M6 2 V16 M3 6 H11 M3 10 H11 M14 2 V9 L11 12" /></g>
-                          <g transform="translate(160,40) rotate(-18) scale(0.58)"><path d="M4 2 H14 V16 H4 Z M4 6 H8 M4 10 H8 M4 14 H8" /></g>
-                          <g transform="translate(40,80) rotate(70) scale(0.64)"><path d="M9 2 L10.5 7 L16 8.5 L10.5 10 L9 15 L7.5 10 L2 8.5 L7.5 7 Z" /></g>
-                          <g transform="translate(120,95) rotate(-27) scale(0.5)"><path d="M3 12 C3 7 6 4 9 4 C12 4 15 7 15 12 H1 V14 H17 V12 Z" /></g>
-                          <g transform="translate(170,120) rotate(46) scale(0.6)"><path d="M2 13 H12 V9 H8 L5 5 H2 V9 Z M3 15 H15" /></g>
-                        </g>
-                      </pattern>
-                    </defs>
-
-                    {/* Composite fill — all three layers stacked on same rect */}
-                    <rect width="100%" height="100%" fill="url(#doodle-layer-a)" />
-                    <rect width="100%" height="100%" fill="url(#doodle-layer-b)" />
-                    <rect width="100%" height="100%" fill="url(#doodle-layer-c)" />
-                  </svg>
-                </div>
-
-                {/* Messages Scroll Container - z-10 over fixed wallpaper */}
+              {/* Fixed Viewport Background Layer for Email Thread View */}
+              <div className="flex-1 flex flex-col min-h-0 relative bg-[#07080b] overflow-hidden">
+                {/* Messages Scroll Container */}
                 <div
                   ref={chatContainerRef}
                   onScroll={handleChatScroll}
-                  className="flex-1 overflow-y-auto p-6 space-y-4 min-h-0 relative z-10 custom-scrollbar"
+                  className="flex-1 overflow-y-auto p-6 space-y-5 min-h-0 relative z-10 custom-scrollbar"
                 >
                   {activeChat.messages.length > 0 ? (
                     activeChat.messages.map((msg, index) => {
-                      const isUser = msg.sender === "user" || msg.sender === "system";
+                      const isUser = msg.sender === "user";
                       const isAI = msg.sender === "system";
+                      const isLead = !isUser && !isAI;
 
                       const msgDate = new Date(msg.createdAt);
                       const prevMsg = index > 0 ? activeChat.messages[index - 1] : null;
@@ -1361,250 +1315,278 @@ function MessagesPage() {
                         }
                       }
 
-                      // Render high-fidelity custom cards for brochure shares
                       const isBrochureCard = msg.content.includes("📄 Document Shared");
-                      // Render high-fidelity custom cards for calendars/appointments
                       const isAppointmentCard = msg.content.includes("📆 Site Visit Booked");
-                      // Render file attachments (PDF, CAD, Docs)
                       const isFileAttachment = msg.content.includes("📎 File Attachment:");
-                      // Render photo / image attachments
                       const isImageAttachment = msg.content.includes("🖼️ Image Shared:");
-                      // Render interactive web / 3D virtual tour links
                       const isLinkShared = msg.content.includes("🔗 Link Shared:");
 
                       return (
                         <div key={msg.id} className="w-full">
                           {showDateDivider && (
-                            <div className="flex justify-center my-6">
-                              <span className="text-[10px] font-medium text-muted-foreground bg-[#111111] border border-white/10 px-3 py-1 rounded-full uppercase tracking-widest font-mono">
+                            <div className="flex justify-center my-4">
+                              <span className="text-[10px] font-medium text-muted-foreground bg-[#111115] border border-white/10 px-3 py-1 rounded-full uppercase tracking-widest font-mono">
                                 {dateLabel}
                               </span>
                             </div>
                           )}
-                          <div
-                            className={`flex flex-col ${isUser ? "items-end" : "items-start"} w-full group animate-in slide-in-from-bottom-2 duration-150`}
-                          >
-                            {isBrochureCard ? (
-                              /* Digital specs brochure presentation card */
-                              <div className="bg-[#111111] border border-white/[0.08] rounded-xl p-4 max-w-[400px] shadow-2xl relative overflow-hidden group/brochure">
-                                <div className="flex gap-3">
-                                  <div className="size-10 bg-primary/10 rounded-lg flex items-center justify-center border border-primary/20 shrink-0 text-primary">
-                                    <FileText className="size-5" />
-                                  </div>
-                                  <div className="min-w-0">
-                                    <h4 className="text-xs font-bold text-white truncate">{msg.content.replace("📄 Document Shared: ", "").split(".pdf|size=")[0]}</h4>
-                                    <p className="text-[10px] text-muted-foreground mt-0.5">Custom Specifications & Lookbook · {msg.content.includes("|size=") ? msg.content.split("|size=")[1] : "4.8 MB"}</p>
-                                  </div>
-                                </div>
-                                <div className="border-t border-border/50 mt-4 pt-3 flex items-center justify-between">
-                                  <span className="text-[9px] text-muted-foreground font-mono">Sent to Lead SMS & Email</span>
-                                  <a
-                                    href="#"
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      setIsLookbookOpen(true);
-                                      setLookbookPage(0);
-                                    }}
-                                    className="inline-flex items-center gap-1 text-[10px] font-bold text-white hover:underline"
-                                  >
-                                    Preview lookbook <ExternalLink className="size-3" />
-                                  </a>
-                                </div>
-                              </div>
-                            ) : isAppointmentCard ? (
-                              /* Premium Calendar Booking Confirmation Card */
-                              <div className="bg-success/5 border border-success/30 rounded-xl p-4 max-w-[400px] shadow-2xl relative overflow-hidden">
-                                <div className="flex gap-3">
-                                  <div className="size-10 bg-success/15 rounded-lg flex items-center justify-center border border-success/30 shrink-0 text-success">
-                                    <Calendar className="size-5" />
-                                  </div>
-                                  <div className="min-w-0">
-                                    <h4 className="text-xs font-bold text-white">Site Walkthrough Booked</h4>
-                                    <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">
-                                      {msg.content.replace("📆 Site Visit Booked: ", "")}
-                                    </p>
-                                  </div>
-                                </div>
-                                <div className="border-t border-success/10 mt-4 pt-3 flex items-center justify-between">
-                                  <span className="inline-flex items-center gap-1 text-[9px] text-success font-semibold tracking-wider uppercase font-mono">
-                                    <Check className="size-3" /> Confirmed Calendar Lock
-                                  </span>
-                                  {isGCalConnected ? (
-                                    <span className="inline-flex items-center gap-1 text-[9px] text-success font-bold font-mono">
-                                      <Check className="size-2.5" /> Synced to GCal
-                                    </span>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1 text-[9px] text-amber-500/80 font-bold font-mono" title="Connect Google Business Reviews integration in Settings to sync calendar">
-                                      <AlertCircle className="size-2.5" /> Local Lock (GCal Disconnected)
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            ) : isFileAttachment ? (
-                              /* Rich Document / PDF / CAD Blueprint Attachment Card */
-                              (() => {
-                                const parts = msg.content.replace("📎 File Attachment: ", "").split("\n\n");
-                                const metaStr = parts[0] || "";
-                                const caption = parts.slice(1).join("\n\n");
-                                const [fileName, sizeParam, typeParam, dataParam] = metaStr.split("|");
-                                const fileSize = sizeParam ? sizeParam.replace("size=", "") : "File";
-                                const fileType = typeParam ? typeParam.replace("type=", "") : "document";
-                                const dataUrl = dataParam ? dataParam.replace("data=", "") : undefined;
 
-                                return (
-                                  <div className="bg-[#14151e] border border-white/10 rounded-xl p-4 max-w-[420px] shadow-2xl relative overflow-hidden space-y-2">
-                                    <div className="flex gap-3 items-center">
-                                      <div className="size-11 bg-primary/10 rounded-lg flex items-center justify-center border border-primary/20 shrink-0 text-primary">
-                                        <FileText className="size-5" />
-                                      </div>
-                                      <div className="min-w-0 flex-1">
-                                        <h4 className="text-xs font-bold text-white truncate">{fileName || "Attached Document"}</h4>
-                                        <div className="flex items-center gap-2 mt-0.5">
-                                          <span className="text-[10px] text-muted-foreground font-mono bg-white/5 px-2 py-0.5 rounded border border-white/5">
-                                            {fileSize}
-                                          </span>
-                                          <span className="text-[10px] text-muted-foreground font-mono">
-                                            {fileType.includes("pdf") ? "PDF Document" : fileType.includes("cad") || fileType.includes("dwg") ? "CAD Blueprint" : "Document"}
-                                          </span>
+                          {/* Threaded Email Card */}
+                          <div
+                            className={`w-full rounded-2xl border transition-all animate-in slide-in-from-bottom-2 duration-150 ${
+                              isAI
+                                ? "bg-[#101118]/90 border-[#c9a84c]/30 shadow-md"
+                                : isUser
+                                  ? "bg-[#0c121e]/90 border-primary/30 shadow-md"
+                                  : "bg-[#111217]/90 border-border/80 shadow-sm"
+                            }`}
+                          >
+                            {/* Email Card Header */}
+                            <div className="p-3.5 sm:p-4 border-b border-border/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-secondary/15 rounded-t-2xl">
+                              <div className="flex items-center gap-3">
+                                <div
+                                  className={`size-8 rounded-xl flex items-center justify-center text-xs font-bold shrink-0 ${
+                                    isAI
+                                      ? "bg-[#c9a84c]/20 text-[#c9a84c] border border-[#c9a84c]/40"
+                                      : isUser
+                                        ? "bg-primary/20 text-primary border border-primary/40"
+                                        : "bg-secondary text-foreground border border-border"
+                                  }`}
+                                >
+                                  {isAI ? <Sparkles className="size-4" /> : isUser ? "You" : (activeChat.lead?.name?.[0] || "C")}
+                                </div>
+
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-semibold text-xs sm:text-sm text-foreground truncate">
+                                      {isAI
+                                        ? "AI Lead Concierge"
+                                        : isUser
+                                          ? "You (Builder Operations)"
+                                          : activeChat.lead?.name || "Client Prospect"}
+                                    </span>
+                                    <span className="text-[10px] font-mono text-muted-foreground truncate">
+                                      &lt;{isAI ? "concierge@buildersedge.ai" : isUser ? "sales@yourcompany.com" : (activeChat.lead?.email || `${activeChat.lead?.name?.toLowerCase().replace(/\s+/g, '') || 'client'}@email.com`)}&gt;
+                                    </span>
+                                  </div>
+                                  <div className="text-[10px] font-mono text-muted-foreground mt-0.5 flex items-center gap-2">
+                                    <span>To: {isUser || isAI ? (activeChat.lead?.email || activeChat.lead?.name || "Client") : "Your Company Team"}</span>
+                                    {isAI && (
+                                      <span className="px-1.5 py-0.2 rounded text-[8.5px] font-mono font-bold bg-[#c9a84c]/20 text-[#c9a84c] border border-[#c9a84c]/30">
+                                        Autonomous AI
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                                <span className="text-[10px] font-mono text-muted-foreground">
+                                  {msgDate.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                                </span>
+                                <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-semibold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 flex items-center gap-1">
+                                  <Check className="size-2.5" /> Delivered via Email
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Email Card Body */}
+                            <div className="p-4 sm:p-5 text-xs sm:text-sm text-foreground/90 leading-relaxed font-sans space-y-3">
+                              {isBrochureCard ? (
+                                /* Digital specs brochure presentation card */
+                                <div className="bg-[#151620] border border-white/[0.08] rounded-xl p-4 max-w-[440px] shadow-lg relative overflow-hidden">
+                                  <div className="flex gap-3">
+                                    <div className="size-10 bg-primary/10 rounded-lg flex items-center justify-center border border-primary/20 shrink-0 text-primary">
+                                      <FileText className="size-5" />
+                                    </div>
+                                    <div className="min-w-0">
+                                      <h4 className="text-xs font-bold text-white truncate">{msg.content.replace("📄 Document Shared: ", "").split(".pdf|size=")[0]}</h4>
+                                      <p className="text-[10px] text-muted-foreground mt-0.5">Custom Specifications & Lookbook · {msg.content.includes("|size=") ? msg.content.split("|size=")[1] : "4.8 MB"}</p>
+                                    </div>
+                                  </div>
+                                  <div className="border-t border-border/50 mt-4 pt-3 flex items-center justify-between">
+                                    <span className="text-[9px] text-muted-foreground font-mono">Floor Plan Specification Attachment</span>
+                                    <a
+                                      href="#"
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        setIsLookbookOpen(true);
+                                        setLookbookPage(0);
+                                      }}
+                                      className="inline-flex items-center gap-1 text-[10px] font-bold text-white hover:underline"
+                                    >
+                                      Preview lookbook <ExternalLink className="size-3" />
+                                    </a>
+                                  </div>
+                                </div>
+                              ) : isAppointmentCard ? (
+                                /* Premium Calendar Booking Confirmation Card */
+                                <div className="bg-success/5 border border-success/30 rounded-xl p-4 max-w-[440px] shadow-lg relative overflow-hidden">
+                                  <div className="flex gap-3">
+                                    <div className="size-10 bg-success/15 rounded-lg flex items-center justify-center border border-success/30 shrink-0 text-success">
+                                      <Calendar className="size-5" />
+                                    </div>
+                                    <div className="min-w-0">
+                                      <h4 className="text-xs font-bold text-white">Discovery Call & Site Walkthrough</h4>
+                                      <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">
+                                        {msg.content.replace("📆 Site Visit Booked: ", "")}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="border-t border-success/10 mt-4 pt-3 flex items-center justify-between">
+                                    <span className="inline-flex items-center gap-1 text-[9px] text-success font-semibold tracking-wider uppercase font-mono">
+                                      <Check className="size-3" /> Confirmed Calendar Booking
+                                    </span>
+                                  </div>
+                                </div>
+                              ) : isFileAttachment ? (
+                                /* Document / File Attachment */
+                                (() => {
+                                  const parts = msg.content.replace("📎 File Attachment: ", "").split("\n\n");
+                                  const metaStr = parts[0] || "";
+                                  const caption = parts.slice(1).join("\n\n");
+                                  const [fileName, sizeParam, typeParam, dataParam] = metaStr.split("|");
+                                  const fileSize = sizeParam ? sizeParam.replace("size=", "") : "File";
+                                  const fileType = typeParam ? typeParam.replace("type=", "") : "document";
+                                  const dataUrl = dataParam ? dataParam.replace("data=", "") : undefined;
+
+                                  return (
+                                    <div className="bg-[#14151e] border border-white/10 rounded-xl p-4 max-w-[440px] shadow-lg relative overflow-hidden space-y-2">
+                                      <div className="flex gap-3 items-center">
+                                        <div className="size-11 bg-primary/10 rounded-lg flex items-center justify-center border border-primary/20 shrink-0 text-primary">
+                                          <FileText className="size-5" />
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                          <h4 className="text-xs font-bold text-white truncate">{fileName || "Attached Document"}</h4>
+                                          <div className="flex items-center gap-2 mt-0.5">
+                                            <span className="text-[10px] text-muted-foreground font-mono bg-white/5 px-2 py-0.5 rounded border border-white/5">
+                                              {fileSize}
+                                            </span>
+                                            <span className="text-[10px] text-muted-foreground font-mono">
+                                              {fileType.includes("pdf") ? "PDF Document" : "Engineering Specs"}
+                                            </span>
+                                          </div>
                                         </div>
                                       </div>
+                                      {caption && (
+                                        <p className="text-xs text-white/90 pt-2 border-t border-white/5 leading-relaxed whitespace-pre-line">
+                                          {caption}
+                                        </p>
+                                      )}
+                                      <div className="border-t border-white/5 pt-2.5 flex items-center justify-between">
+                                        <span className="text-[9px] text-muted-foreground font-mono">Direct File Attachment</span>
+                                        {dataUrl ? (
+                                          <a
+                                            href={dataUrl}
+                                            download={fileName}
+                                            className="inline-flex items-center gap-1 text-[11px] font-bold text-primary hover:underline cursor-pointer"
+                                          >
+                                            <Download className="size-3" /> Download / View
+                                          </a>
+                                        ) : (
+                                          <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
+                                            <Check className="size-3" /> Attached
+                                          </span>
+                                        )}
+                                      </div>
                                     </div>
-                                    {caption && (
-                                      <p className="text-xs text-white/90 pt-2 border-t border-white/5 leading-relaxed whitespace-pre-line">
-                                        {caption}
-                                      </p>
-                                    )}
-                                    <div className="border-t border-white/5 pt-2.5 flex items-center justify-between">
-                                      <span className="text-[9px] text-muted-foreground font-mono">Direct File Attachment</span>
-                                      {dataUrl ? (
-                                        <a
-                                          href={dataUrl}
-                                          download={fileName}
-                                          className="inline-flex items-center gap-1 text-[11px] font-bold text-primary hover:underline cursor-pointer"
+                                  );
+                                })()
+                              ) : isImageAttachment ? (
+                                /* Image Attachment */
+                                (() => {
+                                  const parts = msg.content.replace("🖼️ Image Shared: ", "").split("\n\n");
+                                  const metaStr = parts[0] || "";
+                                  const caption = parts.slice(1).join("\n\n");
+                                  const [fileName, sizeParam, dataParam] = metaStr.split("|");
+                                  const fileSize = sizeParam ? sizeParam.replace("size=", "") : "";
+                                  const dataUrl = dataParam ? dataParam.replace("data=", "") : undefined;
+
+                                  return (
+                                    <div className="bg-[#14151e] border border-white/10 rounded-xl p-3 max-w-[440px] shadow-lg space-y-2">
+                                      {dataUrl && (
+                                        <div
+                                          onClick={() => setActiveImageModalUrl(dataUrl)}
+                                          className="relative rounded-lg overflow-hidden border border-white/10 max-h-[260px] bg-black/40 cursor-pointer group/img"
                                         >
-                                          <Download className="size-3" /> Download / View
-                                        </a>
-                                      ) : (
-                                        <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
-                                          <Check className="size-3" /> Attached
-                                        </span>
+                                          <img src={dataUrl} alt={fileName} className="w-full h-auto object-cover max-h-[260px] group-hover/img:scale-105 transition-transform duration-200" />
+                                        </div>
+                                      )}
+                                      <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono px-1">
+                                        <span className="truncate max-w-[200px]">{fileName}</span>
+                                        {fileSize && <span>{fileSize}</span>}
+                                      </div>
+                                      {caption && (
+                                        <p className="text-xs text-white/90 pt-1 leading-relaxed border-t border-white/5 whitespace-pre-line">
+                                          {caption}
+                                        </p>
                                       )}
                                     </div>
-                                  </div>
-                                );
-                              })()
-                            ) : isImageAttachment ? (
-                              /* Photo / Image Attachment Thumbnail with Lightbox */
-                              (() => {
-                                const parts = msg.content.replace("🖼️ Image Shared: ", "").split("\n\n");
-                                const metaStr = parts[0] || "";
-                                const caption = parts.slice(1).join("\n\n");
-                                const [fileName, sizeParam, dataParam] = metaStr.split("|");
-                                const fileSize = sizeParam ? sizeParam.replace("size=", "") : "";
-                                const dataUrl = dataParam ? dataParam.replace("data=", "") : undefined;
+                                  );
+                                })()
+                              ) : isLinkShared ? (
+                                /* Link / 3D Virtual Tour */
+                                (() => {
+                                  const parts = msg.content.replace("🔗 Link Shared: ", "").split("\n\n");
+                                  const metaStr = parts[0] || "";
+                                  const caption = parts.slice(1).join("\n\n");
+                                  const [titleParam, urlParam, categoryParam] = metaStr.split("|");
+                                  const title = titleParam || "Shared Web Link";
+                                  const url = urlParam ? urlParam.replace("url=", "") : "#";
+                                  const category = categoryParam ? categoryParam.replace("category=", "") : "Virtual Tour";
 
-                                return (
-                                  <div className="bg-[#14151e] border border-white/10 rounded-xl p-3 max-w-[380px] shadow-2xl overflow-hidden space-y-2">
-                                    {dataUrl && (
-                                      <div 
-                                        className="relative rounded-lg overflow-hidden cursor-pointer group bg-black/40 border border-white/5"
-                                        onClick={() => setActiveImageModalUrl(dataUrl)}
-                                      >
-                                        <img src={dataUrl} alt={fileName} className="w-full max-h-60 object-cover group-hover:scale-105 transition-transform duration-200" />
-                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                          <span className="px-3 py-1.5 rounded-full bg-black/80 text-white text-xs font-mono flex items-center gap-1.5 border border-white/20 shadow-xl">
-                                            <Eye className="size-3.5" /> Fullscreen Preview
+                                  return (
+                                    <div className="bg-[#14151e] border border-[#c9a84c]/30 rounded-xl p-4 max-w-[440px] shadow-lg space-y-2.5">
+                                      <div className="flex gap-3 items-start">
+                                        <div className="size-10 bg-[#c9a84c]/15 rounded-lg flex items-center justify-center border border-[#c9a84c]/30 shrink-0 text-[#c9a84c] dark:text-[#e5d9c5]">
+                                          <Globe className="size-5" />
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                          <span className="text-[9px] uppercase tracking-wider font-mono font-bold text-[#c9a84c] dark:text-[#e5d9c5] block">
+                                            {category}
                                           </span>
+                                          <h4 className="text-xs font-bold text-white mt-0.5 truncate">{title}</h4>
+                                          <p className="text-[10px] text-muted-foreground mt-0.5 truncate font-mono">{url}</p>
                                         </div>
                                       </div>
-                                    )}
-                                    <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono px-1">
-                                      <span className="truncate max-w-[200px]">{fileName}</span>
-                                      {fileSize && <span>{fileSize}</span>}
-                                    </div>
-                                    {caption && (
-                                      <p className="text-xs text-white/90 pt-1 leading-relaxed border-t border-white/5 whitespace-pre-line">
-                                        {caption}
-                                      </p>
-                                    )}
-                                  </div>
-                                );
-                              })()
-                            ) : isLinkShared ? (
-                              /* Interactive Web Link / 3D Virtual Tour Card */
-                              (() => {
-                                const parts = msg.content.replace("🔗 Link Shared: ", "").split("\n\n");
-                                const metaStr = parts[0] || "";
-                                const caption = parts.slice(1).join("\n\n");
-                                const [titleParam, urlParam, categoryParam] = metaStr.split("|");
-                                const title = titleParam || "Shared Web Link";
-                                const url = urlParam ? urlParam.replace("url=", "") : "#";
-                                const category = categoryParam ? categoryParam.replace("category=", "") : "Virtual Tour";
-
-                                return (
-                                  <div className="bg-[#14151e] border border-[#c9a84c]/30 rounded-xl p-4 max-w-[420px] shadow-2xl relative overflow-hidden space-y-2.5">
-                                    <div className="flex gap-3 items-start">
-                                      <div className="size-10 bg-[#c9a84c]/15 rounded-lg flex items-center justify-center border border-[#c9a84c]/30 shrink-0 text-[#c9a84c] dark:text-[#e5d9c5]">
-                                        <Globe className="size-5" />
-                                      </div>
-                                      <div className="min-w-0 flex-1">
-                                        <span className="text-[9px] uppercase tracking-wider font-mono font-bold text-[#c9a84c] dark:text-[#e5d9c5] block">
-                                          {category}
-                                        </span>
-                                        <h4 className="text-xs font-bold text-white mt-0.5 truncate">{title}</h4>
-                                        <p className="text-[10px] text-muted-foreground mt-0.5 truncate font-mono">{url}</p>
+                                      {caption && (
+                                        <p className="text-xs text-white/90 pt-2 border-t border-white/5 leading-relaxed whitespace-pre-line">
+                                          {caption}
+                                        </p>
+                                      )}
+                                      <div className="border-t border-white/5 pt-2.5 flex items-center justify-between">
+                                        <span className="text-[9px] text-muted-foreground font-mono">External Resource</span>
+                                        <a
+                                          href={url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#c9a84c]/20 hover:bg-[#c9a84c]/30 text-[#c9a84c] dark:text-[#e5d9c5] text-xs font-bold transition-colors cursor-pointer"
+                                        >
+                                          Open Link <ExternalLink className="size-3" />
+                                        </a>
                                       </div>
                                     </div>
-                                    {caption && (
-                                      <p className="text-xs text-white/90 pt-2 border-t border-white/5 leading-relaxed whitespace-pre-line">
-                                        {caption}
-                                      </p>
-                                    )}
-                                    <div className="border-t border-white/5 pt-2.5 flex items-center justify-between">
-                                      <span className="text-[9px] text-muted-foreground font-mono">External Resource</span>
-                                      <a
-                                        href={url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#c9a84c]/20 hover:bg-[#c9a84c]/30 text-[#c9a84c] dark:text-[#e5d9c5] text-xs font-bold transition-colors cursor-pointer"
-                                      >
-                                        Open Link <ExternalLink className="size-3" />
-                                      </a>
-                                    </div>
-                                  </div>
-                                );
-                              })()
-                            ) : (
-                              /* Standard Message Bubble */
-                              <div
-                                className={`relative p-3 rounded-2xl text-xs leading-relaxed max-w-[70%] font-sans select-text shadow-xl ${isUser
-                                  ? "bg-primary text-black rounded-tr-none font-medium opacity-100"
-                                  : "bg-[#151720] border border-white/10 text-white rounded-tl-none opacity-100"
-                                  }`}
-                              >
-                                {isAI && (
-                                  <div className="absolute -top-2 -left-2 bg-[#0B0B0C] rounded-full p-1 border border-primary/30 text-primary shadow-sm" title="Generated by AI Concierge">
-                                    <Sparkles className="size-3" />
-                                  </div>
-                                )}
-                                <p className="whitespace-pre-line">{msg.content}</p>
-                              </div>
-                            )}
-
-                            {/* Hover Timestamp metadata display */}
-                            <span className="text-[9px] text-muted-foreground/60 mt-1 select-none font-mono px-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                              {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </span>
+                                  );
+                                })()
+                              ) : (
+                                /* Standard Email Text Body */
+                                <p className="whitespace-pre-line leading-relaxed text-sm text-foreground/95 select-text font-sans">
+                                  {msg.content}
+                                </p>
+                              )}
+                            </div>
                           </div>
                         </div>
                       );
                     })
                   ) : (
-                    <div className="flex flex-col items-center justify-center h-full text-center">
-                      <MessageSquare className="size-8 text-muted-foreground mb-3" />
-                      <p className="text-xs text-foreground font-semibold">No direct messages yet</p>
-                      <p className="text-[11px] text-muted-foreground mt-1 max-w-xs leading-relaxed">
-                        Send a message to kick off direct communication. All follow-ups will log and track instantly.
+                    <div className="flex flex-col items-center justify-center h-full text-center py-16">
+                      <div className="size-12 rounded-2xl bg-secondary/60 border border-border flex items-center justify-center mb-3">
+                        <Mail className="size-6 text-muted-foreground" />
+                      </div>
+                      <p className="text-sm text-foreground font-semibold">No emails exchanged yet</p>
+                      <p className="text-xs text-muted-foreground mt-1 max-w-sm leading-relaxed">
+                        Use the email composer below to initiate your formal correspondence with {selectedThread.leadName}.
                       </p>
                     </div>
                   )}
@@ -1612,10 +1594,9 @@ function MessagesPage() {
                   {/* Typing Indicator for simulated replies */}
                   {isSimulating && (
                     <div className="flex flex-col items-start w-full group animate-in slide-in-from-bottom-2 duration-150 mt-2 mb-2">
-                      <div className="relative p-3 rounded-2xl text-[13px] bg-[#151720] border border-white/10 text-white rounded-tl-none opacity-100 shadow-xl flex items-center gap-1.5 h-10 w-16">
-                        <span className="w-1.5 h-1.5 rounded-full bg-white/40 animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                        <span className="w-1.5 h-1.5 rounded-full bg-white/40 animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                        <span className="w-1.5 h-1.5 rounded-full bg-white/40 animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                      <div className="p-3 rounded-xl bg-card border border-border flex items-center gap-2 text-xs text-muted-foreground font-mono">
+                        <Loader2 className="size-3.5 animate-spin text-primary" />
+                        <span>AI Concierge is generating client email response...</span>
                       </div>
                     </div>
                   )}
@@ -1625,29 +1606,29 @@ function MessagesPage() {
                 </div>
               </div>
 
-              {/* QUICK INSTANT RESPONSE SHORTCUTS */}
-              <div className="px-6 py-2 bg-[#080808]/40 border-t border-border/40 flex items-center gap-2 overflow-x-auto select-none">
-                <span className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground shrink-0 select-none">
-                  Draft Quick Tag:
+              {/* QUICK EMAIL RESPONSE TEMPLATES */}
+              <div className="px-6 py-2 bg-[#090a0f] border-t border-border/40 flex items-center gap-2 overflow-x-auto select-none shrink-0">
+                <span className="text-[9.5px] font-mono uppercase tracking-widest text-muted-foreground shrink-0 select-none">
+                  Draft Quick Snippet:
                 </span>
                 {[
-                  "What is your construction timeline?",
-                  "Let's meet at the Lakeway site this Saturday!",
-                  "Could you confirm your target budget range?",
-                  "Here is our standard specifications list."
+                  "Could you confirm your target construction timeline and ideal start date?",
+                  "Would you be open to a quick 15-minute discovery call this week?",
+                  "I've attached our architectural specifications and digital lookbook for your review.",
+                  "Let's schedule a site walkthrough at your property location this Saturday."
                 ].map((suggestText) => (
                   <button
                     key={suggestText}
                     onClick={() => handleSuggestionClick(suggestText)}
-                    className="px-2.5 py-1 text-[10px] bg-white/[0.02] border border-white/[0.05] hover:bg-white/[0.06] hover:border-white/10 text-muted-foreground hover:text-white rounded-full transition-all shrink-0 active:scale-95"
+                    className="px-3 py-1 text-[10.5px] bg-secondary/40 border border-border hover:bg-secondary hover:text-foreground text-muted-foreground rounded-full transition-all shrink-0 active:scale-95 cursor-pointer truncate max-w-xs"
                   >
                     {suggestText}
                   </button>
                 ))}
               </div>
 
-              {/* MESSAGE COMPOSER FOOTER INPUT WITH ATTACHMENT & LINK SUITE */}
-              <div className="p-4 border-t border-border bg-[#0B0B0C]/90 backdrop-blur-md relative z-30 space-y-2">
+              {/* RICH EMAIL COMPOSER */}
+              <div className="p-4 border-t border-border bg-[#0B0B0C] relative z-30 space-y-3 shrink-0">
                 {isUserScrolledUp && (
                   <button
                     type="button"
@@ -1655,7 +1636,7 @@ function MessagesPage() {
                       e.preventDefault();
                       scrollToBottom(true, "smooth");
                     }}
-                    className="absolute -top-20 left-1/2 -translate-x-1/2 z-50 pointer-events-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#141418]/95 border border-primary/50 text-primary shadow-2xl hover:bg-primary hover:text-black hover:scale-105 active:scale-95 transition-all group backdrop-blur-md cursor-pointer animate-in fade-in slide-in-from-bottom-2 duration-200"
+                    className="absolute -top-14 left-1/2 -translate-x-1/2 z-50 pointer-events-auto flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[#141418]/95 border border-primary/50 text-primary shadow-2xl hover:bg-primary hover:text-black transition-all group cursor-pointer animate-in fade-in slide-in-from-bottom-2 duration-200"
                     title="Scroll to latest messages"
                   >
                     <ChevronDown className="size-4 transition-transform group-hover:translate-y-0.5" />
@@ -1664,7 +1645,7 @@ function MessagesPage() {
                         {newMessagesCount}
                       </span>
                     ) : (
-                      <span className="text-[11px] font-medium tracking-tight">Latest</span>
+                      <span className="text-[11px] font-medium tracking-tight">Latest Emails</span>
                     )}
                   </button>
                 )}
@@ -1678,134 +1659,187 @@ function MessagesPage() {
                   accept="image/*,application/pdf,.doc,.docx,.cad,.dwg,.txt,.csv"
                 />
 
-                {/* Pre-Send Attachment Banner (File) */}
-                {attachedFile && (
-                  <div className="p-2.5 px-3 rounded-xl bg-[#14151f] border border-primary/40 flex items-center justify-between text-xs text-white animate-in slide-in-from-bottom-1 shadow-lg">
-                    <div className="flex items-center gap-3 min-w-0">
-                      {attachedFile.type.startsWith("image/") && attachedFile.dataUrl ? (
-                        <img src={attachedFile.dataUrl} alt="Preview" className="size-9 rounded-lg object-cover border border-white/10 shrink-0" />
-                      ) : (
-                        <div className="size-9 rounded-lg bg-primary/10 border border-primary/30 flex items-center justify-center text-primary shrink-0">
-                          <FileText className="size-5" />
+                {/* Main Email Envelope Card */}
+                <div className="rounded-2xl border border-border bg-[#0f1015] shadow-lg overflow-hidden focus-within:border-primary/60 transition-all">
+                  {/* Composer Header Bar */}
+                  <div className="p-3 border-b border-border/40 bg-secondary/30 flex flex-col gap-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <span className="text-[10.5px] font-mono uppercase tracking-wider text-muted-foreground font-semibold shrink-0">
+                          To:
+                        </span>
+                        <div className="px-2.5 py-0.5 rounded-md bg-secondary border border-border text-xs font-mono text-foreground truncate max-w-xs sm:max-w-md">
+                          {selectedThread.leadName} &lt;{selectedThread.email || `${selectedThread.leadName?.toLowerCase().replace(/\s+/g, '')}@client.com`}&gt;
                         </div>
-                      )}
-                      <div className="min-w-0">
-                        <p className="font-semibold text-xs text-white truncate">{attachedFile.name}</p>
-                        <p className="text-[10px] text-muted-foreground font-mono">{attachedFile.size} · Ready to upload & send</p>
                       </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setShowCcDrawer(prev => !prev)}
+                        className={`text-[10px] font-mono px-2 py-1 rounded border transition-colors cursor-pointer shrink-0 ${
+                          showCcDrawer ? "bg-primary/20 border-primary text-primary" : "border-border text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {showCcDrawer ? "Hide CC" : "+ CC / BCC"}
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setAttachedFile(null)}
-                      className="size-6 rounded-full bg-white/5 hover:bg-rose-500/20 text-muted-foreground hover:text-rose-400 flex items-center justify-center transition-colors cursor-pointer"
-                      title="Remove attachment"
-                    >
-                      <X className="size-3.5" />
-                    </button>
-                  </div>
-                )}
 
-                {/* Pre-Send Attachment Banner (Link) */}
-                {attachedLink && (
-                  <div className="p-2.5 px-3 rounded-xl bg-[#14151f] border border-[#c9a84c]/40 flex items-center justify-between text-xs text-white animate-in slide-in-from-bottom-1 shadow-lg">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="size-9 rounded-lg bg-[#c9a84c]/15 border border-[#c9a84c]/30 flex items-center justify-center text-[#c9a84c] dark:text-[#e5d9c5] shrink-0">
-                        <Globe className="size-5" />
+                    {/* CC / BCC Drawer */}
+                    {showCcDrawer && (
+                      <div className="flex items-center gap-2 pt-2 border-t border-border/30 animate-in slide-in-from-top-1">
+                        <span className="text-[10.5px] font-mono uppercase tracking-wider text-muted-foreground font-semibold shrink-0">
+                          CC:
+                        </span>
+                        <input
+                          type="email"
+                          value={ccEmail}
+                          onChange={(e) => setCcEmail(e.target.value)}
+                          placeholder="architect@yourcompany.com, pm@yourcompany.com"
+                          className="w-full bg-transparent text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none font-mono"
+                        />
                       </div>
-                      <div className="min-w-0">
-                        <p className="font-semibold text-xs text-white truncate">{attachedLink.title}</p>
-                        <p className="text-[10px] text-muted-foreground font-mono truncate">{attachedLink.url} ({attachedLink.category})</p>
-                      </div>
+                    )}
+
+                    {/* Subject Line Field */}
+                    <div className="flex items-center gap-2 pt-1">
+                      <span className="text-[10.5px] font-mono uppercase tracking-wider text-muted-foreground font-semibold shrink-0">
+                        Subject:
+                      </span>
+                      <input
+                        type="text"
+                        value={emailSubject}
+                        onChange={(e) => setEmailSubject(e.target.value)}
+                        placeholder={`Re: Custom Spec Home Inquiry · ${selectedThread.leadName}`}
+                        className="w-full bg-transparent text-xs font-semibold text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
+                      />
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setAttachedLink(null)}
-                      className="size-6 rounded-full bg-white/5 hover:bg-rose-500/20 text-muted-foreground hover:text-rose-400 flex items-center justify-center transition-colors cursor-pointer"
-                      title="Remove link"
-                    >
-                      <X className="size-3.5" />
-                    </button>
-                  </div>
-                )}
-
-                {/* Input Controls Bar */}
-                <form onSubmit={handleSendMessage} className="flex items-center gap-1.5 bg-[#141414] border border-border focus-within:border-primary/80 transition-all rounded-xl p-1.5 shadow-sm">
-                  {/* Action Buttons Toolbar */}
-                  <div className="flex items-center gap-0.5 shrink-0 pl-1">
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={isSending}
-                      className="size-8 rounded-lg hover:bg-white/10 text-muted-foreground hover:text-white flex items-center justify-center transition-colors cursor-pointer"
-                      title="Attach Blueprint, PDF, Photo, or File"
-                    >
-                      <Paperclip className="size-4" />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setIsLinkModalOpen(true)}
-                      disabled={isSending}
-                      className="size-8 rounded-lg hover:bg-white/10 text-muted-foreground hover:text-white flex items-center justify-center transition-colors cursor-pointer"
-                      title="Insert 3D Virtual Tour, Lookbook Link, or URL"
-                    >
-                      <Link2 className="size-4" />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setIsPortfolioModalOpen(true)}
-                      disabled={isSending}
-                      className="size-8 rounded-lg hover:bg-white/10 text-muted-foreground hover:text-white flex items-center justify-center transition-colors cursor-pointer"
-                      title="Share Architectural Specs Portfolio / PDF"
-                    >
-                      <BookOpen className="size-4" />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setIsSchedulingOpen(true)}
-                      disabled={isSending}
-                      className="size-8 rounded-lg hover:bg-white/10 text-muted-foreground hover:text-primary flex items-center justify-center transition-colors cursor-pointer"
-                      title="Schedule Site Visit / Walkthrough"
-                    >
-                      <Calendar className="size-4" />
-                    </button>
                   </div>
 
-                  <div className="w-px h-5 bg-border/60 mx-1 shrink-0" />
+                  {/* Pre-Send Attachment Banner (File) */}
+                  {attachedFile && (
+                    <div className="m-3 p-2.5 px-3 rounded-xl bg-secondary/60 border border-primary/40 flex items-center justify-between text-xs text-white">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <FileText className="size-5 text-primary shrink-0" />
+                        <div className="min-w-0">
+                          <p className="font-semibold text-xs text-white truncate">{attachedFile.name}</p>
+                          <p className="text-[10px] text-muted-foreground font-mono">{attachedFile.size} · Ready to attach to email</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setAttachedFile(null)}
+                        className="size-6 rounded-full bg-white/5 hover:bg-rose-500/20 text-muted-foreground hover:text-rose-400 flex items-center justify-center transition-colors cursor-pointer"
+                      >
+                        <X className="size-3.5" />
+                      </button>
+                    </div>
+                  )}
 
-                  {/* Main Message Input */}
-                  <input
-                    type="text"
-                    disabled={isSending}
-                    ref={inputRef}
+                  {/* Pre-Send Attachment Banner (Link) */}
+                  {attachedLink && (
+                    <div className="m-3 p-2.5 px-3 rounded-xl bg-secondary/60 border border-[#c9a84c]/40 flex items-center justify-between text-xs text-white">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <Globe className="size-5 text-[#c9a84c] shrink-0" />
+                        <div className="min-w-0">
+                          <p className="font-semibold text-xs text-white truncate">{attachedLink.title}</p>
+                          <p className="text-[10px] text-muted-foreground font-mono truncate">{attachedLink.url}</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setAttachedLink(null)}
+                        className="size-6 rounded-full bg-white/5 hover:bg-rose-500/20 text-muted-foreground hover:text-rose-400 flex items-center justify-center transition-colors cursor-pointer"
+                      >
+                        <X className="size-3.5" />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Multi-line Email Body Editor */}
+                  <textarea
                     value={newMessageText}
                     onChange={(e) => setNewMessageText(e.target.value)}
-                    placeholder={
-                      attachedFile 
-                        ? `Add a note with ${attachedFile.name}...` 
-                        : attachedLink 
-                          ? `Add a note with ${attachedLink.title}...` 
-                          : `Type message to ${selectedThread.leadName}... (Press Enter to Send)`
-                    }
-                    className="flex-1 bg-transparent border-0 px-2 py-2 text-xs text-white placeholder-muted-foreground focus:outline-none focus:ring-0 leading-relaxed disabled:opacity-40"
+                    onKeyDown={(e) => {
+                      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                        e.preventDefault();
+                        handleSendMessage();
+                      }
+                    }}
+                    placeholder={`Compose email response to ${selectedThread.leadName}... (Press Ctrl+Enter to Send)`}
+                    className="w-full bg-transparent px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none resize-y min-h-[90px] font-sans leading-relaxed"
                   />
 
-                  {/* Send Button */}
-                  <button
-                    type="submit"
-                    disabled={isSending || (!newMessageText.trim() && !attachedFile && !attachedLink)}
-                    className="size-8 bg-primary rounded-lg text-black hover:bg-primary/95 transition-all disabled:opacity-30 active:scale-95 flex items-center justify-center cursor-pointer shrink-0 shadow-sm"
-                    title="Send Message"
-                  >
-                    {isSending ? (
-                      <Loader2 className="size-3.5 animate-spin text-black" />
-                    ) : (
-                      <Send className="size-3.5 text-black" />
-                    )}
-                  </button>
-                </form>
+                  {/* Email Actions Toolbar & Send Button */}
+                  <div className="p-3 bg-secondary/20 border-t border-border/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    {/* Attachment & Insert Buttons */}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isSending}
+                        className="px-2.5 py-1.5 rounded-lg border border-border hover:bg-secondary text-muted-foreground hover:text-foreground text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                        title="Attach PDF, Blueprint, Specs, or Docs"
+                      >
+                        <Paperclip className="size-3.5" />
+                        <span>Attach File</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsLinkModalOpen(true)}
+                        disabled={isSending}
+                        className="px-2.5 py-1.5 rounded-lg border border-border hover:bg-secondary text-muted-foreground hover:text-foreground text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                        title="Insert 3D Virtual Tour, Lookbook Link, or URL"
+                      >
+                        <Globe className="size-3.5" />
+                        <span>Insert 3D Link</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsPortfolioModalOpen(true)}
+                        disabled={isSending}
+                        className="px-2.5 py-1.5 rounded-lg border border-border hover:bg-secondary text-muted-foreground hover:text-foreground text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                        title="Share Floor Plan Lookbook"
+                      >
+                        <BookOpen className="size-3.5" />
+                        <span>Share Lookbook</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsSchedulingOpen(true)}
+                        disabled={isSending}
+                        className="px-2.5 py-1.5 rounded-lg border border-border hover:bg-secondary text-primary hover:bg-primary/10 text-xs flex items-center gap-1.5 transition-colors cursor-pointer font-medium"
+                        title="Schedule Discovery Call / Site Walkthrough"
+                      >
+                        <Calendar className="size-3.5" />
+                        <span>Book Meeting</span>
+                      </button>
+                    </div>
+
+                    {/* Send Email Action Button */}
+                    <button
+                      type="button"
+                      onClick={() => handleSendMessage()}
+                      disabled={isSending || (!newMessageText.trim() && !attachedFile && !attachedLink)}
+                      className="px-5 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all flex items-center justify-center gap-2 shadow-md disabled:opacity-50 cursor-pointer shrink-0"
+                    >
+                      {isSending ? (
+                        <>
+                          <Loader2 className="size-3.5 animate-spin" />
+                          <span>Sending Email...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Send className="size-3.5" />
+                          <span>Send Email</span>
+                          <span className="text-[10px] opacity-70 font-mono hidden sm:inline">(Ctrl+↵)</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
               </div>
             </>
           ) : (
