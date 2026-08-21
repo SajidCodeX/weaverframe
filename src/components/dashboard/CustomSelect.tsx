@@ -13,8 +13,16 @@ interface CustomSelectProps {
   className?: string;
 }
 
-export function CustomSelect({ value, onChange, options, className }: CustomSelectProps) {
+export function CustomSelect({ 
+  value, 
+  onChange, 
+  options, 
+  className,
+  align = "right",
+  dropDirection = "auto"
+}: CustomSelectProps & { align?: "left" | "right"; dropDirection?: "auto" | "up" | "down" }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [openUpwards, setOpenUpwards] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const selectedOption = options.find((opt) => opt.value === value) || options[0];
@@ -38,11 +46,31 @@ export function CustomSelect({ value, onChange, options, className }: CustomSele
     };
   }, []);
 
+  const handleToggle = () => {
+    if (!isOpen && containerRef.current && dropDirection === "auto") {
+      const rect = containerRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const dropdownEstimatedHeight = Math.min(options.length * 42 + 16, 240);
+      
+      // If space below is constrained and space above is sufficient, open upwards
+      if (spaceBelow < dropdownEstimatedHeight && rect.top > dropdownEstimatedHeight) {
+        setOpenUpwards(true);
+      } else {
+        setOpenUpwards(false);
+      }
+    } else if (dropDirection === "up") {
+      setOpenUpwards(true);
+    } else if (dropDirection === "down") {
+      setOpenUpwards(false);
+    }
+    setIsOpen(!isOpen);
+  };
+
   return (
-    <div className={`relative inline-block w-full text-left ${className || ''}`} ref={containerRef}>
+    <div className={`relative inline-block text-left ${className || 'w-full'}`} ref={containerRef}>
       <button
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={handleToggle}
         className="flex w-full items-center justify-between bg-input border border-border text-xs rounded-xl px-3.5 py-2.5 text-foreground outline-none hover:border-primary/50 transition-colors focus:ring-1 focus:ring-primary shadow-sm cursor-pointer"
       >
         <span className="truncate">{selectedOption?.label}</span>
@@ -50,7 +78,13 @@ export function CustomSelect({ value, onChange, options, className }: CustomSele
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 z-50 mt-1.5 w-full origin-top-right rounded-xl bg-card border border-border shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div
+          className={`absolute ${align === 'right' ? 'right-0' : 'left-0'} z-[100] w-full min-w-[210px] rounded-xl bg-card border border-border shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 ${
+            openUpwards 
+              ? "bottom-full mb-1.5 origin-bottom-right" 
+              : "top-full mt-1.5 origin-top-right"
+          }`}
+        >
           <div className="py-1 max-h-60 overflow-y-auto">
             {options.map((option) => (
               <button

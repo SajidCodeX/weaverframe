@@ -100,7 +100,7 @@ function AdminBillingRoute() {
       </div>
 
       {/* ── Subscriptions Table ── */}
-      <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
+      <div className="rounded-2xl border border-border bg-card shadow-sm">
         <div className="p-4 sm:p-5 border-b border-border flex items-center justify-between">
           <span className="text-xs font-mono uppercase tracking-widest text-[#c9a84c] dark:text-[#e5d9c5] font-semibold">
             Tenant Subscription Matrix
@@ -110,7 +110,7 @@ function AdminBillingRoute() {
           </span>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto min-h-[260px] pb-6">
           <table className="w-full text-sm text-left">
             <thead className="text-[10px] font-mono text-muted-foreground uppercase tracking-[0.16em] bg-muted/40 border-b border-border">
               <tr>
@@ -160,6 +160,7 @@ function AdminBillingRoute() {
                           value={builder.plan}
                           onChange={(val) => handlePlanChange(builder.id, val)}
                           options={planOptions}
+                          className="w-56"
                         />
                       </div>
                     </td>
