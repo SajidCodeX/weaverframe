@@ -123,8 +123,8 @@ Do not output any introductory or conversational text outside of the raw JSON ob
 
   const geminiKey = process.env.GEMINI_API_KEY;
   const groqKey = process.env.GROQ_API_KEY;
-  const geminiModel = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-  const groqModel = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
+  const geminiModel = process.env.GEMINI_MODEL || "gemini-1.5-flash";
+  const groqModel = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
 
   let rawText = "";
   if (geminiKey) {
