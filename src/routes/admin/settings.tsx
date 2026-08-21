@@ -4,27 +4,30 @@ import { Card } from "@/components/dashboard/primitives";
 import { getSessionFn } from "@/lib/auth";
 import { getPlatformSettings, updatePlatformSettings, getBlockedUsers, toggleUserStatus } from "@/lib/admin";
 import { useTheme } from "@/components/ThemeProvider";
+import { RoutePending } from "@/components/dashboard/RoutePending";
 import { useState } from "react";
+import { Shield, Mail, Clock, Palette, AlertTriangle, UserCheck, Check, Save } from "lucide-react";
 
 export const Route = createFileRoute("/admin/settings")({
-  beforeLoad: async ({ context }) => {
+  head: () => ({
+    meta: [
+      { title: "Platform Settings — WeaverFrame HQ" },
+    ],
+  }),
+  beforeLoad: ({ context }) => {
     if (typeof window === 'undefined') return;
     const session = context.session;
     if (!session || session.role !== 'admin') {
       throw redirect({ to: '/' })
     }
   },
-  loader: async () => {
+  loader: () => {
     if (typeof window === 'undefined') return { settings: { supportEmail: '', defaultTrialDays: 14, maintenanceMode: false }, blockedUsers: [] };
-    const settings = await getPlatformSettings();
-    const blockedUsers = await getBlockedUsers();
-    return { settings, blockedUsers };
+    return Promise.all([getPlatformSettings(), getBlockedUsers()]).then(([settings, blockedUsers]) => ({ settings, blockedUsers }));
   },
-  head: () => ({
-    meta: [
-      { title: "Platform Settings — WeaverFrame Admin" },
-    ],
-  }),
+  staleTime: 60_000,
+  pendingMs: 0,
+  pendingComponent: () => <RoutePending title="Platform Settings" type="settings" />,
   component: AdminSettingsRoute,
 });
 
@@ -49,7 +52,7 @@ function AdminSettingsRoute() {
         } 
       });
       await router.invalidate();
-      alert('Settings saved successfully!');
+      alert('Platform settings saved successfully!');
     } catch (err) {
       alert('Failed to save settings');
     } finally {
@@ -68,134 +71,183 @@ function AdminSettingsRoute() {
 
   return (
     <Shell title="Platform Settings">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h2 className="text-2xl font-bold font-display tracking-tight text-white">Platform Settings</h2>
-          <p className="text-sm text-muted-foreground mt-1">Configure global platform integrations and defaults.</p>
-        </div>
+      {/* ── Top Actions Bar ── */}
+      <div className="flex items-center justify-between gap-4 mb-6">
+        <span className="text-xs font-mono uppercase tracking-wider text-white/50">
+          Global Environment & Governance
+        </span>
+
         <button 
           onClick={handleSave}
           disabled={isSaving}
-          className="bg-white text-black px-4 py-2 rounded-md text-sm font-medium hover:bg-neutral-200 transition-colors disabled:opacity-50"
+          className="px-5 py-2.5 bg-[#e5d9c5] text-black text-xs font-bold uppercase tracking-wider hover:bg-white transition-all flex items-center justify-center gap-2 rounded-lg shadow-md disabled:opacity-50 cursor-pointer shrink-0"
         >
+          <Save className="size-3.5" />
           {isSaving ? 'Saving...' : 'Save Changes'}
         </button>
       </div>
 
-      <div className="grid gap-6">
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">General Preferences</h3>
-          <div className="space-y-4 max-w-2xl">
+      <div className="grid gap-6 max-w-4xl">
+        {/* ── General Preferences ── */}
+        <div className="rounded-2xl border border-border bg-card p-6 sm:p-7 shadow-sm">
+          <div className="flex items-center gap-2.5 mb-1.5">
+            <Mail className="size-4 text-[#c9a84c] dark:text-[#e5d9c5]" />
+            <h3 className="font-nevera text-base text-foreground font-normal tracking-wide">
+              General Preferences
+            </h3>
+          </div>
+          <p className="text-xs text-muted-foreground mb-5 font-light">
+            Configure default operational settings and alert addresses.
+          </p>
+
+          <div className="space-y-5">
             <div>
-              <label className="block text-sm font-medium text-muted-foreground mb-1">Support Email Address</label>
+              <label className="block text-[11px] font-mono uppercase tracking-wider text-foreground/80 mb-1.5">
+                Super Admin Support / Alert Email
+              </label>
               <input 
                 type="email" 
                 value={email}
                 onChange={e => setEmail(e.target.value)}
-                className="w-full bg-[#0a0a0a] border border-[#333] rounded-md px-3 py-2 text-sm text-white outline-none focus:border-[#666]" 
+                className="w-full max-w-xl bg-input border border-border rounded-lg px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-1 focus:ring-primary/30 outline-none transition-all" 
+                placeholder="ops@weaverframe.online"
               />
-              <p className="text-xs text-muted-foreground mt-1">This email will receive alerts for new signups and billing issues.</p>
+              <p className="text-[10px] font-mono text-muted-foreground mt-1.5">
+                Receives system webhooks, billing notifications, and high-priority infrastructure alerts.
+              </p>
             </div>
+
             <div>
-              <label className="block text-sm font-medium text-muted-foreground mb-1">Default Trial Period (Days)</label>
+              <label className="block text-[11px] font-mono uppercase tracking-wider text-foreground/80 mb-1.5">
+                Default Builder Evaluation Window (Days)
+              </label>
               <input 
                 type="number" 
                 value={trialDays}
                 onChange={e => setTrialDays(Number(e.target.value))}
-                className="w-full bg-[#0a0a0a] border border-[#333] rounded-md px-3 py-2 text-sm text-white outline-none focus:border-[#666]" 
+                className="w-48 bg-input border border-border rounded-lg px-3.5 py-2.5 text-sm font-mono text-foreground focus:border-primary focus:ring-1 focus:ring-primary/30 outline-none transition-all" 
               />
+              <p className="text-[10px] font-mono text-muted-foreground mt-1.5">
+                Duration of trial access before tenant tier auto-locks to read-only.
+              </p>
             </div>
           </div>
-        </Card>
+        </div>
 
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Appearance</h3>
-          <div className="space-y-4 max-w-2xl">
-            <div>
-              <label className="block text-sm font-medium text-muted-foreground mb-3">Theme Preference</label>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => setTheme("light")}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors border ${
-                    theme === "light" 
-                      ? "bg-white text-black border-white" 
-                      : "bg-[#0a0a0a] text-muted-foreground border-[#333] hover:text-white"
-                  }`}
-                >
-                  Light
-                </button>
-                <button
-                  onClick={() => setTheme("dark")}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors border ${
-                    theme === "dark" 
-                      ? "bg-white text-black border-white" 
-                      : "bg-[#0a0a0a] text-muted-foreground border-[#333] hover:text-white"
-                  }`}
-                >
-                  Dark
-                </button>
-                <button
-                  onClick={() => setTheme("system")}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors border ${
-                    theme === "system" 
-                      ? "bg-white text-black border-white" 
-                      : "bg-[#0a0a0a] text-muted-foreground border-[#333] hover:text-white"
-                  }`}
-                >
-                  System
-                </button>
-              </div>
-            </div>
+        {/* ── Appearance Theme ── */}
+        <div className="rounded-2xl border border-border bg-card p-6 sm:p-7 shadow-sm">
+          <div className="flex items-center gap-2.5 mb-1.5">
+            <Palette className="size-4 text-[#c9a84c] dark:text-[#e5d9c5]" />
+            <h3 className="font-nevera text-base text-foreground font-normal tracking-wide">
+              Interface Theme
+            </h3>
           </div>
-        </Card>
+          <p className="text-xs text-muted-foreground mb-5 font-light">
+            Select your preferred interface theme for the admin console.
+          </p>
 
-        <Card className="p-6 border-red-900/30">
-          <h3 className="text-lg font-semibold text-red-500 mb-4">Danger Zone</h3>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setTheme("dark")}
+              className={`px-4 py-2 rounded-lg text-xs font-mono uppercase tracking-wider transition-all border cursor-pointer ${
+                theme === "dark" 
+                  ? "bg-primary text-primary-foreground border-primary font-bold shadow-sm" 
+                  : "bg-secondary text-muted-foreground border-border hover:text-foreground hover:border-border"
+              }`}
+            >
+              Dark (Default)
+            </button>
+            <button
+              onClick={() => setTheme("light")}
+              className={`px-4 py-2 rounded-lg text-xs font-mono uppercase tracking-wider transition-all border cursor-pointer ${
+                theme === "light" 
+                  ? "bg-primary text-primary-foreground border-primary font-bold shadow-sm" 
+                  : "bg-secondary text-muted-foreground border-border hover:text-foreground hover:border-border"
+              }`}
+            >
+              Light
+            </button>
+            <button
+              onClick={() => setTheme("system")}
+              className={`px-4 py-2 rounded-lg text-xs font-mono uppercase tracking-wider transition-all border cursor-pointer ${
+                theme === "system" 
+                  ? "bg-primary text-primary-foreground border-primary font-bold shadow-sm" 
+                  : "bg-secondary text-muted-foreground border-border hover:text-foreground hover:border-border"
+              }`}
+            >
+              System Auto
+            </button>
+          </div>
+        </div>
+
+        {/* ── Danger Zone: Maintenance Mode ── */}
+        <div className="rounded-2xl border border-red-500/30 bg-gradient-to-br from-red-500/10 via-card to-card p-6 sm:p-7 shadow-sm">
+          <div className="flex items-center gap-2.5 mb-1.5">
+            <AlertTriangle className="size-4 text-red-500 dark:text-red-400" />
+            <h3 className="font-nevera text-base text-red-500 dark:text-red-400 font-normal tracking-wide">
+              Emergency Maintenance Mode
+            </h3>
+          </div>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-4 pt-4 border-t border-red-500/20">
             <div>
-              <h4 className="text-sm font-medium text-white">Maintenance Mode</h4>
-              <p className="text-xs text-muted-foreground mt-1">Disable builder logins and show a maintenance page. Admins can still log in.</p>
+              <h4 className="text-sm font-medium text-foreground">Global Maintenance Mode</h4>
+              <p className="text-xs text-muted-foreground mt-1 max-w-lg">
+                Instantly disconnects all builder portal logins and displays a luxury maintenance notice. Super Admins retain full console access.
+              </p>
             </div>
-            <label className="relative inline-flex items-center cursor-pointer">
+            <label className="relative inline-flex items-center cursor-pointer shrink-0">
               <input 
                 type="checkbox" 
                 className="sr-only peer" 
                 checked={maintenance}
                 onChange={e => setMaintenance(e.target.checked)}
               />
-              <div className="w-11 h-6 bg-[#333] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-500"></div>
+              <div className="w-12 h-6 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-500 border border-border"></div>
             </label>
           </div>
-        </Card>
+        </div>
 
-        <Card className="p-0 overflow-hidden">
-          <div className="p-6 border-b border-border">
-            <h3 className="text-lg font-semibold text-white">Blocked & Suspended Users</h3>
-            <p className="text-sm text-muted-foreground mt-1">Review all users currently prevented from accessing the platform.</p>
+        {/* ── Blocked & Suspended Users ── */}
+        <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
+          <div className="p-5 border-b border-border flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-mono uppercase tracking-widest text-[#c9a84c] dark:text-[#e5d9c5] font-semibold">
+                Suspended Access Registry
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Accounts locked from accessing tenant or platform interfaces.
+              </p>
+            </div>
+            <span className="text-xs font-mono text-muted-foreground">
+              {blockedUsers.length} Suspended
+            </span>
           </div>
+
           <div className="divide-y divide-border">
             {blockedUsers.length === 0 ? (
-              <div className="p-6 text-center text-sm text-muted-foreground">
-                No blocked users found.
+              <div className="p-8 text-center text-xs font-mono text-muted-foreground">
+                All accounts are in good standing. Zero active suspensions.
               </div>
             ) : (
               blockedUsers.map((user: any) => (
-                <div key={user.id} className="p-4 px-6 flex items-center justify-between hover:bg-white/[0.02] transition-colors">
+                <div key={user.id} className="p-4 px-6 flex items-center justify-between hover:bg-muted/30 transition-colors">
                   <div>
-                    <div className="font-medium text-sm text-foreground">{user.displayName}</div>
-                    <div className="text-xs text-muted-foreground">{user.email} &middot; {user.builder ? user.builder.companyName : "Platform"}</div>
+                    <div className="font-medium text-sm text-foreground">{user.displayName || "Anonymous User"}</div>
+                    <div className="text-xs font-mono text-muted-foreground mt-0.5">
+                      {user.email} &middot; {user.builder ? user.builder.companyName : "Platform Level"}
+                    </div>
                   </div>
                   <button 
                     onClick={() => handleUnblock(user.id)}
-                    className="text-xs font-medium px-3 py-1.5 rounded transition-colors bg-[#0a0a0a] border border-[#333] hover:bg-white/10 text-white"
+                    className="text-xs font-mono font-medium px-3.5 py-1.5 rounded-lg transition-colors bg-secondary border border-border hover:bg-emerald-500/10 hover:border-emerald-500/30 hover:text-emerald-600 dark:hover:text-emerald-400 text-foreground cursor-pointer"
                   >
-                    Unblock User
+                    Lift Suspension
                   </button>
                 </div>
               ))
             )}
           </div>
-        </Card>
+        </div>
       </div>
     </Shell>
   );

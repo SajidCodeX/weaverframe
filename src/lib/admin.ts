@@ -141,7 +141,17 @@ export const getGlobalUsersData = createServerFn({ method: 'GET' }).handler(asyn
   const users = await db.user.findMany({
     where: { deletedAt: null },
     orderBy: { createdAt: 'desc' },
-    include: { builder: { select: { companyName: true } } }
+    include: { 
+      builder: { 
+        select: { 
+          id: true, 
+          companyName: true, 
+          plan: true, 
+          isActive: true, 
+          email: true 
+        } 
+      } 
+    }
   })
 
   return users

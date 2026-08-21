@@ -121,33 +121,66 @@ Do not output any introductory or conversational text outside of the raw JSON ob
 
   const startTime = Date.now();
 
-  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${apiKey}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
-      messages: [
-        { role: 'system', content: systemPrompt },
-        ...formattedHistory,
-        { role: 'user', content: userMessage }
-      ],
-      temperature: 0.7,
-      max_tokens: 1024
-    })
-  });
+  const geminiKey = process.env.GEMINI_API_KEY;
+  const groqKey = process.env.GROQ_API_KEY;
+  const geminiModel = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  const groqModel = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
 
-  const latencyMs = Date.now() - startTime;
-
-  if (!response.ok) {
-    console.error(`❌ Groq API failed with status ${response.status}`);
-    process.exit(1);
+  let rawText = "";
+  if (geminiKey) {
+    console.log(`📡 Dispatching prompt to Google Gemini API (${geminiModel})...`);
+    const res = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${geminiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: geminiModel,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          ...formattedHistory,
+          { role: 'user', content: userMessage }
+        ],
+        temperature: 0.2,
+        max_tokens: 800,
+        response_format: { type: "json_object" }
+      })
+    });
+    if (res.ok) {
+      const gData = await res.json();
+      rawText = gData.choices?.[0]?.message?.content || "";
+    } else {
+      console.warn(`⚠️ Gemini API returned ${res.status}, trying Groq fallback...`);
+    }
   }
 
-  const resData = await response.json();
-  const rawText = resData.choices?.[0]?.message?.content || "";
+  if (!rawText && groqKey) {
+    console.log(`📡 Dispatching prompt to Groq API (${groqModel})...`);
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${groqKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: groqModel,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          ...formattedHistory,
+          { role: 'user', content: userMessage }
+        ],
+        temperature: 0.2,
+        max_tokens: 800
+      })
+    });
+    if (response.ok) {
+      const resData = await response.json();
+      rawText = resData.choices?.[0]?.message?.content || "";
+    }
+  }
+
+  const latencyMs = Date.now() - startTime;
   
   let replyText = rawText;
   let intent = "HOT";

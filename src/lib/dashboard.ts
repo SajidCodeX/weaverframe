@@ -857,26 +857,107 @@ export const updateBillingProfile = createServerFn({ method: 'POST' })
     }
   });
 
+/**
+ * Unified AI Engine Caller
+ * Primary: Google Gemini Flash (GEMINI_API_KEY) with 1M context & 1,500 free requests/day
+ * Fallback: Groq (GROQ_API_KEY) with fast LPU hardware
+ */
+export async function callAiEngine(
+  messages: Array<{ role: string; content: string }>,
+  options?: { isJson?: boolean; maxTokens?: number; temperature?: number }
+): Promise<string> {
+  const geminiKey = process.env.GEMINI_API_KEY;
+  const groqKey = process.env.GROQ_API_KEY;
+  const geminiModel = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  const groqModel = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
+  const maxTokens = options?.maxTokens || 800;
+  const temperature = options?.temperature ?? 0.1;
+
+  // 1. Prioritize Google Gemini Flash if GEMINI_API_KEY is configured
+  if (geminiKey && geminiKey.trim() !== "") {
+    const modelsToTry = [geminiModel, "gemini-3.6-flash", "gemini-3.7-flash", "gemini-2.5-flash", "gemini-2.0-flash"].filter((v, i, a) => a.indexOf(v) === i);
+    for (const m of modelsToTry) {
+      try {
+        const res = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${geminiKey}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            model: m,
+            messages: messages,
+            temperature: temperature,
+            max_tokens: maxTokens,
+            ...(options?.isJson ? { response_format: { type: "json_object" } } : {})
+          })
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const content = data.choices?.[0]?.message?.content;
+          if (content) return content;
+        } else {
+          const errText = await res.text();
+          console.warn(`Gemini model ${m} returned ${res.status}: ${errText}. Trying fallback...`);
+        }
+      } catch (geminiErr) {
+        console.warn(`Gemini model ${m} network error:`, geminiErr);
+      }
+    }
+  }
+
+  // 2. Fallback to Groq if GROQ_API_KEY is configured
+  if (groqKey && groqKey.trim() !== "") {
+    try {
+      const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${groqKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: groqModel,
+          messages: messages,
+          temperature: temperature,
+          max_tokens: maxTokens,
+          ...(options?.isJson ? { response_format: { type: "json_object" } } : {})
+        })
+      });
+
+      if (groqRes.ok) {
+        const groqData = await groqRes.json();
+        return groqData.choices?.[0]?.message?.content || "";
+      } else {
+        const errText = await groqRes.text();
+        console.error(`Groq API returned ${groqRes.status}: ${errText}`);
+      }
+    } catch (groqErr) {
+      console.error("Groq API fallback encountered network error:", groqErr);
+    }
+  }
+
+  throw new Error("No AI API keys configured or all AI providers failed.");
+}
+
 export const generateGroqCompletion = createServerFn({ method: 'POST' })
   .inputValidator((data: { messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> }) => data)
   .handler(async ({ data }) => {
     const { getTenantDb } = await import('./server-utils.server');
-    // ── GROQ API KEY — must be set in .env as GROQ_API_KEY ────────────────────
     const GROQ_API_KEY = process.env.GROQ_API_KEY;
-    // ─────────────────────────────────────────────────────────────────────────
+    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
     const { messages } = data;
 
-      // Fallback Mock Engine in case API Key is not yet configured
-      const isPlaceholder = !GROQ_API_KEY || GROQ_API_KEY.trim() === "";
-      if (isPlaceholder) {
-        const { requireAuth } = await import('./server-utils.server');
-        const session = await requireAuth().catch(() => ({ companyName: "our company" }));
-        console.log("Groq API Key is a placeholder. Simulating AI completion...");
-        const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')?.content || "";
+    // Fallback Mock Engine in case no API keys are configured
+    const hasKeys = (GEMINI_API_KEY && GEMINI_API_KEY.trim() !== "") || (GROQ_API_KEY && GROQ_API_KEY.trim() !== "");
+    if (!hasKeys) {
+      const { requireAuth } = await import('./server-utils.server');
+      const session = await requireAuth().catch(() => ({ companyName: "our company" }));
+      console.log("No API keys found. Simulating AI completion...");
+      const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')?.content || "";
 
-        // Smart prompt matching to simulate high fidelity AI responses
-        let reply = `Hi! Thank you for reaching out to ${session.companyName || "our team"}. We'd love to help you build your dream home.`;
+      let reply = `Hi! Thank you for reaching out to ${session.companyName || "our team"}. We'd love to help you build your dream home.`;
 
       const lower = lastUserMsg.toLowerCase();
       if (lower.includes("budget") || lower.includes("price") || lower.includes("cost")) {
@@ -899,29 +980,7 @@ export const generateGroqCompletion = createServerFn({ method: 'POST' })
     }
 
     try {
-      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${GROQ_API_KEY}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          model: "llama-3.3-70b-versatile",
-          messages: messages,
-          temperature: 0.1, // Lower temperature to avoid hallucination
-          max_tokens: 1024,
-          top_p: 1,
-          stream: false
-        })
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Groq API returned ${response.status}: ${errorText}`);
-      }
-
-      const responseData = await response.json();
-      return responseData.choices?.[0]?.message?.content || "";
+      return await callAiEngine(messages, { maxTokens: 800, temperature: 0.1 });
     } catch (error) {
       console.error("Error in generateGroqCompletion:", error);
       throw error;
@@ -946,6 +1005,66 @@ export const simulateAIChatReply = createServerFn({ method: 'POST' })
     }
   });
 
+export const getLeadMemoryDetails = createServerFn({ method: 'POST' })
+  .inputValidator((data: { leadId: string }) => data)
+  .handler(async ({ data }) => {
+    const { getTenantDb, requireAuth } = await import('./server-utils.server');
+    await requireAuth();
+    const db = await getTenantDb();
+    const lead = await db.lead.findUnique({
+      where: { id: data.leadId },
+      select: {
+        id: true,
+        name: true,
+        county: true,
+        state: true,
+        estimatedBudget: true,
+        landPrice: true,
+        status: true,
+        scoreTier: true,
+        dealScore: true,
+        leadMemory: true,
+        qualificationData: true,
+        lastAiSummary: true
+      }
+    });
+    return lead;
+  });
+
+export const updateLeadMemory = createServerFn({ method: 'POST' })
+  .inputValidator((data: { leadId: string; memory: Record<string, any>; dealScore?: number }) => data)
+  .handler(async ({ data }) => {
+    const { getTenantDb, requireAuth } = await import('./server-utils.server');
+    const session = await requireAuth();
+    const db = await getTenantDb();
+    
+    const updateData: Record<string, any> = {
+      leadMemory: JSON.stringify(data.memory)
+    };
+    if (typeof data.dealScore === 'number') {
+      updateData.dealScore = data.dealScore;
+      if (data.dealScore >= 75) updateData.scoreTier = "Hot";
+      else if (data.dealScore >= 40) updateData.scoreTier = "Warm";
+      else updateData.scoreTier = "Cold";
+    }
+
+    const updated = await db.lead.update({
+      where: { id: data.leadId },
+      data: updateData
+    });
+
+    await db.activity.create({
+      data: {
+        builderId: session.builderId || '',
+        leadId: data.leadId,
+        action: `🧠 Lead Memory & Deal Score updated manually by builder team.`
+      }
+    });
+
+    invalidateCache("dashboard_");
+    return updated;
+  });
+
 export async function generateAiReplyCore(
   db: any,
   leadId: string,
@@ -963,8 +1082,34 @@ export async function generateAiReplyCore(
 
   const settingsObj = builder?.settings ? JSON.parse(builder.settings) : {};
   const builderProfile = settingsObj.builder_profile || {};
+  const brainConfig = settingsObj.ai_brain_config || {};
+  const qualRules = settingsObj.qualification_rules || {};
+
   const timezone = builderProfile.timezone || "Asia/Kolkata";
-  const aiContext = builderProfile.aiContext || "";
+  const personaName = brainConfig.personaName || builderProfile.primaryContact || "Alex";
+  const primaryGoal = brainConfig.primaryGoal || "book_consultation";
+  const brandVoice = brainConfig.brandVoice || "luxury_bespoke";
+  const minBudget = brainConfig.minBudget || qualRules.minBudget || "$500,000";
+  const maxTimeline = brainConfig.maxTimeline || qualRules.maxTimeline || "12";
+  const lotRequirement = brainConfig.lotRequirement || "actively_shopping";
+  const plansRequirement = brainConfig.plansRequirement || "any";
+  const customDirectives = brainConfig.customDirectives || builderProfile.aiContext || "";
+
+  // Goal directives for Sales Mindset
+  let goalInstructions = "Guide qualified, interested homeowner leads toward scheduling an architectural discovery consultation, private showroom tour, or site meeting.";
+  if (primaryGoal === "qualify_readiness") {
+    goalInstructions = `Strictly qualify the lead's readiness before offering appointments. Naturally verify that they meet the builder's standards: 1) Construction Budget around or above ${minBudget}, 2) Lot/Land Status (${lotRequirement === 'must_own_lot' ? 'must own lot or active contract' : 'actively shopping / owns lot'}), 3) Timeline Window (< ${maxTimeline} months). If qualified, guide toward a consultation.`;
+  } else if (primaryGoal === "nurture_educate") {
+    goalInstructions = "Act as an educational and architectural advisor. Answer questions about custom building, permitting, and architectural processes with high warmth. Build deep trust and rapport before suggesting a consultation.";
+  }
+
+  // Voice & Tone directives
+  let toneInstructions = "Ultra-luxury, refined, quiet elegance, polite, high-ticket bespoke custom estate sales director. Speak with understated prestige, confidence, and utmost courtesy.";
+  if (brandVoice === "warm_consultative") {
+    toneInstructions = "Warm, friendly, consultative, approachable custom home expert advisor. Be encouraging, helpful, and empathetic.";
+  } else if (brandVoice === "direct_executive") {
+    toneInstructions = "Crisp, fast, highly executive, strictly to the point. No fluff or unnecessary filler words. High efficiency communication.";
+  }
 
   // Format current date/time in the builder's timezone
   const now = new Date();
@@ -973,17 +1118,37 @@ export async function generateAiReplyCore(
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true
   }).format(now);
 
-  // Fetch lead to personalize prompt
+  // Fetch lead to personalize prompt and load existing Lead Memory Graph
   const lead = await db.lead.findUnique({ where: { id: leadId } });
   const leadName = lead ? lead.name : "Client";
   const leadCounty = lead ? lead.county : "your area";
+
+  // Parse existing Lead Memory Graph
+  let currentMemory: Record<string, any> = {
+    budgetRange: lead?.estimatedBudget ? `$${(lead.estimatedBudget / 1000).toFixed(0)}k` : null,
+    timeline: null,
+    lotStatus: lead?.landPrice && lead.landPrice > 0 ? `Owns land in ${lead.county} ($${(lead.landPrice / 1000).toFixed(0)}k)` : null,
+    architecturalStyle: null,
+    familyLifestyleNeeds: null,
+    objectionsRaised: [],
+    keyPreferences: [],
+    decisionMakers: null,
+    notes: ""
+  };
+
+  if (lead?.leadMemory) {
+    try {
+      const parsed = JSON.parse(lead.leadMemory);
+      currentMemory = { ...currentMemory, ...parsed };
+    } catch (_) {}
+  }
 
   // Fetch FUTURE active appointments for this builder to check calendar availability
   const upcomingAppts = await db.appointment.findMany({
     where: {
       builderId,
       status: { in: ['Confirmed', 'Pending'] },
-      dateTime: { gte: new Date() }  // Only include future appointments — past ones are irrelevant
+      dateTime: { gte: new Date() }
     },
     include: { lead: true },
     orderBy: { dateTime: 'asc' },
@@ -994,64 +1159,94 @@ export async function generateAiReplyCore(
     ? upcomingAppts.map((a: any) => `- ${new Date(a.dateTime).toLocaleString('en-US', { timeZone: timezone, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}: ${a.type} with ${a.lead?.name || 'Client'} (${a.location})`).join('\n')
     : "No upcoming booked meetings currently in calendar.";
 
-  const systemPrompt = `You are Alex, the premium AI Concierge for ${companyName}. Your supervisor is ${contactName}. 
-Your persona is knowledgeable, highly professional, polite, and responsive. You text like a smart, natural human sales executive via SMS.
+  const systemPrompt = `You are ${personaName}, the elite AI Senior Sales Executive & Concierge representing ${companyName}.
+Your supervisor/builder principal is ${contactName}.
+
+MISSION & SALES PERSON MINDSET:
+- You are NOT a generic support bot. You are a high-performing, consultative luxury sales closer.
+- Your ultimate objective: Help genuine homeowners bring their dream custom estate to life while locking in qualified showroom tours, architectural discovery calls, and site visits.
+- Use consultative selling: Listen intently, acknowledge their aesthetic vision, ask targeted high-value qualification questions, frame value before price, and soft-close with clear next steps.
+
+BRAND VOICE & PERSONA GUIDELINES:
+- ${toneInstructions}
+- Text like a natural human sales director via SMS/WhatsApp (2-3 concise sentences max per response).
+
+QUALIFICATION STANDARDS & THRESHOLDS:
+- Minimum Construction Budget: ${minBudget}
+- Target Timeline: Within ${maxTimeline} months
+- Land/Lot Readiness: ${lotRequirement === 'must_own_lot' ? 'Must own buildable lot or under contract' : 'Lot search assistance available or owns lot'}
+- Architectural Status: ${plansRequirement}
+
+OBJECTION HANDLING & ANTI-HESITATION PLAYBOOKS:
+1. "PRICES ARE TOO HIGH / EXPENSIVE / COMPARING QUOTES":
+   - Frame value immediately: Highlight our guaranteed fixed-cost architectural finishing, full structural warranty, transparent bespoke material sourcing, and zero surprise escalation clauses.
+   - Example: "Completely understand! Custom builds are major investments. We focus on transparent fixed-scope architectural finishing with zero hidden surprises. Would you like to review our recent cost-per-sqft breakdown for ${leadCounty}?"
+2. "JUST BROWSING / NOT READY YET / NEED TO DISCUSS WITH SPOUSE":
+   - Low-friction value offer: Offer our private digital lookbook or a complimentary 15-minute 3D site walkthrough with zero obligation.
+   - Example: "No rush at all! Many of our clients start exploring designs a year ahead. I'd love to send over our 2026 Architectural Lookbook to review with your family—shall I send that over?"
+3. "DO YOU HAVE LOTS / LAND SELECTION QUESTIONS":
+   - Reassure feasibility: Confirm our in-house civil engineer assists with lot vetting, topography slope analysis, and permit approvals.
+4. "READY TO PROCEED / HIGH BUDGET / REQUESTING PRINCIPAL BUILDER":
+   - Escalate immediately to human sales director while warmly confirming appointment.
+
+CURRENT ACTIVE LEAD MEMORY (RECALL IN CONVERSATION):
+- Client Name: ${leadName}
+- Target County: ${leadCounty}
+- Known Budget: ${currentMemory.budgetRange || "Not confirmed yet"}
+- Lot/Land Status: ${currentMemory.lotStatus || "Not confirmed yet"}
+- Timeline: ${currentMemory.timeline || "Not confirmed yet"}
+- Desired Architectural Style: ${currentMemory.architecturalStyle || "Not confirmed yet"}
+- Family/Lifestyle Needs: ${currentMemory.familyLifestyleNeeds || "Not confirmed yet"}
+- Past Objections: ${currentMemory.objectionsRaised?.length ? currentMemory.objectionsRaised.join(', ') : "None"}
+- Known Preferences: ${currentMemory.keyPreferences?.length ? currentMemory.keyPreferences.join(', ') : "None"}
 
 CURRENT DATE & TIME: ${currentLocalTimeStr} (Timezone: ${timezone})
-All your calendar reasoning must be based on this current time.
 
-BUILDER KNOWLEDGE BASE & POLICIES:
-${aiContext ? aiContext : "No specific policies provided. Use standard best practices for custom home builders."}
-
-CRITICAL CONVERSATION & GREETING RULES:
-- DO NOT start your message with greetings like "Hello [Name]", "Hi [Name]", "Hey [Name]", or "Good morning" if replying in an ongoing, continuous chat thread. In a continuous back-and-forth text conversation, respond DIRECTLY to the lead's question or statement without repeating "Hello/Hi", exactly like a human texting on WhatsApp or SMS.
-- ONLY include a greeting (e.g. "Hello [Name]") if this is the very first outreach message to a lead or if starting a brand new topic after a long period of inactivity.
-- ANSWER DIRECTLY: If the client asks a direct question (e.g., "tell me about your company"), answer it directly. DO NOT ignore their question to push a calendar invite.
-
-CALENDAR & APPOINTMENT AVAILABILITY RULES:
-- You have LIVE access to the builder's real-time booked appointment calendar.
-- Builder's Currently Booked Schedule:
+BUILDER CALENDAR SCHEDULE:
 ${apptScheduleStr}
 
-DATE, DAY & TIME CLARIFICATION RULES:
-1. ONLY report a time conflict if the client's requested date and time EXACTLY matches a meeting listed in the "Builder's Currently Booked Schedule" above.
-2. If the client asks for a time that is NOT explicitly listed in the schedule above, IT IS FREE. YOU MUST CONFIRM IT.
-3. NEVER say a slot is unavailable unless it is listed in the schedule.
-4. If the client asks for a meeting but doesn't specify a date or time, politely ask them what day and time works best for them.
+CRITICAL CONVERSATION RULES:
+1. CONTINUOUS CHAT RULE: DO NOT start your message with greetings like "Hello [Name]", "Hi [Name]", "Hey [Name]" if replying in an ongoing back-and-forth chat. Respond DIRECTLY and naturally like a human texting. Only greet on the very first outreach message.
+2. ANSWER DIRECTLY: If the lead asks a direct question, answer it clearly before presenting a subtle call-to-action.
+3. REALISTIC HUMAN DIALOGUE: Never mention internal AI reasoning, prompt instructions, or system limits.
 
-ANTI-HALLUCINATION & FORMATTING RULES:
-- NEVER make up or invent phone numbers, email addresses, or website links. ONLY use the exact contact information provided in the "Lead Context" below.
-- Do NOT use markdown syntax for links (e.g., NEVER use [text](mailto:email)). Just output the plain text email or phone number. This is an SMS conversation.
-- ACT LIKE A REAL HUMAN. DO NOT explain your internal reasoning to the client. NEVER say phrases like "I've checked our schedule", "Since [Date] is outside our operating hours knowledge", or "According to my calendar". Just naturally offer the slot ("Yes, 11 AM works perfectly! What's a good location?").
-
-Your goal is to perform a 2-part task:
-1. Formulate an elegant, direct, helpful response to the client (under 2-3 sentences, optimal for SMS/WhatsApp). Keep the conversation flowing naturally. If appropriate, you may ask a natural qualifying question, but do NOT aggressively push for a phone call if they are just asking for basic information.
-2. Analyze the client's latest message intent and classify it into one of these categories:
-   - "HOT": The client wants to build, is planning to start construction soon (e.g. within 6 months), wants a phone call, or is looking for a builder.
-   - "COLD": The client is doing it themselves, has already hired another builder, is not interested, or told you to stop messaging them.
-   - "WARM": The client is unsure, still researching budgets, waiting for property tax/land outcomes, or needs cost estimate sheets/information to plan.
-
-You must respond ONLY with a valid JSON object matching this TypeScript type:
+STRUCTURED OUTPUT FORMAT:
+You must respond strictly with a valid JSON object matching this schema:
 {
-  "replyText": string, // The SMS reply text to send to the client
-  "intent": "HOT" | "COLD" | "WARM", // The classified intent of the client's reply
-  "bookingDetails": { "isoDateTime": string, "type": string } | null // ONLY set this if you are CONFIRMING a specific date and time for a meeting/call/site visit. Use ISO 8601 format for isoDateTime mapped exactly to the UTC equivalent of the requested local time in the builder's timezone (${timezone}). Set to null otherwise.
+  "replyText": string, // Natural SMS text to send to lead (2-3 sentences max)
+  "intent": "HOT" | "WARM" | "COLD", // HOT: ready to build/meet, WARM: researching/interested, COLD: not interested/disqualified
+  "dealScore": number, // 0 to 100 buyer readiness score based on budget, land ownership, timeline, and engagement
+  "dealSummary": string, // 1-sentence executive summary of the lead's current readiness state
+  "leadMemoryUpdate": {
+    "budgetRange": string | null, // e.g. "$750k - $1M" or extracted number
+    "timeline": string | null, // e.g. "Spring 2027", "Next 4 months"
+    "lotStatus": string | null, // e.g. "Owns 2-acre lot in Travis", "Searching in Cedar Park"
+    "architecturalStyle": string | null, // e.g. "Modern Farmhouse", "Mediterranean Estate"
+    "familyLifestyleNeeds": string | null, // e.g. "4 bed, pool, single story for aging parents"
+    "objectionsRaised": string[], // List of any hesitations/objections mentioned in this interaction
+    "keyPreferences": string[] // Key finishes, lot features, or architectural desires mentioned
+  },
+  "qualification": {
+    "budgetQualified": boolean, // True if budget meets builder minimum
+    "timelineQualified": boolean, // True if timeline is within range
+    "lotQualified": boolean, // True if owns land or actively contracting
+    "decisionMaker": boolean, // True if decision maker
+    "overallStatus": "Qualified" | "Nurturing" | "Disqualified"
+  },
+  "objectionStrategyUsed": string | null, // Name of strategy applied, e.g. "Value-Framed Price Justification"
+  "nextBestAction": string, // Recommended next step for builder team, e.g. "Send 3D elevation lookbook" or "Call within 15 mins"
+  "escalationRequired": boolean, // Set to true if lead is ready to sign, has $1.5M+ budget, or requests owner
+  "escalationReason": string | null, // e.g. "High ticket $2M lead ready for in-person architectural contract"
+  "bookingDetails": { "isoDateTime": string, "type": string } | null // ONLY set if lead agrees to a specific day/time
 }
-
-Example of when to set bookingDetails:
-- Lead says: "Yes, August 15th at 4 PM works!" and builder is in America/Chicago (UTC-5) → convert 4 PM local to UTC: set bookingDetails: { "isoDateTime": "2026-08-15T21:00:00.000Z", "type": "Site visit" }
-- Lead says: "November 11th at 11 AM" and builder is in America/Chicago (UTC-5) → set bookingDetails: { "isoDateTime": "2026-11-11T17:00:00.000Z", "type": "Site visit" }
-- Lead is just asking about pricing or general info → set bookingDetails: null
-- IMPORTANT: isoDateTime must always be the UTC equivalent. Subtract the timezone offset from the local time. America/Chicago is UTC-6 (CST) or UTC-5 (CDT). Asia/Kolkata is UTC+5:30.
 
 Lead Context:
 - Client Name: ${leadName}
-- Target County: ${leadCounty}
 - Company: ${companyName}
 - Company Phone: ${builderPhone}
 - Company Email: ${builderEmail}
 
-Do not output any introductory or conversational text outside of the raw JSON object.`;
+Do not output any markdown formatting or text outside the raw JSON object.`;
 
   const formattedMessages = [
     { role: 'system' as const, content: systemPrompt },
@@ -1059,80 +1254,161 @@ Do not output any introductory or conversational text outside of the raw JSON ob
     { role: 'user' as const, content: userMessage }
   ];
 
-  // Call Groq API directly (avoids server-fn-to-server-fn HTTP overhead which breaks in portal context)
   const GROQ_API_KEY = process.env.GROQ_API_KEY;
+  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+  const hasKeys = (GEMINI_API_KEY && GEMINI_API_KEY.trim() !== "") || (GROQ_API_KEY && GROQ_API_KEY.trim() !== "");
   let rawResponse = "";
 
-  if (!GROQ_API_KEY || GROQ_API_KEY.trim() === "") {
-    // Fallback mock if no API key
-    const lastUserMsg = userMessage.toLowerCase();
-    if (lastUserMsg.includes("meet") || lastUserMsg.includes("schedule") || lastUserMsg.includes("slot")) {
-      rawResponse = JSON.stringify({ replyText: "That slot works great — I've reserved it for you! What location works best for you?", intent: "HOT", bookingDetails: null });
-    } else {
-      rawResponse = JSON.stringify({ replyText: "Thank you for reaching out! Our custom homes in Austin start at $500K. Would you like to schedule a walkthrough?", intent: "WARM", bookingDetails: null });
+  if (hasKeys) {
+    try {
+      rawResponse = await callAiEngine(formattedMessages, { isJson: true, maxTokens: 1200, temperature: 0.1 });
+    } catch (aiError) {
+      console.error("AI API error in generateAiReplyCore:", aiError);
+      throw aiError;
     }
   } else {
-    try {
-      const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${GROQ_API_KEY}`,
-          "Content-Type": "application/json"
+    // Fallback mock only if NO API keys are configured
+    const lastUserMsg = userMessage.toLowerCase();
+    const isMeeting = lastUserMsg.includes("meet") || lastUserMsg.includes("schedule") || lastUserMsg.includes("saturday") || lastUserMsg.includes("tour");
+    const isBudget = lastUserMsg.includes("budget") || lastUserMsg.includes("cost") || lastUserMsg.includes("price") || lastUserMsg.includes("expensive");
+    
+    if (isMeeting) {
+      rawResponse = JSON.stringify({
+        replyText: "That slot works wonderfully! I've reserved a private consultation for you. What location or project address would you like to focus on?",
+        intent: "HOT",
+        dealScore: 88,
+        dealSummary: "Homeowner confirmed consultation request for custom home build.",
+        leadMemoryUpdate: {
+          budgetRange: currentMemory.budgetRange || "$750k+",
+          timeline: "Within 6 months",
+          lotStatus: currentMemory.lotStatus || "Owns buildable land",
+          architecturalStyle: currentMemory.architecturalStyle || "Modern Custom Estate",
+          familyLifestyleNeeds: currentMemory.familyLifestyleNeeds || "Primary residence",
+          objectionsRaised: [],
+          keyPreferences: ["Private Showroom Walkthrough"]
         },
-        body: JSON.stringify({
-          model: "llama-3.3-70b-versatile",
-          messages: formattedMessages,
-          temperature: 0.1,
-          max_tokens: 1024,
-          top_p: 1,
-          stream: false
-        })
+        qualification: {
+          budgetQualified: true,
+          timelineQualified: true,
+          lotQualified: true,
+          decisionMaker: true,
+          overallStatus: "Qualified"
+        },
+        objectionStrategyUsed: "Consultation Soft-Close",
+        nextBestAction: "Prepare showroom design portfolio before meeting.",
+        escalationRequired: false,
+        escalationReason: null,
+        bookingDetails: null
       });
-      if (!groqResponse.ok) {
-        const errText = await groqResponse.text();
-        throw new Error(`Groq API ${groqResponse.status}: ${errText}`);
-      }
-      const groqData = await groqResponse.json();
-      rawResponse = groqData.choices?.[0]?.message?.content || "";
-    } catch (groqError) {
-      console.error("Groq API error in generateAiReplyCore:", groqError);
-      throw groqError;
+    } else if (isBudget) {
+      rawResponse = JSON.stringify({
+        replyText: "Our custom builds typically start at $500K for semi-custom homes and range upwards for bespoke estates. We provide a full fixed-scope architectural guarantee with zero surprise cost overruns. Does that range align with your vision?",
+        intent: "WARM",
+        dealScore: 65,
+        dealSummary: "Lead inquiring about budget thresholds and cost per square foot.",
+        leadMemoryUpdate: {
+          budgetRange: "$500k - $1M",
+          timeline: currentMemory.timeline || "6-12 months",
+          lotStatus: currentMemory.lotStatus || null,
+          architecturalStyle: currentMemory.architecturalStyle || null,
+          familyLifestyleNeeds: null,
+          objectionsRaised: ["Price Sensitivity"],
+          keyPreferences: ["Fixed-Scope Guarantee"]
+        },
+        qualification: {
+          budgetQualified: true,
+          timelineQualified: true,
+          lotQualified: false,
+          decisionMaker: true,
+          overallStatus: "Nurturing"
+        },
+        objectionStrategyUsed: "Value-Framed Price Justification",
+        nextBestAction: "Send architectural investment breakdown sheet.",
+        escalationRequired: false,
+        escalationReason: null,
+        bookingDetails: null
+      });
+    } else {
+      rawResponse = JSON.stringify({
+        replyText: "Thank you for sharing your ideas! We specialize in tailored custom estates throughout Austin. Do you currently have a specific architectural style or floor plan in mind?",
+        intent: "WARM",
+        dealScore: 55,
+        dealSummary: "Lead exploring custom home design options.",
+        leadMemoryUpdate: {
+          budgetRange: currentMemory.budgetRange || null,
+          timeline: currentMemory.timeline || null,
+          lotStatus: currentMemory.lotStatus || null,
+          architecturalStyle: currentMemory.architecturalStyle || null,
+          familyLifestyleNeeds: null,
+          objectionsRaised: [],
+          keyPreferences: []
+        },
+        qualification: {
+          budgetQualified: false,
+          timelineQualified: false,
+          lotQualified: false,
+          decisionMaker: true,
+          overallStatus: "Nurturing"
+        },
+        objectionStrategyUsed: "Architectural Vision Alignment",
+        nextBestAction: "Identify target build style and lot readiness.",
+        escalationRequired: false,
+        escalationReason: null,
+        bookingDetails: null
+      });
     }
   }
 
   let replyText = "";
   let intent: 'HOT' | 'COLD' | 'WARM' = 'WARM';
+  let dealScore = 50;
+  let dealSummary = "";
+  let leadMemoryUpdate: Record<string, any> = {};
+  let qualification: Record<string, any> = {
+    budgetQualified: false,
+    timelineQualified: false,
+    lotQualified: false,
+    decisionMaker: true,
+    overallStatus: "Nurturing"
+  };
+  let objectionStrategyUsed: string | null = null;
+  let nextBestAction = "Follow up with homeowner.";
+  let escalationRequired = false;
+  let escalationReason: string | null = null;
   let bookingDetails: { isoDateTime: string; type: string } | null = null;
 
   try {
     const rawJsonMatch = rawResponse.match(/\{[\s\S]*\}/);
     if (rawJsonMatch) {
       const parsed = JSON.parse(rawJsonMatch[0]);
-      replyText = parsed.replyText || parsed.reply || rawResponse;
+      replyText = parsed.replyText || parsed.reply || "";
       intent = parsed.intent || 'WARM';
-      bookingDetails = parsed.bookingDetails || null;
-    } else {
-      const parsed = JSON.parse(rawResponse);
-      replyText = parsed.replyText || parsed.reply || rawResponse;
-      intent = parsed.intent || 'WARM';
+      dealScore = typeof parsed.dealScore === 'number' ? parsed.dealScore : (intent === 'HOT' ? 85 : intent === 'COLD' ? 20 : 55);
+      dealSummary = parsed.dealSummary || "";
+      leadMemoryUpdate = parsed.leadMemoryUpdate || {};
+      qualification = parsed.qualification || qualification;
+      objectionStrategyUsed = parsed.objectionStrategyUsed || null;
+      nextBestAction = parsed.nextBestAction || nextBestAction;
+      escalationRequired = !!parsed.escalationRequired;
+      escalationReason = parsed.escalationReason || null;
       bookingDetails = parsed.bookingDetails || null;
     }
   } catch (e) {
-    console.warn("Failed to parse structured JSON from Alex AI. Performing fallback parsing:", e);
-    replyText = rawResponse;
+    console.warn("JSON.parse error, activating regex extractor fallback:", e);
+  }
 
-    // Safety Heuristic Matcher
-    const lowerMsg = userMessage.toLowerCase();
-    if (lowerMsg.includes("yes") || lowerMsg.includes("start") || lowerMsg.includes("months") || lowerMsg.includes("soon") || lowerMsg.includes("tour")) {
-      intent = 'HOT';
-    } else if (lowerMsg.includes("no") || lowerMsg.includes("myself") || lowerMsg.includes("hired") || lowerMsg.includes("stop")) {
-      intent = 'COLD';
+  // Robust fallback: if replyText is still empty, extract it directly via regex
+  if (!replyText || replyText.trim() === "") {
+    const replyMatch = rawResponse.match(/"replyText"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)/i) ||
+                       rawResponse.match(/"reply"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)/i);
+    if (replyMatch && replyMatch[1]) {
+      replyText = replyMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"').trim();
     } else {
-      intent = 'WARM';
+      replyText = rawResponse.replace(/\{[\s\S]*\}/, '').trim() || "Thank you for reaching out! We specialize in custom luxury estates. How can I assist with your build today?";
     }
   }
 
-  // Strip redundant repetitive greetings (e.g. "Hello Aman,", "Hi Aman,", "Aman,") in continuous conversation
+  // Strip redundant repetitive greetings in ongoing conversations
   if (chatHistory.length > 0 && replyText) {
     const firstName = leadName ? leadName.split(' ')[0] : '';
     const greetingRegex = new RegExp(`^(Hello|Hi|Hey|Good morning|Good afternoon|${firstName})\\s*([A-Za-z0-9]+)?\\s*[,!.:-]\\s*`, 'i');
@@ -1142,7 +1418,26 @@ Do not output any introductory or conversational text outside of the raw JSON ob
     }
   }
 
-  // Determine DB updates based on intent
+  // Merge Memory Updates into Persistent Memory Graph
+  const updatedMemory: Record<string, any> = {
+    budgetRange: leadMemoryUpdate.budgetRange || currentMemory.budgetRange,
+    timeline: leadMemoryUpdate.timeline || currentMemory.timeline,
+    lotStatus: leadMemoryUpdate.lotStatus || currentMemory.lotStatus,
+    architecturalStyle: leadMemoryUpdate.architecturalStyle || currentMemory.architecturalStyle,
+    familyLifestyleNeeds: leadMemoryUpdate.familyLifestyleNeeds || currentMemory.familyLifestyleNeeds,
+    objectionsRaised: Array.from(new Set([
+      ...(currentMemory.objectionsRaised || []),
+      ...(leadMemoryUpdate.objectionsRaised || [])
+    ])),
+    keyPreferences: Array.from(new Set([
+      ...(currentMemory.keyPreferences || []),
+      ...(leadMemoryUpdate.keyPreferences || [])
+    ])),
+    decisionMakers: currentMemory.decisionMakers || null,
+    lastUpdated: new Date().toISOString()
+  };
+
+  // Determine DB status & tier
   let dbStatus = "Replied";
   let dbScoreTier = "Warm";
   let activityText = "";
@@ -1150,18 +1445,18 @@ Do not output any introductory or conversational text outside of the raw JSON ob
   if (intent === 'HOT') {
     dbStatus = "Qualified";
     dbScoreTier = "Hot";
-    activityText = `🟢 AI marked Lead as Qualified & Hot (High intent to build).`;
+    activityText = `🟢 AI Sales Engine marked Lead as Hot (${dealScore}/100) — High buyer readiness.`;
   } else if (intent === 'COLD') {
     dbStatus = "Closed Lost";
     dbScoreTier = "Cold";
-    activityText = `🔴 AI marked Lead as Disqualified & Cold (Competitor hired / Self-build).`;
+    activityText = `🔴 AI Sales Engine marked Lead as Cold (${dealScore}/100) — Disqualified or competitor chosen.`;
   } else {
     dbStatus = "Appointment";
     dbScoreTier = "Warm";
-    activityText = `🟡 AI marked Lead as Nurturing & Warm (Budget / Planning phase).`;
+    activityText = `🟡 AI Sales Engine marked Lead as Warm (${dealScore}/100) — Nurturing in progress.`;
   }
 
-  // Save Activity in database
+  // Save changes to database
   if (!isSimulated) {
     await db.activity.create({
       data: {
@@ -1171,16 +1466,37 @@ Do not output any introductory or conversational text outside of the raw JSON ob
       }
     });
 
-    // Update Lead Status & Score Tier in database
+    if (escalationRequired) {
+      await db.activity.create({
+        data: {
+          builderId,
+          leadId,
+          action: `🔥 VIP HUMAN ESCALATION TRIGGERED: ${escalationReason || 'High ticket client requires immediate executive call'}.`
+        }
+      });
+    }
+
+    // Update Lead in DB with Memory Graph, Score & Qualification Data
     await db.lead.update({
       where: { id: leadId },
       data: {
         status: dbStatus,
-        scoreTier: dbScoreTier
+        scoreTier: dbScoreTier,
+        dealScore: dealScore,
+        leadMemory: JSON.stringify(updatedMemory),
+        qualificationData: JSON.stringify({
+          qualification,
+          objectionStrategyUsed,
+          nextBestAction,
+          dealSummary,
+          escalationRequired,
+          escalationReason
+        }),
+        lastAiSummary: dealSummary || activityText
       }
     });
 
-    // AUTO-BOOK APPOINTMENT: If AI confirmed a specific slot, create it in the database
+    // Auto-Book Appointment if confirmed
     if (bookingDetails && bookingDetails.isoDateTime) {
       try {
         const bookingDate = new Date(bookingDetails.isoDateTime);
@@ -1191,16 +1507,16 @@ Do not output any introductory or conversational text outside of the raw JSON ob
               leadId,
               type: bookingDetails.type || 'Site visit',
               dateTime: bookingDate,
-              location: 'TBD — Confirmed via AI Portal Chat',
+              location: 'TBD — Confirmed via AI Concierge',
               status: 'Pending',
-              notes: `Auto-booked by AI Concierge via client portal conversation.`
+              notes: `Auto-booked by AI Sales Concierge. Next step: ${nextBestAction}`
             }
           });
           await db.activity.create({
             data: {
               builderId,
               leadId,
-              action: `📅 AI Concierge auto-booked a ${bookingDetails.type || 'Site visit'} on ${bookingDate.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })} via client portal.`
+              action: `📅 AI Concierge auto-booked a ${bookingDetails.type || 'Site visit'} on ${bookingDate.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}.`
             }
           });
         }
@@ -1210,7 +1526,19 @@ Do not output any introductory or conversational text outside of the raw JSON ob
     }
   }
 
-  return { replyText };
+  return {
+    replyText,
+    intent,
+    dealScore,
+    dealSummary,
+    leadMemory: updatedMemory,
+    qualification,
+    objectionStrategyUsed,
+    nextBestAction,
+    escalationRequired,
+    escalationReason,
+    bookingDetails
+  };
 }
 
 export const summarizeConversation = createServerFn({ method: 'POST' })
@@ -1254,23 +1582,7 @@ Format the output clearly using bullet points and bold section headers. Keep it 
 Conversation Log:
 ${chatLog}`;
 
-      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          model: "llama-3.3-70b-versatile",
-          messages: [{ role: 'system', content: prompt }],
-          temperature: 0.5,
-          max_tokens: 300
-        })
-      });
-
-      if (!res.ok) throw new Error(`Groq status ${res.status}`);
-      const json = await res.json();
-      const summary = json.choices?.[0]?.message?.content;
+      const summary = await callAiEngine([{ role: 'system', content: prompt }], { maxTokens: 300, temperature: 0.5 });
       return summary || "Unable to generate chat summary.";
     } catch (err) {
       console.error("Summarization error:", err);
@@ -1757,15 +2069,15 @@ export const simulateLeadMessage = createServerFn({ method: 'POST' })
           content: m.content
         }));
 
-        // Use the existing Llama-3 function
-        const aiResponse = await simulateAIChatReply({ 
-          data: { 
-            leadId, 
-            userMessage: content, 
-            chatHistory: formattedHistory,
-            isSimulated: true
-          } 
-        });
+        // Generate AI response directly with unified AI engine (Gemini Flash / Groq)
+        const aiResponse = await generateAiReplyCore(
+          db,
+          leadId,
+          session.builderId || '',
+          content,
+          formattedHistory,
+          true
+        );
 
         // Save AI response as 'system' message
         if (aiResponse && aiResponse.replyText) {
@@ -2177,9 +2489,23 @@ export const testIntegrationConnection = createServerFn({ method: 'POST' })
       }
     }
 
-    else if (platformId === "rencast") {
-      if (!credentials.apiKey || !credentials.targetMarket) {
-        throw new Error("Missing Rencast Partner API Key or Target Market Area.");
+    else if (platformId === "email_mailbox") {
+      const email = credentials.email || credentials.username || '';
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!email || !emailRegex.test(email.trim())) {
+        throw new Error("Invalid email address. Please enter a valid company mailbox address (e.g. alex@luxuryhomes.com).");
+      }
+      const provider = credentials.provider || 'google';
+      if (provider === 'custom_smtp') {
+        if (!credentials.smtpHost) throw new Error("Missing SMTP Host (e.g. smtp.mailgun.org).");
+        if (!credentials.smtpPort) throw new Error("Missing SMTP Port (e.g. 587 or 465).");
+        if (!credentials.password && credentials.password !== "••••••••••••••••") {
+          throw new Error("Missing SMTP Password or App Password.");
+        }
+      } else {
+        if (!credentials.password && credentials.password !== "••••••••••••••••") {
+          throw new Error("Missing App Password or Access Secret for mailbox authentication.");
+        }
       }
     }
 
@@ -2356,6 +2682,39 @@ export const saveBuilderProfile = createServerFn({ method: 'POST' })
       throw err;
     }
   })
+
+export const getAiBrainConfig = createServerFn({ method: 'GET' }).handler(async () => {
+  const { getTenantDb } = await import('./server-utils.server');
+  const brainConfig = await readSettingJson('ai_brain_config');
+  const legacyQual = await readSettingJson('qualification_rules');
+  const builderProfile = await readSettingJson('builder_profile');
+
+  return {
+    primaryGoal: (brainConfig.primaryGoal as string) || 'book_consultation',
+    brandVoice: (brainConfig.brandVoice as string) || 'luxury_bespoke',
+    personaName: (brainConfig.personaName as string) || (builderProfile.primaryContact as string) || 'Alex',
+    minBudget: (brainConfig.minBudget as string) || (legacyQual.minBudget as string) || '$500,000',
+    maxTimeline: (brainConfig.maxTimeline as string) || (legacyQual.maxTimeline as string) || '12',
+    lotRequirement: (brainConfig.lotRequirement as string) || 'actively_shopping',
+    plansRequirement: (brainConfig.plansRequirement as string) || 'any',
+    minLeadScore: typeof brainConfig.minLeadScore === 'number' ? brainConfig.minLeadScore : (typeof legacyQual.minLeadScore === 'number' ? legacyQual.minLeadScore : 60),
+    customDirectives: (brainConfig.customDirectives as string) || (builderProfile.aiContext as string) || '',
+  };
+});
+
+export const saveAiBrainConfig = createServerFn({ method: 'POST' })
+  .inputValidator((data: Record<string, any>) => data)
+  .handler(async ({ data }) => {
+    const { getTenantDb } = await import('./server-utils.server');
+    await writeSettingJson('ai_brain_config', data);
+    // Also sync backwards to legacy keys for compatibility
+    await writeSettingJson('qualification_rules', {
+      minBudget: data.minBudget,
+      maxTimeline: data.maxTimeline,
+      minLeadScore: data.minLeadScore,
+    });
+    return { success: true };
+  });
 
 export const getQualificationRules = createServerFn({ method: 'GET' }).handler(async () => {
     const { getTenantDb } = await import('./server-utils.server');

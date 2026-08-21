@@ -4,33 +4,36 @@ import { Card, Badge } from "@/components/dashboard/primitives";
 import { CustomSelect } from "@/components/dashboard/CustomSelect";
 import { getBuildersData, getAdminStats, updateBuilderPlan } from "@/lib/admin";
 import { getSessionFn } from "@/lib/auth";
+import { RoutePending } from "@/components/dashboard/RoutePending";
+import { DollarSign, CreditCard, Sparkles, Building2, RefreshCw, CheckCircle2 } from "lucide-react";
 
 export const Route = createFileRoute("/admin/billing")({
-  beforeLoad: async ({ context }) => {
+  head: () => ({
+    meta: [
+      { title: "Billing & Subscriptions — WeaverFrame HQ" },
+    ],
+  }),
+  beforeLoad: ({ context }) => {
     if (typeof window === 'undefined') return;
     const session = context.session;
     if (!session || session.role !== 'admin') {
       throw redirect({ to: '/' })
     }
   },
-  loader: async () => {
+  loader: () => {
     if (typeof window === 'undefined') return { builders: [], stats: { totalMRR: 0, activeBuilders: 0, totalLeads: 0, trends: { mrr: '', builders: '', leads: '' } } };
-    const builders = await getBuildersData();
-    const stats = await getAdminStats();
-    return { builders, stats };
+    return Promise.all([getBuildersData(), getAdminStats()]).then(([builders, stats]) => ({ builders, stats }));
   },
-  head: () => ({
-    meta: [
-      { title: "Billing & Subscriptions — WeaverFrame Admin" },
-    ],
-  }),
+  staleTime: 60_000,
+  pendingMs: 0,
+  pendingComponent: () => <RoutePending title="Subscriptions & Billing" type="reviews" />,
   component: AdminBillingRoute,
 });
 
 const planOptions = [
-  { label: "Trial", value: "trial" },
-  { label: "Professional", value: "professional" },
-  { label: "Enterprise", value: "enterprise" },
+  { label: "Free Trial (14 Days)", value: "trial" },
+  { label: "Professional ($399/mo)", value: "professional" },
+  { label: "Enterprise Scale ($799/mo)", value: "enterprise" },
 ];
 
 function AdminBillingRoute() {
@@ -48,57 +51,107 @@ function AdminBillingRoute() {
 
   return (
     <Shell title="Subscriptions & Billing">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h2 className="text-2xl font-bold font-display tracking-tight text-white">Subscription Management</h2>
-          <p className="text-sm text-muted-foreground mt-1">Manage builder billing, trials, and platform revenue.</p>
-        </div>
-        <button className="bg-white text-black px-4 py-2 rounded-md text-sm font-medium hover:bg-neutral-200 transition-colors">
-          Sync with Stripe
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <Card className="p-6">
-          <div className="text-sm font-medium text-muted-foreground mb-2">Estimated MRR</div>
-          <div className="flex items-baseline gap-2">
-            <div className="text-3xl font-bold text-foreground">${stats.totalMRR.toLocaleString()}</div>
-            <div className={`text-sm font-medium ${stats.trends.mrr.startsWith('+') ? 'text-success' : 'text-danger'}`}>{stats.trends.mrr}</div>
+      {/* ── 3 Metric Cards ── */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5 mb-8">
+        <div className="rounded-xl border border-border bg-card p-5 sm:p-6 shadow-sm hover:border-primary/40 transition-all">
+          <div className="flex items-center justify-between text-muted-foreground mb-3">
+            <span className="text-[11px] font-mono uppercase tracking-wider">Estimated MRR</span>
+            <div className="size-8 rounded-lg bg-secondary border border-border flex items-center justify-center text-[#c9a84c] dark:text-[#e5d9c5]">
+              <DollarSign className="size-4" />
+            </div>
           </div>
-        </Card>
-        <Card className="p-6">
-          <div className="text-sm font-medium text-muted-foreground mb-2">Active Subscriptions</div>
-          <div className="text-3xl font-bold text-foreground">{builders.filter(b => b.plan !== 'trial').length}</div>
-        </Card>
-        <Card className="p-6">
-          <div className="text-sm font-medium text-muted-foreground mb-2">Builders on Trial</div>
-          <div className="text-3xl font-bold text-foreground">{builders.filter(b => b.plan === 'trial').length}</div>
-        </Card>
+          <div className="font-nevera text-2xl sm:text-3xl font-normal text-foreground">
+            ${stats.totalMRR.toLocaleString()}
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-3 pt-3 border-t border-border">
+            {stats.totalMRR > 0 ? "From active paid subscriptions" : "No paid subscriptions currently"}
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-border bg-card p-5 sm:p-6 shadow-sm hover:border-primary/40 transition-all">
+          <div className="flex items-center justify-between text-muted-foreground mb-3">
+            <span className="text-[11px] font-mono uppercase tracking-wider">Active Subscriptions</span>
+            <div className="size-8 rounded-lg bg-secondary border border-border flex items-center justify-center text-[#c9a84c] dark:text-[#e5d9c5]">
+              <CreditCard className="size-4" />
+            </div>
+          </div>
+          <div className="font-nevera text-2xl sm:text-3xl font-normal text-foreground">
+            {builders.filter(b => b.plan !== 'trial').length}
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-3 pt-3 border-t border-border">
+            Paying builder accounts
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-border bg-card p-5 sm:p-6 shadow-sm hover:border-primary/40 transition-all">
+          <div className="flex items-center justify-between text-muted-foreground mb-3">
+            <span className="text-[11px] font-mono uppercase tracking-wider">Builders on Trial</span>
+            <div className="size-8 rounded-lg bg-secondary border border-border flex items-center justify-center text-[#c9a84c] dark:text-[#e5d9c5]">
+              <Sparkles className="size-4" />
+            </div>
+          </div>
+          <div className="font-nevera text-2xl sm:text-3xl font-normal text-foreground">
+            {builders.filter(b => b.plan === 'trial').length}
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-3 pt-3 border-t border-border">
+            Active evaluation accounts
+          </p>
+        </div>
       </div>
 
-      <Card>
+      {/* ── Subscriptions Table ── */}
+      <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
+        <div className="p-4 sm:p-5 border-b border-border flex items-center justify-between">
+          <span className="text-xs font-mono uppercase tracking-widest text-[#c9a84c] dark:text-[#e5d9c5] font-semibold">
+            Tenant Subscription Matrix
+          </span>
+          <span className="text-xs font-mono text-muted-foreground">
+            {builders.length} Total Accounts
+          </span>
+        </div>
+
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
-            <thead className="text-[10px] text-muted-foreground uppercase tracking-wider bg-secondary/30 border-b border-border">
+            <thead className="text-[10px] font-mono text-muted-foreground uppercase tracking-[0.16em] bg-muted/40 border-b border-border">
               <tr>
-                <th className="px-6 py-3 font-semibold">Builder</th>
-                <th className="px-6 py-3 font-semibold">Current Plan</th>
-                <th className="px-6 py-3 font-semibold text-right">Estimated Value</th>
-                <th className="px-6 py-3 font-semibold text-right">Actions</th>
+                <th className="px-6 py-4 font-semibold">Builder Organization</th>
+                <th className="px-6 py-4 font-semibold">Tier Status</th>
+                <th className="px-6 py-4 font-semibold text-right">Contract Value</th>
+                <th className="px-6 py-4 font-semibold text-right">Manage Plan</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {builders.map(builder => {
-                const planValue = builder.plan === 'enterprise' ? 999 : builder.plan === 'trial' ? 0 : 299;
+                const planValue = builder.plan === 'enterprise' ? 799 : builder.plan === 'trial' ? 0 : 399;
                 return (
-                  <tr key={builder.id} className="hover:bg-white/[0.02] transition-colors">
-                    <td className="px-6 py-4 font-medium text-foreground">{builder.companyName}</td>
+                  <tr key={builder.id} className="hover:bg-muted/30 transition-colors group">
                     <td className="px-6 py-4">
-                      <Badge tone={builder.plan === 'enterprise' ? 'success' : builder.plan === 'trial' ? 'neutral' : 'info'}>
-                        {builder.plan.toUpperCase()}
-                      </Badge>
+                      <div className="flex items-center gap-3">
+                        <div className="size-8 rounded-lg bg-secondary border border-border flex items-center justify-center font-nevera text-xs font-bold text-[#c9a84c] dark:text-[#e5d9c5]">
+                          {builder.companyName.slice(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <span className="font-medium text-foreground group-hover:text-primary transition-colors block">
+                            {builder.companyName}
+                          </span>
+                          <span className="text-[10px] font-mono text-muted-foreground block">
+                            ID: {builder.id.slice(0, 10)}...
+                          </span>
+                        </div>
+                      </div>
                     </td>
-                    <td className="px-6 py-4 text-right font-mono text-muted-foreground">
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-mono font-semibold tracking-wider ${
+                        builder.plan === 'enterprise' 
+                          ? 'bg-[#c9a84c]/15 text-[#c9a84c] dark:text-[#e5d9c5] border border-[#c9a84c]/30 dark:border-[#e5d9c5]/30' 
+                          : builder.plan === 'trial' 
+                            ? 'bg-muted text-muted-foreground border border-border' 
+                            : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                      }`}>
+                        {builder.plan.toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-right font-mono text-foreground font-medium">
                       ${planValue}/mo
                     </td>
                     <td className="px-6 py-4 text-right">
@@ -115,13 +168,15 @@ function AdminBillingRoute() {
               })}
               {builders.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-6 py-8 text-center text-muted-foreground">No subscriptions found.</td>
+                  <td colSpan={4} className="px-6 py-12 text-center text-muted-foreground text-xs font-mono">
+                    No subscriptions found in registry.
+                  </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
-      </Card>
+      </div>
     </Shell>
   );
 }

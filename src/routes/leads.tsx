@@ -1,7 +1,7 @@
+import { createFileRoute, useLoaderData, useRouteContext, useRouter, Link, useNavigate } from '@tanstack/react-router';
 import { RoutePending } from "@/components/dashboard/RoutePending";
-import { createFileRoute, useLoaderData, useRouter, useRouteContext } from "@tanstack/react-router";
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Search, Plus, Download, Phone, Calendar, Eye, MoreHorizontal, X, Mail, Check, AlertCircle, Edit, RefreshCw, LayoutGrid, List, MessageSquare, Zap, Star } from "lucide-react";
+import { Search, Plus, Download, Phone, Calendar, Eye, MoreHorizontal, X, Mail, Check, AlertCircle, Edit, RefreshCw, LayoutGrid, List, MessageSquare, Zap, Star, Sparkles, AlertTriangle, Lightbulb, Brain } from "lucide-react";
 import { Shell } from "@/components/dashboard/Shell";
 import { Card, ScoreBadge, StageBadge } from "@/components/dashboard/primitives";
 import { CustomSelect } from "@/components/dashboard/CustomSelect";
@@ -1388,6 +1388,16 @@ function LeadDetailPanel({ lead, onClose }: { lead: any; onClose: () => void }) 
   const { session } = useRouteContext({ strict: false }) as any;
   const isPrivacyMode = session?.role === 'admin' && !!session?.actingAsBuilderId;
 
+  let parsedMemory: Record<string, any> = {};
+  if (lead.leadMemory) {
+    try { parsedMemory = JSON.parse(lead.leadMemory); } catch (_) {}
+  }
+
+  let parsedQual: Record<string, any> = {};
+  if (lead.qualificationData) {
+    try { parsedQual = JSON.parse(lead.qualificationData); } catch (_) {}
+  }
+
   const budgetConfirmed = lead.estimatedBudget >= 200000;
   const isEngaged = lead.stage !== "New";
   const scoreTierPts = lead.scoreTier === "Hot" ? 20 : lead.scoreTier === "Warm" ? 10 : 0;
@@ -1398,7 +1408,8 @@ function LeadDetailPanel({ lead, onClose }: { lead: any; onClose: () => void }) 
     { label: "Hot Score Tier", val: lead.scoreTier === "Hot", pts: 20 },
   ];
 
-  const totalScore = (budgetConfirmed ? 50 : 0) + (isEngaged ? 30 : 0) + scoreTierPts;
+  const calculatedScore = (budgetConfirmed ? 50 : 0) + (isEngaged ? 30 : 0) + scoreTierPts;
+  const dealScoreVal = typeof lead.dealScore === 'number' ? lead.dealScore : calculatedScore;
 
   return (
     <>
@@ -1427,6 +1438,88 @@ function LeadDetailPanel({ lead, onClose }: { lead: any; onClose: () => void }) 
         </div>
 
         <div className="p-5 space-y-6 text-left">
+          {/* ── AI SALES INTELLIGENCE & LEAD MEMORY GRAPH ── */}
+          <section className="p-4 rounded-xl border border-[#c9a84c]/30 dark:border-[#e5d9c5]/30 bg-card shadow-sm space-y-3.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="size-4 text-[#c9a84c] dark:text-[#e5d9c5]" />
+                <h3 className="text-xs uppercase tracking-wider text-foreground font-mono font-bold">
+                  AI Sales Intelligence & Memory Graph
+                </h3>
+              </div>
+              <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold border border-emerald-500/20">
+                Live Memory
+              </span>
+            </div>
+
+            {/* Deal Score Gauge */}
+            <div className="p-3 rounded-lg bg-secondary/80 border border-border space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-mono text-muted-foreground uppercase text-[10px]">Real-Time Deal Score</span>
+                <span className={`font-mono font-bold ${
+                  dealScoreVal >= 75 ? "text-emerald-500" : dealScoreVal >= 40 ? "text-amber-500" : "text-rose-500"
+                }`}>
+                  {dealScoreVal} / 100 · {dealScoreVal >= 75 ? "HOT" : dealScoreVal >= 40 ? "WARM" : "COLD"}
+                </span>
+              </div>
+              <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
+                <div 
+                  className={`h-full rounded-full transition-all duration-300 ${
+                    dealScoreVal >= 75 ? "bg-emerald-500" : dealScoreVal >= 40 ? "bg-amber-500" : "bg-rose-500"
+                  }`}
+                  style={{ width: `${Math.min(100, Math.max(5, dealScoreVal))}%` }}
+                />
+              </div>
+              {lead.lastAiSummary && (
+                <p className="text-[11px] text-muted-foreground italic font-mono pt-1">
+                  "{lead.lastAiSummary}"
+                </p>
+              )}
+            </div>
+
+            {/* VIP Takeover Alert */}
+            {parsedQual.escalationRequired && (
+              <div className="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-xs flex items-start gap-2">
+                <AlertTriangle className="size-3.5 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold uppercase tracking-wider text-[10px] block">🔥 VIP Human Escalation</span>
+                  <p className="text-[11px] mt-0.5">{parsedQual.escalationReason || "High intent custom estate lead requires principal review."}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Extracted Memory Graph Grid */}
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="p-2 rounded-lg bg-secondary/50 border border-border">
+                <span className="text-muted-foreground block text-[9px] uppercase font-mono">Target Budget</span>
+                <span className="font-semibold text-foreground font-mono">{parsedMemory.budgetRange || lead.budget || "Evaluating"}</span>
+              </div>
+              <div className="p-2 rounded-lg bg-secondary/50 border border-border">
+                <span className="text-muted-foreground block text-[9px] uppercase font-mono">Lot Readiness</span>
+                <span className="font-semibold text-foreground truncate block">{parsedMemory.lotStatus || (lead.landPrice > 0 ? `Owns land ($${(lead.landPrice / 1000).toFixed(0)}k)` : "Evaluating")}</span>
+              </div>
+              <div className="p-2 rounded-lg bg-secondary/50 border border-border">
+                <span className="text-muted-foreground block text-[9px] uppercase font-mono">Build Timeline</span>
+                <span className="font-semibold text-foreground font-mono">{parsedMemory.timeline || "< 12 Months"}</span>
+              </div>
+              <div className="p-2 rounded-lg bg-secondary/50 border border-border">
+                <span className="text-muted-foreground block text-[9px] uppercase font-mono">Style Preference</span>
+                <span className="font-semibold text-foreground truncate block">{parsedMemory.architecturalStyle || "Modern Bespoke"}</span>
+              </div>
+            </div>
+
+            {/* Next Best Action */}
+            <div className="p-2.5 rounded-lg bg-primary/5 border border-primary/20 space-y-1">
+              <div className="flex items-center gap-1.5 text-primary text-[10px] font-mono font-bold uppercase">
+                <Lightbulb className="size-3" />
+                <span>Next Best Action for Builder Team</span>
+              </div>
+              <p className="text-xs text-foreground font-medium">
+                {parsedQual.nextBestAction || "Send curated portfolio & offer discovery walkthrough."}
+              </p>
+            </div>
+          </section>
+
           <section>
             <h3 className="text-xs uppercase tracking-wider text-muted-foreground mb-3 font-mono">Lead Profile</h3>
             <dl className="grid grid-cols-2 gap-3 text-sm">

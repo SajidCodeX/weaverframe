@@ -43,26 +43,27 @@ export function CustomSelect({ value, onChange, options, className }: CustomSele
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex w-full items-center justify-between bg-[#0a0a0a] border border-[#333] text-xs rounded px-3 py-2 text-white outline-none hover:border-[#555] transition-colors focus:ring-1 focus:ring-white"
+        className="flex w-full items-center justify-between bg-input border border-border text-xs rounded-xl px-3.5 py-2.5 text-foreground outline-none hover:border-primary/50 transition-colors focus:ring-1 focus:ring-primary shadow-sm cursor-pointer"
       >
-        <span>{selectedOption?.label}</span>
-        <ChevronDown className={`w-3 h-3 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`} />
+        <span className="truncate">{selectedOption?.label}</span>
+        <ChevronDown className={`size-3.5 text-muted-foreground transition-transform shrink-0 ml-2 ${isOpen ? "rotate-180" : ""}`} />
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 z-10 mt-1 w-full origin-top-right rounded-md bg-[#0a0a0a] border border-[#333] shadow-lg shadow-black/50 overflow-hidden">
-          <div className="py-1">
+        <div className="absolute right-0 z-50 mt-1.5 w-full origin-top-right rounded-xl bg-card border border-border shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+          <div className="py-1 max-h-60 overflow-y-auto">
             {options.map((option) => (
               <button
                 key={option.value}
+                type="button"
                 onClick={() => {
                   onChange(option.value);
                   setIsOpen(false);
                 }}
-                className={`block w-full text-left px-4 py-2 text-xs transition-colors ${
+                className={`block w-full text-left px-4 py-2.5 text-xs transition-colors cursor-pointer ${
                   option.value === value
-                    ? "bg-white/10 text-white font-medium"
-                    : "text-muted-foreground hover:bg-white/5 hover:text-white"
+                    ? "bg-secondary text-primary font-semibold"
+                    : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                 }`}
               >
                 {option.label}

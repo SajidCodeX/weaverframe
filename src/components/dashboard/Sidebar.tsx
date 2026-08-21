@@ -119,10 +119,10 @@ export function Sidebar({
             actuallyCollapsed ? "opacity-0 w-0 scale-x-0 overflow-hidden ml-0" : "opacity-100 w-auto scale-x-100 ml-0"
           }`}
         >
-          <span className="font-nevera text-sm tracking-[0.14em] uppercase text-white font-semibold block leading-none">
+          <span className="font-nevera text-sm tracking-[0.14em] uppercase text-foreground font-semibold block leading-none">
             WeaverFrame
           </span>
-          <span className="text-[8.5px] font-mono tracking-widest text-[#e5d9c5]/70 uppercase block mt-1">
+          <span className="text-[8.5px] font-mono tracking-widest text-[#c9a84c] dark:text-[#e5d9c5]/70 uppercase block mt-1">
             Architecture & AI OS
           </span>
         </div>
@@ -149,12 +149,12 @@ export function Sidebar({
             >
               {/* Active left indicator */}
               {active && (
-                <span className="absolute left-0 top-[6px] bottom-[6px] w-[3px] rounded-r-full bg-[#e5d9c5] shadow-[0_0_10px_rgba(229,217,197,0.7)]" />
+                <span className="absolute left-0 top-[6px] bottom-[6px] w-[3px] rounded-r-full bg-[#c9a84c] dark:bg-[#e5d9c5] shadow-[0_0_10px_rgba(201,168,76,0.6)]" />
               )}
 
               <Icon
                 className={`size-4 shrink-0 transition-colors duration-200 ${
-                  active ? "text-[#e5d9c5]" : "text-muted-foreground group-hover:text-white"
+                  active ? "text-[#c9a84c] dark:text-[#e5d9c5]" : "text-muted-foreground group-hover:text-foreground"
                 }`}
               />
 
@@ -179,7 +179,7 @@ export function Sidebar({
       </nav>
 
       {/* ── Footer: Company + User ── */}
-      <div className="p-3 border-t border-border flex flex-col gap-2 overflow-hidden bg-[#060608]">
+      <div className="p-3 border-t border-border flex flex-col gap-2 overflow-hidden bg-sidebar">
         {/* Company block */}
         <div
           className={`px-2 py-1.5 transition-all duration-300 origin-top overflow-hidden ${
@@ -188,7 +188,7 @@ export function Sidebar({
         >
           <div className="text-[9px] font-mono text-muted-foreground uppercase tracking-widest flex items-center justify-between">
             <span>{isAdminView ? 'Administration' : 'Estate Builder OS'}</span>
-            <span className="size-1 rounded-full bg-[#e5d9c5]" />
+            <span className="size-1 rounded-full bg-[#c9a84c] dark:bg-[#e5d9c5]" />
           </div>
           <div className="text-xs text-foreground font-semibold mt-0.5 truncate tracking-wide">
             {isAdminView ? "WeaverFrame HQ" : (session?.companyName || 'Company Name')}
@@ -208,7 +208,7 @@ export function Sidebar({
 
         {/* Profile row */}
         <div
-          className={`flex items-center rounded-lg hover:bg-white/[0.04] transition-all duration-200 overflow-hidden px-2 py-2 border border-transparent hover:border-white/[0.06] ${
+          className={`flex items-center rounded-lg hover:bg-accent/60 transition-all duration-200 overflow-hidden px-2 py-2 border border-transparent hover:border-border ${
             actuallyCollapsed ? "gap-0" : "gap-3"
           }`}
           title={actuallyCollapsed ? "Profile" : undefined}
@@ -232,14 +232,14 @@ export function Sidebar({
             <div className="text-xs text-foreground truncate font-medium">
               {isAdminView ? 'SajidAli Ansari' : (session?.displayName || 'User')}
             </div>
-            <div className="text-[10px] text-[#e5d9c5]/80 capitalize font-mono tracking-wider">
+            <div className="text-[10px] text-[#c9a84c] dark:text-[#e5d9c5]/80 capitalize font-mono tracking-wider">
               {isAdminView ? 'Superuser' : (session?.builderRole === 'sales' ? 'Sales Exec' : session?.builderRole || 'Owner')}
             </div>
           </div>
           
           <button 
             onClick={handleLogout}
-            className={`shrink-0 p-1.5 text-muted-foreground hover:text-white rounded-md hover:bg-white/10 transition-colors ${
+            className={`shrink-0 p-1.5 text-muted-foreground hover:text-foreground rounded-md hover:bg-accent transition-colors ${
               actuallyCollapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100 w-auto"
             }`}
             title="Log out"

@@ -35,7 +35,15 @@ import {
   ChevronDown,
   ExternalLink,
   BrainCircuit,
-  MoreVertical
+  MoreVertical,
+  Paperclip,
+  Link2,
+  Globe,
+  Download,
+  Eye,
+  BookOpen,
+  Image as ImageIcon,
+  Upload
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -180,6 +188,16 @@ function MessagesPage() {
 
   const [isLookbookOpen, setIsLookbookOpen] = useState(false);
   const [lookbookPage, setLookbookPage] = useState(0);
+
+  // File & Link Attachment State
+  const [attachedFile, setAttachedFile] = useState<{ name: string; size: string; type: string; dataUrl?: string } | null>(null);
+  const [attachedLink, setAttachedLink] = useState<{ title: string; url: string; category: string } | null>(null);
+  const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
+  const [linkInputUrl, setLinkInputUrl] = useState("");
+  const [linkInputTitle, setLinkInputTitle] = useState("");
+  const [linkInputCategory, setLinkInputCategory] = useState("3D Virtual Tour");
+  const [activeImageModalUrl, setActiveImageModalUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Portfolio Management
   const [editingPortfolioId, setEditingPortfolioId] = useState<string | null>(null);
@@ -568,13 +586,81 @@ function MessagesPage() {
     return threads;
   }, [activeThreadsList, searchQuery, activeTab, selectedLeadId]);
 
-  // Handle sending text message
+  // Handle File Selection (PDF, Blueprint, Images, CAD, Docs)
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    let sizeStr = `${(file.size / 1024).toFixed(0)} KB`;
+    if (file.size > 1024 * 1024) {
+      sizeStr = `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
+    }
+
+    const isImg = file.type.startsWith("image/");
+    const reader = new FileReader();
+    reader.onload = () => {
+      setAttachedFile({
+        name: file.name,
+        size: sizeStr,
+        type: file.type || (isImg ? "image/jpeg" : "application/pdf"),
+        dataUrl: typeof reader.result === "string" ? reader.result : undefined
+      });
+      toast.success(`Attached ${file.name} (${sizeStr})`);
+    };
+    reader.readAsDataURL(file);
+
+    e.target.value = "";
+  };
+
+  // Handle Link Inserter
+  const handleAddLink = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!linkInputUrl.trim()) return;
+
+    let formattedUrl = linkInputUrl.trim();
+    if (!formattedUrl.startsWith("http://") && !formattedUrl.startsWith("https://")) {
+      formattedUrl = `https://${formattedUrl}`;
+    }
+
+    const domain = formattedUrl.replace(/^https?:\/\//, '').split('/')[0];
+    const finalTitle = linkInputTitle.trim() || domain;
+
+    setAttachedLink({
+      url: formattedUrl,
+      title: finalTitle,
+      category: linkInputCategory || "Virtual Tour / Link"
+    });
+
+    setIsLinkModalOpen(false);
+    setLinkInputUrl("");
+    setLinkInputTitle("");
+    setLinkInputCategory("3D Virtual Tour");
+    toast.success(`Attached link: ${finalTitle}`);
+  };
+
+  // Handle sending text message or attachments
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!selectedLeadId || !newMessageText.trim() || isSending) return;
+    if (!selectedLeadId || (!newMessageText.trim() && !attachedFile && !attachedLink) || isSending) return;
 
-    const originalText = newMessageText.trim();
+    let payloadContent = newMessageText.trim();
+    if (attachedFile) {
+      if (attachedFile.type.startsWith("image/")) {
+        const header = `🖼️ Image Shared: ${attachedFile.name}|size=${attachedFile.size}|data=${attachedFile.dataUrl || ""}`;
+        payloadContent = payloadContent ? `${header}\n\n${payloadContent}` : header;
+      } else {
+        const header = `📎 File Attachment: ${attachedFile.name}|size=${attachedFile.size}|type=${attachedFile.type}|data=${attachedFile.dataUrl || ""}`;
+        payloadContent = payloadContent ? `${header}\n\n${payloadContent}` : header;
+      }
+    } else if (attachedLink) {
+      const header = `🔗 Link Shared: ${attachedLink.title}|url=${attachedLink.url}|category=${attachedLink.category}`;
+      payloadContent = payloadContent ? `${header}\n\n${payloadContent}` : header;
+    }
+
+    const originalText = payloadContent;
     setNewMessageText("");
+    setAttachedFile(null);
+    setAttachedLink(null);
     setIsSending(true);
 
     const tempId = `opt-${Date.now()}`;
@@ -775,15 +861,33 @@ function MessagesPage() {
     e.preventDefault();
     if (!selectedLeadId || !simulateMessageText.trim()) return;
 
+    const msgToSend = simulateMessageText.trim();
     setIsSimulating(true);
     try {
-      await simulateLeadMessage({
+      const res = await simulateLeadMessage({
         data: {
           leadId: selectedLeadId,
-          content: simulateMessageText,
+          content: msgToSend,
           enableAiReply: isAiActive
         }
       });
+
+      // Instantly inject new messages into local active chat view
+      if (res && res.leadMessage) {
+        setActiveChat(prev => {
+          if (!prev) return null;
+          const newMessages = [...prev.messages, res.leadMessage];
+          if (res.systemMessage) {
+            newMessages.push(res.systemMessage);
+          }
+          if ((window as any)._messagesCache) {
+            (window as any)._messagesCache.set(selectedLeadId, newMessages);
+          }
+          return { ...prev, messages: newMessages };
+        });
+        setTimeout(() => scrollToBottom(true, "smooth"), 60);
+      }
+
       setIsSimulateOpen(false);
       setSimulateMessageText("");
       await router.invalidate();
@@ -1261,6 +1365,12 @@ function MessagesPage() {
                       const isBrochureCard = msg.content.includes("📄 Document Shared");
                       // Render high-fidelity custom cards for calendars/appointments
                       const isAppointmentCard = msg.content.includes("📆 Site Visit Booked");
+                      // Render file attachments (PDF, CAD, Docs)
+                      const isFileAttachment = msg.content.includes("📎 File Attachment:");
+                      // Render photo / image attachments
+                      const isImageAttachment = msg.content.includes("🖼️ Image Shared:");
+                      // Render interactive web / 3D virtual tour links
+                      const isLinkShared = msg.content.includes("🔗 Link Shared:");
 
                       return (
                         <div key={msg.id} className="w-full">
@@ -1330,6 +1440,140 @@ function MessagesPage() {
                                   )}
                                 </div>
                               </div>
+                            ) : isFileAttachment ? (
+                              /* Rich Document / PDF / CAD Blueprint Attachment Card */
+                              (() => {
+                                const parts = msg.content.replace("📎 File Attachment: ", "").split("\n\n");
+                                const metaStr = parts[0] || "";
+                                const caption = parts.slice(1).join("\n\n");
+                                const [fileName, sizeParam, typeParam, dataParam] = metaStr.split("|");
+                                const fileSize = sizeParam ? sizeParam.replace("size=", "") : "File";
+                                const fileType = typeParam ? typeParam.replace("type=", "") : "document";
+                                const dataUrl = dataParam ? dataParam.replace("data=", "") : undefined;
+
+                                return (
+                                  <div className="bg-[#14151e] border border-white/10 rounded-xl p-4 max-w-[420px] shadow-2xl relative overflow-hidden space-y-2">
+                                    <div className="flex gap-3 items-center">
+                                      <div className="size-11 bg-primary/10 rounded-lg flex items-center justify-center border border-primary/20 shrink-0 text-primary">
+                                        <FileText className="size-5" />
+                                      </div>
+                                      <div className="min-w-0 flex-1">
+                                        <h4 className="text-xs font-bold text-white truncate">{fileName || "Attached Document"}</h4>
+                                        <div className="flex items-center gap-2 mt-0.5">
+                                          <span className="text-[10px] text-muted-foreground font-mono bg-white/5 px-2 py-0.5 rounded border border-white/5">
+                                            {fileSize}
+                                          </span>
+                                          <span className="text-[10px] text-muted-foreground font-mono">
+                                            {fileType.includes("pdf") ? "PDF Document" : fileType.includes("cad") || fileType.includes("dwg") ? "CAD Blueprint" : "Document"}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                    {caption && (
+                                      <p className="text-xs text-white/90 pt-2 border-t border-white/5 leading-relaxed whitespace-pre-line">
+                                        {caption}
+                                      </p>
+                                    )}
+                                    <div className="border-t border-white/5 pt-2.5 flex items-center justify-between">
+                                      <span className="text-[9px] text-muted-foreground font-mono">Direct File Attachment</span>
+                                      {dataUrl ? (
+                                        <a
+                                          href={dataUrl}
+                                          download={fileName}
+                                          className="inline-flex items-center gap-1 text-[11px] font-bold text-primary hover:underline cursor-pointer"
+                                        >
+                                          <Download className="size-3" /> Download / View
+                                        </a>
+                                      ) : (
+                                        <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
+                                          <Check className="size-3" /> Attached
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })()
+                            ) : isImageAttachment ? (
+                              /* Photo / Image Attachment Thumbnail with Lightbox */
+                              (() => {
+                                const parts = msg.content.replace("🖼️ Image Shared: ", "").split("\n\n");
+                                const metaStr = parts[0] || "";
+                                const caption = parts.slice(1).join("\n\n");
+                                const [fileName, sizeParam, dataParam] = metaStr.split("|");
+                                const fileSize = sizeParam ? sizeParam.replace("size=", "") : "";
+                                const dataUrl = dataParam ? dataParam.replace("data=", "") : undefined;
+
+                                return (
+                                  <div className="bg-[#14151e] border border-white/10 rounded-xl p-3 max-w-[380px] shadow-2xl overflow-hidden space-y-2">
+                                    {dataUrl && (
+                                      <div 
+                                        className="relative rounded-lg overflow-hidden cursor-pointer group bg-black/40 border border-white/5"
+                                        onClick={() => setActiveImageModalUrl(dataUrl)}
+                                      >
+                                        <img src={dataUrl} alt={fileName} className="w-full max-h-60 object-cover group-hover:scale-105 transition-transform duration-200" />
+                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                          <span className="px-3 py-1.5 rounded-full bg-black/80 text-white text-xs font-mono flex items-center gap-1.5 border border-white/20 shadow-xl">
+                                            <Eye className="size-3.5" /> Fullscreen Preview
+                                          </span>
+                                        </div>
+                                      </div>
+                                    )}
+                                    <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono px-1">
+                                      <span className="truncate max-w-[200px]">{fileName}</span>
+                                      {fileSize && <span>{fileSize}</span>}
+                                    </div>
+                                    {caption && (
+                                      <p className="text-xs text-white/90 pt-1 leading-relaxed border-t border-white/5 whitespace-pre-line">
+                                        {caption}
+                                      </p>
+                                    )}
+                                  </div>
+                                );
+                              })()
+                            ) : isLinkShared ? (
+                              /* Interactive Web Link / 3D Virtual Tour Card */
+                              (() => {
+                                const parts = msg.content.replace("🔗 Link Shared: ", "").split("\n\n");
+                                const metaStr = parts[0] || "";
+                                const caption = parts.slice(1).join("\n\n");
+                                const [titleParam, urlParam, categoryParam] = metaStr.split("|");
+                                const title = titleParam || "Shared Web Link";
+                                const url = urlParam ? urlParam.replace("url=", "") : "#";
+                                const category = categoryParam ? categoryParam.replace("category=", "") : "Virtual Tour";
+
+                                return (
+                                  <div className="bg-[#14151e] border border-[#c9a84c]/30 rounded-xl p-4 max-w-[420px] shadow-2xl relative overflow-hidden space-y-2.5">
+                                    <div className="flex gap-3 items-start">
+                                      <div className="size-10 bg-[#c9a84c]/15 rounded-lg flex items-center justify-center border border-[#c9a84c]/30 shrink-0 text-[#c9a84c] dark:text-[#e5d9c5]">
+                                        <Globe className="size-5" />
+                                      </div>
+                                      <div className="min-w-0 flex-1">
+                                        <span className="text-[9px] uppercase tracking-wider font-mono font-bold text-[#c9a84c] dark:text-[#e5d9c5] block">
+                                          {category}
+                                        </span>
+                                        <h4 className="text-xs font-bold text-white mt-0.5 truncate">{title}</h4>
+                                        <p className="text-[10px] text-muted-foreground mt-0.5 truncate font-mono">{url}</p>
+                                      </div>
+                                    </div>
+                                    {caption && (
+                                      <p className="text-xs text-white/90 pt-2 border-t border-white/5 leading-relaxed whitespace-pre-line">
+                                        {caption}
+                                      </p>
+                                    )}
+                                    <div className="border-t border-white/5 pt-2.5 flex items-center justify-between">
+                                      <span className="text-[9px] text-muted-foreground font-mono">External Resource</span>
+                                      <a
+                                        href={url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#c9a84c]/20 hover:bg-[#c9a84c]/30 text-[#c9a84c] dark:text-[#e5d9c5] text-xs font-bold transition-colors cursor-pointer"
+                                      >
+                                        Open Link <ExternalLink className="size-3" />
+                                      </a>
+                                    </div>
+                                  </div>
+                                );
+                              })()
                             ) : (
                               /* Standard Message Bubble */
                               <div
@@ -1402,8 +1646,8 @@ function MessagesPage() {
                 ))}
               </div>
 
-              {/* MESSAGE COMPOSER FOOTER INPUT */}
-              <div className="p-4 border-t border-border bg-[#0B0B0C]/80 backdrop-blur-md relative z-30">
+              {/* MESSAGE COMPOSER FOOTER INPUT WITH ATTACHMENT & LINK SUITE */}
+              <div className="p-4 border-t border-border bg-[#0B0B0C]/90 backdrop-blur-md relative z-30 space-y-2">
                 {isUserScrolledUp && (
                   <button
                     type="button"
@@ -1424,21 +1668,136 @@ function MessagesPage() {
                     )}
                   </button>
                 )}
-                <form onSubmit={handleSendMessage} className="relative flex items-center">
+
+                {/* Hidden File Input Picker */}
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileSelect}
+                  className="hidden"
+                  accept="image/*,application/pdf,.doc,.docx,.cad,.dwg,.txt,.csv"
+                />
+
+                {/* Pre-Send Attachment Banner (File) */}
+                {attachedFile && (
+                  <div className="p-2.5 px-3 rounded-xl bg-[#14151f] border border-primary/40 flex items-center justify-between text-xs text-white animate-in slide-in-from-bottom-1 shadow-lg">
+                    <div className="flex items-center gap-3 min-w-0">
+                      {attachedFile.type.startsWith("image/") && attachedFile.dataUrl ? (
+                        <img src={attachedFile.dataUrl} alt="Preview" className="size-9 rounded-lg object-cover border border-white/10 shrink-0" />
+                      ) : (
+                        <div className="size-9 rounded-lg bg-primary/10 border border-primary/30 flex items-center justify-center text-primary shrink-0">
+                          <FileText className="size-5" />
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <p className="font-semibold text-xs text-white truncate">{attachedFile.name}</p>
+                        <p className="text-[10px] text-muted-foreground font-mono">{attachedFile.size} · Ready to upload & send</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setAttachedFile(null)}
+                      className="size-6 rounded-full bg-white/5 hover:bg-rose-500/20 text-muted-foreground hover:text-rose-400 flex items-center justify-center transition-colors cursor-pointer"
+                      title="Remove attachment"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Pre-Send Attachment Banner (Link) */}
+                {attachedLink && (
+                  <div className="p-2.5 px-3 rounded-xl bg-[#14151f] border border-[#c9a84c]/40 flex items-center justify-between text-xs text-white animate-in slide-in-from-bottom-1 shadow-lg">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="size-9 rounded-lg bg-[#c9a84c]/15 border border-[#c9a84c]/30 flex items-center justify-center text-[#c9a84c] dark:text-[#e5d9c5] shrink-0">
+                        <Globe className="size-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-semibold text-xs text-white truncate">{attachedLink.title}</p>
+                        <p className="text-[10px] text-muted-foreground font-mono truncate">{attachedLink.url} ({attachedLink.category})</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setAttachedLink(null)}
+                      className="size-6 rounded-full bg-white/5 hover:bg-rose-500/20 text-muted-foreground hover:text-rose-400 flex items-center justify-center transition-colors cursor-pointer"
+                      title="Remove link"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Input Controls Bar */}
+                <form onSubmit={handleSendMessage} className="flex items-center gap-1.5 bg-[#141414] border border-border focus-within:border-primary/80 transition-all rounded-xl p-1.5 shadow-sm">
+                  {/* Action Buttons Toolbar */}
+                  <div className="flex items-center gap-0.5 shrink-0 pl-1">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isSending}
+                      className="size-8 rounded-lg hover:bg-white/10 text-muted-foreground hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                      title="Attach Blueprint, PDF, Photo, or File"
+                    >
+                      <Paperclip className="size-4" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsLinkModalOpen(true)}
+                      disabled={isSending}
+                      className="size-8 rounded-lg hover:bg-white/10 text-muted-foreground hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                      title="Insert 3D Virtual Tour, Lookbook Link, or URL"
+                    >
+                      <Link2 className="size-4" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsPortfolioModalOpen(true)}
+                      disabled={isSending}
+                      className="size-8 rounded-lg hover:bg-white/10 text-muted-foreground hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                      title="Share Architectural Specs Portfolio / PDF"
+                    >
+                      <BookOpen className="size-4" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsSchedulingOpen(true)}
+                      disabled={isSending}
+                      className="size-8 rounded-lg hover:bg-white/10 text-muted-foreground hover:text-primary flex items-center justify-center transition-colors cursor-pointer"
+                      title="Schedule Site Visit / Walkthrough"
+                    >
+                      <Calendar className="size-4" />
+                    </button>
+                  </div>
+
+                  <div className="w-px h-5 bg-border/60 mx-1 shrink-0" />
+
+                  {/* Main Message Input */}
                   <input
                     type="text"
-                    required
                     disabled={isSending}
                     ref={inputRef}
                     value={newMessageText}
                     onChange={(e) => setNewMessageText(e.target.value)}
-                    placeholder={`Type message to ${selectedThread.leadName}... (Press Enter to Send)`}
-                    className="w-full bg-[#141414] border border-border focus:border-primary/80 transition-all rounded-lg pl-4 pr-12 py-3 text-xs text-white placeholder-muted-foreground focus:outline-none focus:ring-0 leading-relaxed disabled:opacity-40"
+                    placeholder={
+                      attachedFile 
+                        ? `Add a note with ${attachedFile.name}...` 
+                        : attachedLink 
+                          ? `Add a note with ${attachedLink.title}...` 
+                          : `Type message to ${selectedThread.leadName}... (Press Enter to Send)`
+                    }
+                    className="flex-1 bg-transparent border-0 px-2 py-2 text-xs text-white placeholder-muted-foreground focus:outline-none focus:ring-0 leading-relaxed disabled:opacity-40"
                   />
+
+                  {/* Send Button */}
                   <button
                     type="submit"
-                    disabled={isSending || !newMessageText.trim()}
-                    className="absolute right-3 p-1.5 bg-primary rounded-md text-black hover:bg-primary/95 transition-all disabled:opacity-40 active:scale-95 flex items-center justify-center cursor-pointer"
+                    disabled={isSending || (!newMessageText.trim() && !attachedFile && !attachedLink)}
+                    className="size-8 bg-primary rounded-lg text-black hover:bg-primary/95 transition-all disabled:opacity-30 active:scale-95 flex items-center justify-center cursor-pointer shrink-0 shadow-sm"
+                    title="Send Message"
                   >
                     {isSending ? (
                       <Loader2 className="size-3.5 animate-spin text-black" />
@@ -2073,6 +2432,141 @@ function MessagesPage() {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* INSERT LINK / VIRTUAL TOUR DIALOG */}
+      {isLinkModalOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-[#0e0f14] border border-border w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="px-6 py-4 border-b border-border flex items-center justify-between bg-[#12131b]">
+              <div className="flex items-center gap-2.5">
+                <div className="size-8 rounded-xl bg-[#c9a84c]/15 border border-[#c9a84c]/30 flex items-center justify-center text-[#c9a84c] dark:text-[#e5d9c5]">
+                  <Globe className="size-4" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-sm text-foreground">Share Link / 3D Virtual Tour</h3>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Send a clickable web link or Matterport walkthrough.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsLinkModalOpen(false)}
+                className="size-7 rounded-lg hover:bg-white/10 text-muted-foreground hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddLink} className="p-6 space-y-4">
+              {/* Category Quick Presets */}
+              <div className="space-y-1.5">
+                <label className="block text-[10px] uppercase font-mono tracking-wider text-muted-foreground font-bold">
+                  Resource Category
+                </label>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {[
+                    "3D Virtual Tour",
+                    "Design Lookbook",
+                    "Cost Estimator",
+                    "Client Portal",
+                    "Video Walkthrough",
+                    "Other Link"
+                  ].map((cat) => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setLinkInputCategory(cat)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-mono transition-all cursor-pointer border ${
+                        linkInputCategory === cat
+                          ? "bg-primary text-black border-primary font-bold shadow-sm"
+                          : "bg-white/5 text-muted-foreground border-white/5 hover:text-white"
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* URL Input */}
+              <div className="space-y-1.5">
+                <label className="block text-[10px] uppercase font-mono tracking-wider text-muted-foreground font-bold">
+                  Website / Tour URL *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={linkInputUrl}
+                  onChange={(e) => setLinkInputUrl(e.target.value)}
+                  placeholder="https://my.matterport.com/show/?m=... or https://..."
+                  className="w-full bg-[#181924] border border-border focus:border-primary rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none font-mono"
+                  autoFocus
+                />
+              </div>
+
+              {/* Title / Description */}
+              <div className="space-y-1.5">
+                <label className="block text-[10px] uppercase font-mono tracking-wider text-muted-foreground font-bold">
+                  Display Title (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={linkInputTitle}
+                  onChange={(e) => setLinkInputTitle(e.target.value)}
+                  placeholder="e.g. 3D Model Walkthrough - Lakeway Estate"
+                  className="w-full bg-[#181924] border border-border focus:border-primary rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => setIsLinkModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs text-muted-foreground hover:text-white transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!linkInputUrl.trim()}
+                  className="px-5 py-2 rounded-xl bg-primary text-black text-xs font-bold hover:bg-primary/90 transition-all disabled:opacity-40 cursor-pointer shadow-md flex items-center gap-1.5"
+                >
+                  <Link2 className="size-3.5" /> Attach Link
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* FULLSCREEN IMAGE LIGHTBOX MODAL */}
+      {activeImageModalUrl && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-in fade-in duration-200">
+          <div className="fixed inset-0" onClick={() => setActiveImageModalUrl(null)} />
+          <div className="relative max-w-4xl max-h-[90vh] flex flex-col items-center z-10 animate-in zoom-in-95 duration-150">
+            <div className="absolute -top-12 right-0 flex items-center gap-2">
+              <a
+                href={activeImageModalUrl}
+                download="estate-photo.jpg"
+                className="size-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer shadow-lg"
+                title="Download image"
+              >
+                <Download className="size-4" />
+              </a>
+              <button
+                onClick={() => setActiveImageModalUrl(null)}
+                className="size-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer shadow-lg"
+                title="Close"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+            <img
+              src={activeImageModalUrl}
+              alt="Fullscreen attachment"
+              className="max-h-[80vh] w-auto rounded-2xl object-contain shadow-2xl border border-white/10"
+            />
           </div>
         </div>
       )}

@@ -21,7 +21,7 @@ import {
   getBillingProfile,
   updateBillingProfile,
 } from "@/lib/dashboard";
-import { Loader2, Check, X, AlertCircle, Download } from "lucide-react";
+import { Loader2, Check, X, AlertCircle, Download, Mail, Sparkles, RefreshCw, Lock, ShieldCheck, CheckCircle2, Zap, Server, Globe } from "lucide-react";
 
 export const Route = createFileRoute("/settings")({
   beforeLoad: async ({ context }) => {
@@ -76,7 +76,6 @@ export const Route = createFileRoute("/settings")({
 
 const sections = [
   "Builder Profile",
-  "Lead Qualification Rules",
   "Notifications",
   "Integrations",
   "Billing",
@@ -367,7 +366,7 @@ function SettingsPage() {
   // ── Integration connection states ──────────────────────────────────────────
   const [connectionStatus, setConnectionStatus] = useState<Record<string, boolean>>(() => {
     const statuses: Record<string, boolean> = {
-      google: false, houzz: false, facebook: false, twilio: false, hubspot: false, ghl: false
+      google: false, houzz: false, facebook: false, twilio: false, hubspot: false, ghl: false, email_mailbox: false
     };
     Object.keys(loadedStatuses).forEach(key => {
       if (loadedStatuses[key]) statuses[key] = loadedStatuses[key].isConnected;
@@ -378,7 +377,7 @@ function SettingsPage() {
   // Saved credentials storage in state
   const [credentials, setCredentials] = useState<Record<string, Record<string, string>>>(() => {
     const creds: Record<string, Record<string, string>> = {
-      google: {}, twilio: {}, hubspot: {}, houzz: {}, facebook: {}, ghl: {}
+      google: {}, twilio: {}, hubspot: {}, houzz: {}, facebook: {}, ghl: {}, email_mailbox: {}
     };
     Object.keys(loadedStatuses).forEach(key => {
       if (loadedStatuses[key]) creds[key] = loadedStatuses[key].credentials || {};
@@ -386,13 +385,25 @@ function SettingsPage() {
     return creds;
   });
 
+  // ── Email & Mailbox Connection State ─────────────────────────────────────────
+  const [emailProvider, setEmailProvider] = useState<"google" | "microsoft" | "custom_smtp">("google");
+  const [emailAddress, setEmailAddress] = useState("");
+  const [emailSenderName, setEmailSenderName] = useState("");
+  const [emailPassword, setEmailPassword] = useState("");
+  const [smtpHost, setSmtpHost] = useState("");
+  const [smtpPort, setSmtpPort] = useState("587");
+  const [useSsl, setUseSsl] = useState(false);
+
+  const [isTestingEmail, setIsTestingEmail] = useState(false);
+  const [emailTestSuccess, setEmailTestSuccess] = useState<string | null>(null);
+
   useEffect(() => {
     if (loadedStatuses && Object.keys(loadedStatuses).length > 0) {
       const statuses: Record<string, boolean> = {
-        google: false, houzz: false, facebook: false, twilio: false, hubspot: false, ghl: false
+        google: false, houzz: false, facebook: false, twilio: false, hubspot: false, ghl: false, email_mailbox: false
       };
       const creds: Record<string, Record<string, string>> = {
-        google: {}, twilio: {}, hubspot: {}, houzz: {}, facebook: {}, ghl: {}
+        google: {}, twilio: {}, hubspot: {}, houzz: {}, facebook: {}, ghl: {}, email_mailbox: {}
       };
       Object.keys(loadedStatuses).forEach(key => {
         if (loadedStatuses[key]) {
@@ -402,8 +413,103 @@ function SettingsPage() {
       });
       setConnectionStatus(statuses);
       setCredentials(creds);
+
+      if (creds.email_mailbox) {
+        const em = creds.email_mailbox;
+        if (em.provider) setEmailProvider(em.provider as any);
+        if (em.email) setEmailAddress(em.email);
+        if (em.senderName) setEmailSenderName(em.senderName);
+        if (em.password) setEmailPassword(em.password);
+        if (em.smtpHost) setSmtpHost(em.smtpHost);
+        if (em.smtpPort) setSmtpPort(em.smtpPort);
+        if (em.useSsl) setUseSsl(em.useSsl === 'true');
+      }
     }
   }, [loadedStatuses]);
+
+  const isEmailConnected = !!connectionStatus.email_mailbox;
+
+  const handleTestEmail = async () => {
+    if (!emailAddress.trim()) {
+      alert("Please enter a valid company mailbox email first.");
+      return;
+    }
+    setIsTestingEmail(true);
+    setEmailTestSuccess(null);
+    try {
+      const creds = {
+        provider: emailProvider,
+        email: emailAddress,
+        senderName: emailSenderName,
+        password: emailPassword,
+        smtpHost: emailProvider === 'google' ? 'smtp.gmail.com' : emailProvider === 'microsoft' ? 'smtp.office365.com' : smtpHost,
+        smtpPort: emailProvider === 'google' ? '465' : emailProvider === 'microsoft' ? '587' : smtpPort,
+        useSsl: useSsl ? 'true' : 'false'
+      };
+      await testIntegrationConnection({
+        data: { platformId: "email_mailbox", credentials: creds }
+      });
+      setEmailTestSuccess(`Handshake verified! Connected to ${emailAddress}`);
+      setTimeout(() => setEmailTestSuccess(null), 5000);
+    } catch (err: any) {
+      alert(`Mailbox Verification Failed: ${err?.message || err}`);
+    } finally {
+      setIsTestingEmail(false);
+    }
+  };
+
+  const handleSaveEmail = async () => {
+    if (!emailAddress.trim()) {
+      alert("Please enter a company email address.");
+      return;
+    }
+    setIsSaving(prev => ({ ...prev, email_mailbox: true }));
+    try {
+      const creds = {
+        provider: emailProvider,
+        email: emailAddress,
+        senderName: emailSenderName,
+        password: emailPassword,
+        smtpHost: emailProvider === 'google' ? 'smtp.gmail.com' : emailProvider === 'microsoft' ? 'smtp.office365.com' : smtpHost,
+        smtpPort: emailProvider === 'google' ? '465' : emailProvider === 'microsoft' ? '587' : smtpPort,
+        useSsl: useSsl ? 'true' : 'false'
+      };
+      await testIntegrationConnection({
+        data: { platformId: "email_mailbox", credentials: creds }
+      });
+      await saveIntegrationCredentials({
+        data: { platformId: "email_mailbox", credentials: creds }
+      });
+      setConnectionStatus(prev => ({ ...prev, email_mailbox: true }));
+      setCredentials(prev => ({ ...prev, email_mailbox: creds }));
+      await router.invalidate();
+      alert(`Success: Company mailbox linked! AI can now send and receive emails as ${emailAddress}.`);
+    } catch (err: any) {
+      console.error(err);
+      alert(`Failed to save mailbox connection: ${err?.message || err}`);
+    } finally {
+      setIsSaving(prev => ({ ...prev, email_mailbox: false }));
+    }
+  };
+
+  const handleDisconnectEmail = async () => {
+    setIsSaving(prev => ({ ...prev, email_mailbox: true }));
+    try {
+      await disconnectIntegration({
+        data: { platformId: "email_mailbox" }
+      });
+      setConnectionStatus(prev => ({ ...prev, email_mailbox: false }));
+      setCredentials(prev => ({ ...prev, email_mailbox: {} }));
+      setEmailPassword("");
+      await router.invalidate();
+      alert("Mailbox disconnected.");
+    } catch (err) {
+      console.error(err);
+      alert("Failed to disconnect mailbox.");
+    } finally {
+      setIsSaving(prev => ({ ...prev, email_mailbox: false }));
+    }
+  };
 
   const [isSaving, setIsSaving] = useState<Record<string, boolean>>({});
 
@@ -651,29 +757,6 @@ function SettingsPage() {
             </div>
           )}
 
-          {active === "Lead Qualification Rules" && (
-            <div className="space-y-4">
-              <H>Qualification Rules</H>
-              <Row label="Minimum budget"><Input value={qualForm.minBudget} onChange={e => setQualForm(p => ({ ...p, minBudget: e.target.value }))} /></Row>
-              <Row label="Maximum timeline (months)"><Input value={qualForm.maxTimeline} onChange={e => setQualForm(p => ({ ...p, maxTimeline: e.target.value }))} /></Row>
-              <Toggle label="Pre-approval required" checked={qualForm.preApprovalRequired} onChange={v => setQualForm(p => ({ ...p, preApprovalRequired: v }))} />
-              {/* <Toggle label="Specific zip codes only" checked={qualForm.specificZipOnly} onChange={v => setQualForm(p => ({ ...p, specificZipOnly: v }))} /> */}
-              <div>
-                <label className="text-xs text-muted-foreground uppercase tracking-wider">Minimum lead score to notify builder</label>
-                <div className="flex items-center gap-3 mt-2">
-                  <input
-                    type="range" min={0} max={100}
-                    value={qualForm.minLeadScore}
-                    onChange={e => setQualForm(p => ({ ...p, minLeadScore: Number(e.target.value) }))}
-                    className="flex-1 accent-primary"
-                  />
-                  <span className="font-mono text-sm text-foreground w-10 text-right">{qualForm.minLeadScore}</span>
-                </div>
-              </div>
-              <Save onClick={handleSaveQual} isSaving={isSavingQual} saved={qualSaved} />
-            </div>
-          )}
-
           {active === "Notifications" && (
             <div className="space-y-4">
               <H>Notification Preferences</H>
@@ -706,12 +789,237 @@ function SettingsPage() {
               <div>
                 <H>Integrations & API Credentials</H>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Connect third-party platforms with your API keys and credentials so all reviews, leads, and SMS logs can be synced in real-time.
+                  Connect company mailboxes and third-party platforms with encrypted credentials to synchronize reviews, leads, and AI communication.
                 </p>
               </div>
 
               {/* Integrations List */}
               <div className="space-y-3">
+                {/* ── EMAIL & MAILBOX CONNECTION (PRIMARY AI MAIL GATEWAY) ── */}
+                <div className="border border-border rounded-lg bg-secondary/10 overflow-hidden transition-all duration-150">
+                  <div className="flex items-center justify-between p-4 bg-secondary/30">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="size-9 rounded-md bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-foreground text-xs font-mono font-bold shrink-0">
+                        <Mail className="size-4 text-[#c9a84c] dark:text-[#e5d9c5]" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-foreground truncate">
+                          Company Email & Mailbox Gateway
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-0.5 truncate">
+                          Send and receive AI lead conversations directly from your official company email.
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0 ml-4">
+                      <span className={`text-[10px] uppercase font-mono tracking-widest px-2 py-0.5 rounded ${
+                        isEmailConnected ? "bg-success/10 text-success" : "bg-neutral-800 text-muted-foreground"
+                      }`}>
+                        {isEmailConnected ? "Connected" : "Disconnected"}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedIntegration(expandedIntegration === "email_mailbox" ? null : "email_mailbox")}
+                        className="text-xs px-3 py-1.5 rounded border border-border text-foreground hover:bg-secondary transition-colors cursor-pointer"
+                      >
+                        {expandedIntegration === "email_mailbox" ? "Close" : isEmailConnected ? "Configure" : "Connect"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {expandedIntegration === "email_mailbox" && (
+                    <div className="p-5 border-t border-border/40 bg-card space-y-4 animate-in slide-in-from-top-2 duration-150">
+                      {/* Mail Provider Dropdown */}
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">
+                          Mail Service Provider
+                        </label>
+                        <CustomSelect
+                          value={emailProvider}
+                          onChange={(val) => setEmailProvider(val as any)}
+                          options={[
+                            { value: "google", label: "Google Workspace / Gmail (@yourcompany.com)" },
+                            { value: "microsoft", label: "Microsoft 365 / Outlook (@yourcompany.com)" },
+                            { value: "custom_smtp", label: "Custom SMTP / IMAP Server (Private Host)" },
+                          ]}
+                        />
+                      </div>
+
+                      {/* Form Fields Grid */}
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-4">
+                        {/* Connected Email Address */}
+                        <div className="sm:col-span-6 space-y-1.5">
+                          <label className="block text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">
+                            Company Mailbox Email <span className="text-danger">*</span>
+                          </label>
+                          <input
+                            type="email"
+                            value={emailAddress}
+                            onChange={e => setEmailAddress(e.target.value)}
+                            placeholder="e.g. alex@luxuryhomes.com"
+                            className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs text-foreground focus:outline-none focus:border-white/60 font-mono"
+                          />
+                        </div>
+
+                        {/* Sender Display Name */}
+                        <div className="sm:col-span-6 space-y-1.5">
+                          <label className="block text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">
+                            Sender Display Name
+                          </label>
+                          <input
+                            type="text"
+                            value={emailSenderName}
+                            onChange={e => setEmailSenderName(e.target.value)}
+                            placeholder="e.g. Alex | Luxury Homes Studio"
+                            className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs text-foreground focus:outline-none focus:border-white/60"
+                          />
+                        </div>
+
+                        {/* App Password / Access Secret */}
+                        {emailProvider !== "custom_smtp" ? (
+                          <div className="sm:col-span-12 space-y-1.5">
+                            <label className="block text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">
+                              {emailProvider === "google" ? "Google Workspace App Password" : "Microsoft 365 App Password / Secret"} <span className="text-danger">*</span>
+                            </label>
+                            <input
+                              type="password"
+                              value={emailPassword}
+                              onChange={e => setEmailPassword(e.target.value)}
+                              placeholder="Enter 16-character App Password (e.g. abcd efgh ijkl mnop)"
+                              className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-white/60"
+                            />
+                            <p className="text-[10px] text-muted-foreground">
+                              {emailProvider === "google"
+                                ? "🔑 Generated in Google Account > Security > 2-Step Verification > App Passwords."
+                                : "🔑 Generated in Microsoft 365 Admin / Azure Security > App Registrations or App Passwords."}
+                            </p>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="sm:col-span-6 space-y-1.5">
+                              <label className="block text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">
+                                SMTP Server Host <span className="text-danger">*</span>
+                              </label>
+                              <input
+                                type="text"
+                                value={smtpHost}
+                                onChange={e => setSmtpHost(e.target.value)}
+                                placeholder="e.g. smtp.mailgun.org or mail.yourdomain.com"
+                                className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-white/60"
+                              />
+                            </div>
+
+                            <div className="sm:col-span-3 space-y-1.5">
+                              <label className="block text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">
+                                SMTP Port <span className="text-danger">*</span>
+                              </label>
+                              <input
+                                type="text"
+                                value={smtpPort}
+                                onChange={e => setSmtpPort(e.target.value)}
+                                placeholder="587"
+                                className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-white/60"
+                              />
+                            </div>
+
+                            <div className="sm:col-span-3 space-y-1.5 flex flex-col justify-center pt-3">
+                              <label className="flex items-center gap-2 cursor-pointer text-xs text-foreground">
+                                <input
+                                  type="checkbox"
+                                  checked={useSsl}
+                                  onChange={e => setUseSsl(e.target.checked)}
+                                  className="size-4 accent-primary rounded"
+                                />
+                                <span>Use SSL (Port 465)</span>
+                              </label>
+                            </div>
+
+                            <div className="sm:col-span-12 space-y-1.5">
+                              <label className="block text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">
+                                SMTP Password <span className="text-danger">*</span>
+                              </label>
+                              <input
+                                type="password"
+                                value={emailPassword}
+                                onChange={e => setEmailPassword(e.target.value)}
+                                placeholder="Enter SMTP password"
+                                className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-white/60"
+                              />
+                            </div>
+                          </>
+                        )}
+                      </div>
+
+                      {/* Test Success Feedback */}
+                      {emailTestSuccess && (
+                        <div className="p-3 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-mono flex items-center gap-2 animate-in fade-in duration-150">
+                          <CheckCircle2 className="size-4 shrink-0" />
+                          <span>{emailTestSuccess}</span>
+                        </div>
+                      )}
+
+                      {/* Card Actions Footer */}
+                      <div className="flex items-center justify-between pt-2 border-t border-border/20">
+                        <span className="text-[10px] text-muted-foreground font-mono flex items-center gap-1.5">
+                          <Lock className="size-3 text-emerald-500" />
+                          AES-256 GCM encrypted
+                        </span>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={handleTestEmail}
+                            disabled={isTestingEmail || !emailAddress.trim()}
+                            className="px-3 py-1.5 border border-border hover:bg-secondary text-xs font-medium text-foreground rounded transition-colors flex items-center gap-1 disabled:opacity-50"
+                          >
+                            {isTestingEmail ? (
+                              <>
+                                <RefreshCw className="size-3 animate-spin" />
+                                <span>Verifying...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Zap className="size-3 text-[#c9a84c] dark:text-[#e5d9c5]" />
+                                <span>Test</span>
+                              </>
+                            )}
+                          </button>
+
+                          {isEmailConnected && (
+                            <button
+                              type="button"
+                              onClick={handleDisconnectEmail}
+                              disabled={isSaving.email_mailbox}
+                              className="px-3 py-1.5 border border-danger/20 hover:bg-danger/10 text-danger rounded text-xs font-semibold transition-colors disabled:opacity-50"
+                            >
+                              Disconnect
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={handleSaveEmail}
+                            disabled={isSaving.email_mailbox || !emailAddress.trim()}
+                            className="px-4 py-1.5 bg-primary text-black rounded text-xs font-semibold hover:bg-primary/95 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                          >
+                            {isSaving.email_mailbox ? (
+                              <>
+                                <RefreshCw className="size-3 animate-spin" />
+                                <span>Saving...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Sparkles className="size-3" />
+                                <span>Save & Sync</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
                 {integrationsList.map((i) => {
                   const isExpanded = expandedIntegration === i.id;
                   const isConnected = connectionStatus[i.id];
