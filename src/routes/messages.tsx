@@ -933,32 +933,48 @@ function MessagesPage() {
           style={{ width: `${leftWidth}px` }}
           className="border-r border-border flex flex-col h-full min-h-0 bg-[#080808]/90 shrink-0 relative"
         >
-
           {/* Thread Search Box */}
-          <div className="p-4 border-b border-border space-y-3">
+          <div className="p-3.5 border-b border-border space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-xs text-foreground tracking-tight flex items-center gap-1.5">
+                <Mail className="size-3.5 text-primary" />
+                <span>Client Mailbox</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setNewChatSearchQuery("");
+                  setIsNewChatModalOpen(true);
+                }}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-[10.5px] font-semibold transition-colors cursor-pointer"
+              >
+                <Plus className="size-3" /> New Email
+              </button>
+            </div>
+
             <div className="relative">
-              <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
+              <Search className="absolute left-3 top-2.5 size-3.5 text-muted-foreground" />
               <input
                 type="text"
-                placeholder="Search conversations..."
+                placeholder="Search emails or leads..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-secondary border border-border rounded-md pl-9 pr-4 py-2 text-xs text-foreground focus:outline-none focus:border-primary/60 placeholder:text-muted-foreground transition-colors"
+                className="w-full bg-secondary border border-border rounded-lg pl-8 pr-3 py-1.5 text-xs text-foreground focus:outline-none focus:border-primary/60 placeholder:text-muted-foreground transition-colors"
               />
             </div>
 
             {/* Filter Tabs */}
-            <div className="flex gap-1.5 p-0.5 bg-secondary/60 rounded-lg">
+            <div className="flex gap-1 p-0.5 bg-secondary/60 rounded-lg">
               {(["all", "unread", "hot"] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`flex-1 py-1 text-[11px] font-medium capitalize rounded-md transition-all ${activeTab === tab
-                    ? "bg-card text-foreground shadow-sm"
+                  className={`flex-1 py-1 text-[10.5px] font-medium capitalize rounded-md transition-all ${activeTab === tab
+                    ? "bg-card text-foreground shadow-sm font-semibold"
                     : "text-muted-foreground hover:text-foreground"
                     }`}
                 >
-                  {tab}
+                  {tab === "all" ? "All" : tab === "unread" ? "Unread" : "Hot Leads"}
                 </button>
               ))}
             </div>
@@ -1062,19 +1078,6 @@ function MessagesPage() {
               </div>
             )}
           </div>
-
-          {/* WhatsApp-Style Floating New Chat FAB Button */}
-          <button
-            type="button"
-            onClick={() => {
-              setNewChatSearchQuery("");
-              setIsNewChatModalOpen(true);
-            }}
-            className="absolute bottom-5 right-5 z-30 size-12 rounded-full bg-[#25D366] hover:bg-[#20bd5a] text-black font-bold shadow-[0_4px_20px_rgba(37,211,102,0.4)] flex items-center justify-center transition-all hover:scale-110 active:scale-95 group cursor-pointer"
-            title="Start new chat"
-          >
-            <MessageSquarePlus className="size-6 text-black group-hover:scale-110 transition-transform" />
-          </button>
         </div>
 
         {/* Draggable Divider splitter */}
@@ -1093,12 +1096,11 @@ function MessagesPage() {
 
           {selectedThread && activeChat ? (
             <>
-              {/* CHAT PANEL HEADER */}
-              <div className="px-6 py-4 border-b border-border bg-[#0B0B0C]/80 flex items-center justify-between gap-4">
-
-                {/* User Info Card */}
-                <div className="flex items-center gap-3">
-                  <div className="size-9 rounded-full bg-primary/5 border border-white/[0.06] flex items-center justify-center font-bold text-xs text-white">
+              {/* UNIFIED STREAMLINED THREAD HEADER */}
+              <div className="px-6 py-3.5 border-b border-border bg-[#090a0e] flex items-center justify-between gap-4 shrink-0">
+                {/* Left: Lead Identity & Metadata */}
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="size-9 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center font-bold text-xs text-primary shrink-0">
                     {(selectedThread.leadName || "Lead")
                       .split(" ")
                       .filter(Boolean)
@@ -1107,179 +1109,151 @@ function MessagesPage() {
                       .slice(0, 2)
                       .toUpperCase() || "L"}
                   </div>
-                  <div>
-                    <h3 className="font-semibold text-xs text-foreground tracking-tight flex items-center gap-2">
-                      {selectedThread.leadName}
-                      {selectedThread.isOnline && (
-                        <span className="inline-block size-2 rounded-full bg-green-500 animate-pulse" title="Lead is actively viewing the portal" />
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold text-xs sm:text-sm text-foreground truncate">
+                        {selectedThread.leadName}
+                      </h3>
+                      {selectedThread.scoreTier === "Hot" && (
+                        <span className="px-1.5 py-0.5 rounded text-[8.5px] font-bold uppercase tracking-wider bg-red-500/10 text-red-400 border border-red-500/20 shrink-0">
+                          Hot Lead
+                        </span>
                       )}
-                    </h3>
-                    <div className="flex items-center gap-1.5 text-xs mt-0.5 h-4">
-                      {selectedThread.isOnline ? (
-                        <span className="text-green-500 font-medium">Online (Portal)</span>
-                      ) : (
-                        <span className="text-muted-foreground">Offline</span>
+                      {selectedThread.scoreTier === "Warm" && (
+                        <span className="px-1.5 py-0.5 rounded text-[8.5px] font-bold uppercase tracking-wider bg-warning/10 text-warning border border-warning/20 shrink-0">
+                          Warm
+                        </span>
                       )}
+                      {selectedThread.estimatedBudget > 0 && (
+                        <span className="text-[10px] text-muted-foreground font-mono hidden sm:inline shrink-0">
+                          · Est. ${Math.round(selectedThread.estimatedBudget / 1000)}K
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground font-mono mt-0.5 truncate">
+                      <span>{selectedThread.email || `${selectedThread.leadName?.toLowerCase().replace(/\s+/g, '')}@client.com`}</span>
                     </div>
                   </div>
                 </div>
 
-                {/* Lead contacts and fast action links */}
-                <div className="flex items-center gap-4 shrink-0">
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
-                    {selectedThread.email && (
-                      <a href={`mailto:${selectedThread.email}`} className="p-2 bg-secondary border border-border rounded-md hover:bg-secondary/80 hover:text-white transition-colors" title={selectedThread.email}>
-                        <Mail className="size-3.5" />
-                      </a>
-                    )}
-                    <button
-                      onClick={handleCopyPortalLink}
-                      className="p-2 bg-secondary border border-border rounded-md hover:bg-secondary/80 hover:text-white transition-colors"
-                      title="Copy Portal Link"
-                    >
-                      <ExternalLink className="size-3.5" />
-                    </button>
-                  </div>
+                {/* Right: Quick Action Controls */}
+                <div className="flex items-center gap-2 shrink-0">
+                  {/* AI Toggle Button */}
+                  <button
+                    onClick={async () => {
+                      if (!selectedLeadId) return;
+                      const nextVal = !isAiActive;
+                      setAiToggleMap(prev => ({ ...prev, [selectedLeadId]: nextVal }));
+                      try {
+                        await setLeadAiToggle({ data: { leadId: selectedLeadId, active: nextVal } });
+                      } catch (err) {
+                        console.error("Failed to toggle AI:", err);
+                        setAiToggleMap(prev => ({ ...prev, [selectedLeadId]: isAiActive }));
+                      }
+                    }}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
+                      isAiActive
+                        ? "bg-[#c9a84c]/10 border-[#c9a84c]/30 text-[#c9a84c]"
+                        : "bg-secondary border-border text-muted-foreground hover:text-foreground"
+                    }`}
+                    title={isAiActive ? "AI Concierge is autonomously managing replies" : "AI Concierge paused"}
+                  >
+                    <Sparkles className="size-3.5" />
+                    <span className="hidden sm:inline">{isAiActive ? "AI Active" : "AI Paused"}</span>
+                  </button>
 
-                  <div className="w-px h-6 bg-border" />
+                  {/* AI Summary */}
+                  <button
+                    onClick={handleSummarizeChat}
+                    disabled={isSummarizing || !activeChat || activeChat.messages.length === 0}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-secondary border border-border hover:bg-secondary/80 text-foreground text-xs font-medium transition-colors cursor-pointer disabled:opacity-50"
+                    title="Generate AI Briefing Summary"
+                  >
+                    {isSummarizing ? <Loader2 className="size-3.5 animate-spin text-primary" /> : <BrainCircuit className="size-3.5 text-primary" />}
+                    <span className="hidden md:inline">Summarize</span>
+                  </button>
 
-                  {/* Header action shortcuts */}
-                  {/* Header action shortcuts */}
+                  {/* Schedule Site Visit Button */}
+                  <button
+                    onClick={() => setIsSchedulingOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-primary hover:bg-primary/20 text-xs font-medium transition-colors cursor-pointer"
+                    title="Book Discovery Call / Site Visit"
+                  >
+                    <Calendar className="size-3.5" />
+                    <span className="hidden md:inline">Book Visit</span>
+                  </button>
+
+                  {/* More Dropdown */}
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <button className="p-1.5 rounded-md hover:bg-white/5 transition-colors text-muted-foreground hover:text-white">
-                        <MoreVertical className="size-4.5" />
+                      <button className="p-2 rounded-lg hover:bg-secondary border border-transparent hover:border-border transition-colors text-muted-foreground hover:text-foreground cursor-pointer">
+                        <MoreVertical className="size-4" />
                       </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-56 bg-[#0a0a0c] border border-border">
-                      <DropdownMenuItem
-                        onClick={async (e) => {
-                          e.preventDefault();
-                          if (!selectedLeadId) return;
-                          const nextVal = !isAiActive;
-                          setAiToggleMap(prev => ({ ...prev, [selectedLeadId]: nextVal }));
-                          try {
-                            await setLeadAiToggle({ data: { leadId: selectedLeadId, active: nextVal } });
-                          } catch (err) {
-                            console.error("Failed to persist AI toggle state:", err);
-                            setAiToggleMap(prev => ({ ...prev, [selectedLeadId]: isAiActive }));
-                          }
-                        }}
-                        className="flex items-center gap-2 cursor-pointer hover:bg-white/5 focus:bg-white/5"
-                      >
-                        <Sparkles className={`size-4 ${isAiActive ? "text-success animate-pulse" : "text-muted-foreground"}`} />
-                        <span>{isAiActive ? "Pause AI Concierge" : "Activate AI Concierge"}</span>
+                      <DropdownMenuItem onClick={handleCopyPortalLink} className="flex items-center gap-2 cursor-pointer">
+                        <ExternalLink className="size-4 text-muted-foreground" />
+                        <span>Copy Client Portal Link</span>
                       </DropdownMenuItem>
-
-                      <DropdownMenuItem
-                        onClick={() => setIsPortfolioModalOpen(true)}
-                        disabled={isSending}
-                        className="flex items-center gap-2 cursor-pointer hover:bg-white/5 focus:bg-white/5"
-                      >
-                        <FileText className="size-4 text-muted-foreground" />
-                        <span>Portfolios</span>
+                      <DropdownMenuItem onClick={() => setIsPortfolioModalOpen(true)} className="flex items-center gap-2 cursor-pointer">
+                        <BookOpen className="size-4 text-muted-foreground" />
+                        <span>Manage Spec Portfolios</span>
                       </DropdownMenuItem>
-
-                      <DropdownMenuItem
-                        onClick={handleSummarizeChat}
-                        disabled={isSummarizing || !activeChat || activeChat.messages.length === 0}
-                        className="flex items-center gap-2 cursor-pointer hover:bg-white/5 focus:bg-white/5"
-                      >
-                        {isSummarizing ? <Loader2 className="size-4 animate-spin text-muted-foreground" /> : <BrainCircuit className="size-4 text-muted-foreground" />}
-                        <span>Summarize Chat</span>
-                      </DropdownMenuItem>
-
                       {canSimulate && (
-                        <DropdownMenuItem
-                          onClick={() => setIsSimulateOpen(true)}
-                          className="flex items-center gap-2 cursor-pointer hover:bg-white/5 focus:bg-white/5"
-                        >
+                        <DropdownMenuItem onClick={() => setIsSimulateOpen(true)} className="flex items-center gap-2 cursor-pointer">
                           <MessageSquare className="size-4 text-muted-foreground" />
-                          <span>Simulate Reply</span>
+                          <span>Simulate Lead Reply</span>
                         </DropdownMenuItem>
                       )}
-
-                      <DropdownMenuSeparator className="bg-border" />
-
-                      <DropdownMenuItem
-                        onClick={() => setIsSchedulingOpen(true)}
-                        className="flex items-center gap-2 cursor-pointer text-primary focus:bg-primary/10 focus:text-primary hover:bg-primary/10 hover:text-primary"
-                      >
-                        <Calendar className="size-4" />
-                        <span>Schedule Site Visit</span>
-                      </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
               </div>
 
-              {/* EMAIL THREAD SUBJECT & METADATA BAR */}
-              <div className="px-6 py-2.5 bg-[#080808]/90 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm relative z-20">
-                <div className="flex items-center gap-4 text-xs font-medium min-w-0">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider font-semibold shrink-0">
-                      Subject:
-                    </span>
-                    <span className="text-xs font-semibold text-foreground truncate">
-                      {emailSubject || `Re: Custom Spec Home Inquiry · ${selectedThread.leadName}`}
-                    </span>
-                  </div>
-                  <div className="hidden md:flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-secondary/80 border border-border text-[10.5px] font-mono text-muted-foreground shrink-0">
-                    <Mail className="size-3 text-primary" />
-                    <span>{selectedThread.email || `${selectedThread.leadName?.toLowerCase().replace(/\s+/g, '')}@client.com`}</span>
-                  </div>
+              {/* SUBJECT LINE BAR */}
+              <div className="px-6 py-2.5 bg-[#06070a] border-b border-border/30 flex items-center justify-between text-xs text-muted-foreground shrink-0">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground/70 font-semibold shrink-0">Subject:</span>
+                  <span className="font-medium text-foreground text-xs truncate">
+                    {emailSubject || `Re: Custom Spec Home Inquiry · ${selectedThread.leadName}`}
+                  </span>
                 </div>
-
-                <div className="flex items-center gap-3 text-xs font-medium shrink-0 self-end sm:self-auto">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[9px] text-muted-foreground uppercase tracking-widest font-mono">Score:</span>
-                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider uppercase ${selectedThread.scoreTier === 'Hot' ? 'bg-red-500/10 text-red-400 border border-red-500/20' : selectedThread.scoreTier === 'Warm' ? 'bg-warning/10 text-warning border border-warning/20' : 'bg-cold/10 text-cold border border-cold/20'}`}>{selectedThread.scoreTier}</span>
-                  </div>
-                  <div className="w-px h-4 bg-border/50" />
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[9px] text-muted-foreground uppercase tracking-widest font-mono">Budget:</span>
-                    <span className="text-foreground font-mono text-[11px] font-bold">${Math.round(selectedThread.estimatedBudget / 1000)}K</span>
-                  </div>
-                  <div className="w-px h-4 bg-border/50" />
-                  <div className="flex items-center gap-1 text-[10px] font-mono text-emerald-500/90 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                    <Check className="size-2.5" />
-                    <span>Company Email Gateway</span>
-                  </div>
-                </div>
+                <span className="text-[10.5px] font-mono text-muted-foreground/60 shrink-0 hidden sm:flex items-center gap-1">
+                  <Check className="size-3 text-emerald-400" /> Synced via Company Email
+                </span>
               </div>
 
               {/* AI CHAT EXECUTIVE PRE-MEETING BRIEFING SHEET */}
               {chatSummary && (
-                <div className="mx-6 mt-4 p-5 rounded-xl bg-[#0f0f14] border border-primary/40 shadow-2xl animate-in fade-in slide-in-from-top-4 relative z-30 shrink-0 max-h-[300px] overflow-y-auto">
-                  <div className="flex items-center justify-between pb-3 mb-3 border-b border-white/10 sticky top-0 bg-[#0f0f14] z-10">
+                <div className="mx-6 mt-4 p-4 rounded-xl bg-[#0f0f14] border border-primary/40 shadow-2xl animate-in fade-in slide-in-from-top-4 relative z-30 shrink-0 max-h-[260px] overflow-y-auto">
+                  <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-white/10 sticky top-0 bg-[#0f0f14] z-10">
                     <div className="flex items-center gap-2">
-                      <div className="size-7 rounded-lg bg-primary/20 border border-primary/40 flex items-center justify-center">
-                        <BrainCircuit className="size-4 text-primary" />
+                      <div className="size-6 rounded-lg bg-primary/20 border border-primary/40 flex items-center justify-center">
+                        <BrainCircuit className="size-3.5 text-primary" />
                       </div>
                       <div>
-                        <h4 className="text-xs font-bold text-white tracking-wider uppercase font-display">Builder Pre-Meeting Intelligence Briefing</h4>
-                        <p className="text-[10px] text-muted-foreground">AI-synthesized deal overview & action checklist</p>
+                        <h4 className="text-xs font-bold text-white tracking-wider uppercase font-display">Builder Deal Briefing</h4>
                       </div>
                     </div>
                     <button
                       onClick={() => setChatSummary(null)}
-                      className="size-7 rounded-md bg-white/5 hover:bg-white/15 text-muted-foreground hover:text-white flex items-center justify-center transition-colors"
+                      className="size-6 rounded-md bg-white/5 hover:bg-white/15 text-muted-foreground hover:text-white flex items-center justify-center transition-colors"
                       title="Close Summary"
                     >
-                      <X className="size-4" />
+                      <X className="size-3.5" />
                     </button>
                   </div>
                   <FormattedSummary text={chatSummary} />
                 </div>
               )}
 
-              {/* Fixed Viewport Background Layer for Email Thread View */}
+              {/* EMAIL THREAD STREAM CANVAS */}
               <div className="flex-1 flex flex-col min-h-0 relative bg-[#07080b] overflow-hidden">
                 {/* Messages Scroll Container */}
                 <div
                   ref={chatContainerRef}
                   onScroll={handleChatScroll}
-                  className="flex-1 overflow-y-auto p-6 space-y-5 min-h-0 relative z-10 custom-scrollbar"
+                  className="flex-1 overflow-y-auto px-6 py-4 space-y-1 min-h-0 relative z-10 custom-scrollbar"
                 >
                   {activeChat.messages.length > 0 ? (
                     activeChat.messages.map((msg, index) => {
@@ -1325,27 +1299,19 @@ function MessagesPage() {
                         <div key={msg.id} className="w-full">
                           {showDateDivider && (
                             <div className="flex justify-center my-4">
-                              <span className="text-[10px] font-medium text-muted-foreground bg-[#111115] border border-white/10 px-3 py-1 rounded-full uppercase tracking-widest font-mono">
+                              <span className="text-[10px] font-medium text-muted-foreground bg-[#111115] border border-white/10 px-3 py-0.5 rounded-full uppercase tracking-widest font-mono">
                                 {dateLabel}
                               </span>
                             </div>
                           )}
 
-                          {/* Threaded Email Card */}
-                          <div
-                            className={`w-full rounded-2xl border transition-all animate-in slide-in-from-bottom-2 duration-150 ${
-                              isAI
-                                ? "bg-[#101118]/90 border-[#c9a84c]/30 shadow-md"
-                                : isUser
-                                  ? "bg-[#0c121e]/90 border-primary/30 shadow-md"
-                                  : "bg-[#111217]/90 border-border/80 shadow-sm"
-                            }`}
-                          >
-                            {/* Email Card Header */}
-                            <div className="p-3.5 sm:p-4 border-b border-border/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-secondary/15 rounded-t-2xl">
-                              <div className="flex items-center gap-3">
+                          {/* Flowing Email Entry */}
+                          <div className="py-3.5 border-b border-border/30 last:border-0 group animate-in fade-in duration-150">
+                            {/* Sender Header Row */}
+                            <div className="flex items-start justify-between gap-3 mb-1.5">
+                              <div className="flex items-center gap-2.5 min-w-0">
                                 <div
-                                  className={`size-8 rounded-xl flex items-center justify-center text-xs font-bold shrink-0 ${
+                                  className={`size-7 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 ${
                                     isAI
                                       ? "bg-[#c9a84c]/20 text-[#c9a84c] border border-[#c9a84c]/40"
                                       : isUser
@@ -1353,59 +1319,50 @@ function MessagesPage() {
                                         : "bg-secondary text-foreground border border-border"
                                   }`}
                                 >
-                                  {isAI ? <Sparkles className="size-4" /> : isUser ? "You" : (activeChat.lead?.name?.[0] || "C")}
+                                  {isAI ? <Sparkles className="size-3.5" /> : isUser ? "You" : (activeChat.lead?.name?.[0] || "C")}
                                 </div>
 
-                                <div className="min-w-0">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="font-semibold text-xs sm:text-sm text-foreground truncate">
-                                      {isAI
-                                        ? "AI Lead Concierge"
-                                        : isUser
-                                          ? "You (Builder Operations)"
-                                          : activeChat.lead?.name || "Client Prospect"}
+                                <div className="flex items-center gap-2 flex-wrap min-w-0">
+                                  <span className="font-semibold text-xs text-foreground">
+                                    {isAI ? "AI Lead Concierge" : isUser ? "You" : (activeChat.lead?.name || "Client")}
+                                  </span>
+                                  <span className="text-[11px] text-muted-foreground font-mono">
+                                    &lt;{isAI ? "concierge@buildersedge.ai" : isUser ? "sales@yourcompany.com" : (activeChat.lead?.email || `${activeChat.lead?.name?.toLowerCase().replace(/\s+/g, '') || 'client'}@email.com`)}&gt;
+                                  </span>
+                                  {isAI && (
+                                    <span className="px-1.5 py-0.5 rounded text-[8.5px] font-mono font-semibold bg-[#c9a84c]/15 text-[#c9a84c] border border-[#c9a84c]/30">
+                                      ✦ AI Auto-Reply
                                     </span>
-                                    <span className="text-[10px] font-mono text-muted-foreground truncate">
-                                      &lt;{isAI ? "concierge@buildersedge.ai" : isUser ? "sales@yourcompany.com" : (activeChat.lead?.email || `${activeChat.lead?.name?.toLowerCase().replace(/\s+/g, '') || 'client'}@email.com`)}&gt;
+                                  )}
+                                  {isUser && (
+                                    <span className="px-1.5 py-0.5 rounded text-[8.5px] font-mono font-semibold bg-primary/15 text-primary border border-primary/30">
+                                      Direct Reply
                                     </span>
-                                  </div>
-                                  <div className="text-[10px] font-mono text-muted-foreground mt-0.5 flex items-center gap-2">
-                                    <span>To: {isUser || isAI ? (activeChat.lead?.email || activeChat.lead?.name || "Client") : "Your Company Team"}</span>
-                                    {isAI && (
-                                      <span className="px-1.5 py-0.2 rounded text-[8.5px] font-mono font-bold bg-[#c9a84c]/20 text-[#c9a84c] border border-[#c9a84c]/30">
-                                        Autonomous AI
-                                      </span>
-                                    )}
-                                  </div>
+                                  )}
                                 </div>
                               </div>
 
-                              <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
-                                <span className="text-[10px] font-mono text-muted-foreground">
-                                  {msgDate.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                                </span>
-                                <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-semibold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 flex items-center gap-1">
-                                  <Check className="size-2.5" /> Delivered via Email
-                                </span>
-                              </div>
+                              <span className="text-[10.5px] text-muted-foreground font-mono shrink-0 select-none">
+                                {msgDate.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                              </span>
                             </div>
 
-                            {/* Email Card Body */}
-                            <div className="p-4 sm:p-5 text-xs sm:text-sm text-foreground/90 leading-relaxed font-sans space-y-3">
+                            {/* Email Message Content Body */}
+                            <div className="pl-9 text-xs sm:text-[13px] text-foreground/90 leading-relaxed font-sans select-text space-y-2.5">
                               {isBrochureCard ? (
                                 /* Digital specs brochure presentation card */
-                                <div className="bg-[#151620] border border-white/[0.08] rounded-xl p-4 max-w-[440px] shadow-lg relative overflow-hidden">
-                                  <div className="flex gap-3">
-                                    <div className="size-10 bg-primary/10 rounded-lg flex items-center justify-center border border-primary/20 shrink-0 text-primary">
-                                      <FileText className="size-5" />
+                                <div className="bg-[#12131a] border border-white/10 rounded-xl p-3.5 max-w-[420px] shadow-md relative overflow-hidden">
+                                  <div className="flex gap-3 items-center">
+                                    <div className="size-9 bg-primary/10 rounded-lg flex items-center justify-center border border-primary/20 shrink-0 text-primary">
+                                      <FileText className="size-4.5" />
                                     </div>
-                                    <div className="min-w-0">
-                                      <h4 className="text-xs font-bold text-white truncate">{msg.content.replace("📄 Document Shared: ", "").split(".pdf|size=")[0]}</h4>
-                                      <p className="text-[10px] text-muted-foreground mt-0.5">Custom Specifications & Lookbook · {msg.content.includes("|size=") ? msg.content.split("|size=")[1] : "4.8 MB"}</p>
+                                    <div className="min-w-0 flex-1">
+                                      <h4 className="text-xs font-semibold text-white truncate">{msg.content.replace("📄 Document Shared: ", "").split(".pdf|size=")[0]}</h4>
+                                      <p className="text-[10px] text-muted-foreground mt-0.5">Floor Plan Specifications · {msg.content.includes("|size=") ? msg.content.split("|size=")[1] : "4.8 MB"}</p>
                                     </div>
                                   </div>
-                                  <div className="border-t border-border/50 mt-4 pt-3 flex items-center justify-between">
-                                    <span className="text-[9px] text-muted-foreground font-mono">Floor Plan Specification Attachment</span>
+                                  <div className="border-t border-border/40 mt-3 pt-2.5 flex items-center justify-between">
+                                    <span className="text-[9px] text-muted-foreground font-mono">Architectural Lookbook</span>
                                     <a
                                       href="#"
                                       onClick={(e) => {
@@ -1413,29 +1370,29 @@ function MessagesPage() {
                                         setIsLookbookOpen(true);
                                         setLookbookPage(0);
                                       }}
-                                      className="inline-flex items-center gap-1 text-[10px] font-bold text-white hover:underline"
+                                      className="inline-flex items-center gap-1 text-[10.5px] font-bold text-primary hover:underline"
                                     >
                                       Preview lookbook <ExternalLink className="size-3" />
                                     </a>
                                   </div>
                                 </div>
                               ) : isAppointmentCard ? (
-                                /* Premium Calendar Booking Confirmation Card */
-                                <div className="bg-success/5 border border-success/30 rounded-xl p-4 max-w-[440px] shadow-lg relative overflow-hidden">
-                                  <div className="flex gap-3">
-                                    <div className="size-10 bg-success/15 rounded-lg flex items-center justify-center border border-success/30 shrink-0 text-success">
-                                      <Calendar className="size-5" />
+                                /* Calendar Confirmation Card */
+                                <div className="bg-success/5 border border-success/30 rounded-xl p-3.5 max-w-[420px] shadow-md relative overflow-hidden">
+                                  <div className="flex gap-3 items-center">
+                                    <div className="size-9 bg-success/15 rounded-lg flex items-center justify-center border border-success/30 shrink-0 text-success">
+                                      <Calendar className="size-4.5" />
                                     </div>
-                                    <div className="min-w-0">
-                                      <h4 className="text-xs font-bold text-white">Discovery Call & Site Walkthrough</h4>
+                                    <div className="min-w-0 flex-1">
+                                      <h4 className="text-xs font-semibold text-white">Discovery Call & Site Walkthrough</h4>
                                       <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">
                                         {msg.content.replace("📆 Site Visit Booked: ", "")}
                                       </p>
                                     </div>
                                   </div>
-                                  <div className="border-t border-success/10 mt-4 pt-3 flex items-center justify-between">
-                                    <span className="inline-flex items-center gap-1 text-[9px] text-success font-semibold tracking-wider uppercase font-mono">
-                                      <Check className="size-3" /> Confirmed Calendar Booking
+                                  <div className="border-t border-success/10 mt-3 pt-2 flex items-center justify-between">
+                                    <span className="inline-flex items-center gap-1 text-[9px] text-success font-semibold uppercase font-mono">
+                                      <Check className="size-2.5" /> Confirmed Calendar Booking
                                     </span>
                                   </div>
                                 </div>
@@ -1451,30 +1408,25 @@ function MessagesPage() {
                                   const dataUrl = dataParam ? dataParam.replace("data=", "") : undefined;
 
                                   return (
-                                    <div className="bg-[#14151e] border border-white/10 rounded-xl p-4 max-w-[440px] shadow-lg relative overflow-hidden space-y-2">
-                                      <div className="flex gap-3 items-center">
-                                        <div className="size-11 bg-primary/10 rounded-lg flex items-center justify-center border border-primary/20 shrink-0 text-primary">
-                                          <FileText className="size-5" />
+                                    <div className="bg-[#12131a] border border-white/10 rounded-xl p-3 max-w-[420px] shadow-md space-y-2">
+                                      <div className="flex gap-2.5 items-center">
+                                        <div className="size-9 bg-primary/10 rounded-lg flex items-center justify-center border border-primary/20 shrink-0 text-primary">
+                                          <FileText className="size-4.5" />
                                         </div>
                                         <div className="min-w-0 flex-1">
-                                          <h4 className="text-xs font-bold text-white truncate">{fileName || "Attached Document"}</h4>
-                                          <div className="flex items-center gap-2 mt-0.5">
-                                            <span className="text-[10px] text-muted-foreground font-mono bg-white/5 px-2 py-0.5 rounded border border-white/5">
-                                              {fileSize}
-                                            </span>
-                                            <span className="text-[10px] text-muted-foreground font-mono">
-                                              {fileType.includes("pdf") ? "PDF Document" : "Engineering Specs"}
-                                            </span>
-                                          </div>
+                                          <h4 className="text-xs font-semibold text-white truncate">{fileName || "Attached Document"}</h4>
+                                          <span className="text-[10px] text-muted-foreground font-mono">
+                                            {fileSize} · {fileType.includes("pdf") ? "PDF Document" : "Engineering Specs"}
+                                          </span>
                                         </div>
                                       </div>
                                       {caption && (
-                                        <p className="text-xs text-white/90 pt-2 border-t border-white/5 leading-relaxed whitespace-pre-line">
+                                        <p className="text-xs text-white/90 pt-1 border-t border-white/5 leading-relaxed whitespace-pre-line">
                                           {caption}
                                         </p>
                                       )}
-                                      <div className="border-t border-white/5 pt-2.5 flex items-center justify-between">
-                                        <span className="text-[9px] text-muted-foreground font-mono">Direct File Attachment</span>
+                                      <div className="border-t border-white/5 pt-2 flex items-center justify-between">
+                                        <span className="text-[9px] text-muted-foreground font-mono">Direct Attachment</span>
                                         {dataUrl ? (
                                           <a
                                             href={dataUrl}
@@ -1485,7 +1437,7 @@ function MessagesPage() {
                                           </a>
                                         ) : (
                                           <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
-                                            <Check className="size-3" /> Attached
+                                            <Check className="size-2.5" /> Attached
                                           </span>
                                         )}
                                       </div>
@@ -1503,13 +1455,13 @@ function MessagesPage() {
                                   const dataUrl = dataParam ? dataParam.replace("data=", "") : undefined;
 
                                   return (
-                                    <div className="bg-[#14151e] border border-white/10 rounded-xl p-3 max-w-[440px] shadow-lg space-y-2">
+                                    <div className="bg-[#12131a] border border-white/10 rounded-xl p-2.5 max-w-[420px] shadow-md space-y-2">
                                       {dataUrl && (
                                         <div
                                           onClick={() => setActiveImageModalUrl(dataUrl)}
-                                          className="relative rounded-lg overflow-hidden border border-white/10 max-h-[260px] bg-black/40 cursor-pointer group/img"
+                                          className="relative rounded-lg overflow-hidden border border-white/10 max-h-[240px] bg-black/40 cursor-pointer group/img"
                                         >
-                                          <img src={dataUrl} alt={fileName} className="w-full h-auto object-cover max-h-[260px] group-hover/img:scale-105 transition-transform duration-200" />
+                                          <img src={dataUrl} alt={fileName} className="w-full h-auto object-cover max-h-[240px] group-hover/img:scale-105 transition-transform duration-200" />
                                         </div>
                                       )}
                                       <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono px-1">
@@ -1536,41 +1488,41 @@ function MessagesPage() {
                                   const category = categoryParam ? categoryParam.replace("category=", "") : "Virtual Tour";
 
                                   return (
-                                    <div className="bg-[#14151e] border border-[#c9a84c]/30 rounded-xl p-4 max-w-[440px] shadow-lg space-y-2.5">
-                                      <div className="flex gap-3 items-start">
-                                        <div className="size-10 bg-[#c9a84c]/15 rounded-lg flex items-center justify-center border border-[#c9a84c]/30 shrink-0 text-[#c9a84c] dark:text-[#e5d9c5]">
-                                          <Globe className="size-5" />
+                                    <div className="bg-[#12131a] border border-[#c9a84c]/30 rounded-xl p-3 max-w-[420px] shadow-md space-y-2">
+                                      <div className="flex gap-2.5 items-start">
+                                        <div className="size-9 bg-[#c9a84c]/15 rounded-lg flex items-center justify-center border border-[#c9a84c]/30 shrink-0 text-[#c9a84c]">
+                                          <Globe className="size-4.5" />
                                         </div>
                                         <div className="min-w-0 flex-1">
-                                          <span className="text-[9px] uppercase tracking-wider font-mono font-bold text-[#c9a84c] dark:text-[#e5d9c5] block">
+                                          <span className="text-[9px] uppercase tracking-wider font-mono font-bold text-[#c9a84c] block">
                                             {category}
                                           </span>
-                                          <h4 className="text-xs font-bold text-white mt-0.5 truncate">{title}</h4>
-                                          <p className="text-[10px] text-muted-foreground mt-0.5 truncate font-mono">{url}</p>
+                                          <h4 className="text-xs font-semibold text-white truncate">{title}</h4>
+                                          <p className="text-[10px] text-muted-foreground truncate font-mono">{url}</p>
                                         </div>
                                       </div>
                                       {caption && (
-                                        <p className="text-xs text-white/90 pt-2 border-t border-white/5 leading-relaxed whitespace-pre-line">
+                                        <p className="text-xs text-white/90 pt-1 border-t border-white/5 leading-relaxed whitespace-pre-line">
                                           {caption}
                                         </p>
                                       )}
-                                      <div className="border-t border-white/5 pt-2.5 flex items-center justify-between">
-                                        <span className="text-[9px] text-muted-foreground font-mono">External Resource</span>
+                                      <div className="border-t border-white/5 pt-2 flex items-center justify-between">
+                                        <span className="text-[9px] text-muted-foreground font-mono">External Link</span>
                                         <a
                                           href={url}
                                           target="_blank"
                                           rel="noopener noreferrer"
-                                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#c9a84c]/20 hover:bg-[#c9a84c]/30 text-[#c9a84c] dark:text-[#e5d9c5] text-xs font-bold transition-colors cursor-pointer"
+                                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-[#c9a84c]/20 hover:bg-[#c9a84c]/30 text-[#c9a84c] text-xs font-bold transition-colors cursor-pointer"
                                         >
-                                          Open Link <ExternalLink className="size-3" />
+                                          Open <ExternalLink className="size-3" />
                                         </a>
                                       </div>
                                     </div>
                                   );
                                 })()
                               ) : (
-                                /* Standard Email Text Body */
-                                <p className="whitespace-pre-line leading-relaxed text-sm text-foreground/95 select-text font-sans">
+                                /* Standard Clean Email Text */
+                                <p className="whitespace-pre-line leading-relaxed text-[13.5px] text-foreground/90 font-sans">
                                   {msg.content}
                                 </p>
                               )}
@@ -1586,18 +1538,16 @@ function MessagesPage() {
                       </div>
                       <p className="text-sm text-foreground font-semibold">No emails exchanged yet</p>
                       <p className="text-xs text-muted-foreground mt-1 max-w-sm leading-relaxed">
-                        Use the email composer below to initiate your formal correspondence with {selectedThread.leadName}.
+                        Use the composer below to start your conversation with {selectedThread.leadName}.
                       </p>
                     </div>
                   )}
 
                   {/* Typing Indicator for simulated replies */}
                   {isSimulating && (
-                    <div className="flex flex-col items-start w-full group animate-in slide-in-from-bottom-2 duration-150 mt-2 mb-2">
-                      <div className="p-3 rounded-xl bg-card border border-border flex items-center gap-2 text-xs text-muted-foreground font-mono">
-                        <Loader2 className="size-3.5 animate-spin text-primary" />
-                        <span>AI Concierge is generating client email response...</span>
-                      </div>
+                    <div className="flex items-center gap-2 p-3 text-xs text-muted-foreground font-mono animate-in fade-in duration-150">
+                      <Loader2 className="size-3.5 animate-spin text-primary" />
+                      <span>AI Concierge is generating client email response...</span>
                     </div>
                   )}
 
@@ -1606,29 +1556,8 @@ function MessagesPage() {
                 </div>
               </div>
 
-              {/* QUICK EMAIL RESPONSE TEMPLATES */}
-              <div className="px-6 py-2 bg-[#090a0f] border-t border-border/40 flex items-center gap-2 overflow-x-auto select-none shrink-0">
-                <span className="text-[9.5px] font-mono uppercase tracking-widest text-muted-foreground shrink-0 select-none">
-                  Draft Quick Snippet:
-                </span>
-                {[
-                  "Could you confirm your target construction timeline and ideal start date?",
-                  "Would you be open to a quick 15-minute discovery call this week?",
-                  "I've attached our architectural specifications and digital lookbook for your review.",
-                  "Let's schedule a site walkthrough at your property location this Saturday."
-                ].map((suggestText) => (
-                  <button
-                    key={suggestText}
-                    onClick={() => handleSuggestionClick(suggestText)}
-                    className="px-3 py-1 text-[10.5px] bg-secondary/40 border border-border hover:bg-secondary hover:text-foreground text-muted-foreground rounded-full transition-all shrink-0 active:scale-95 cursor-pointer truncate max-w-xs"
-                  >
-                    {suggestText}
-                  </button>
-                ))}
-              </div>
-
-              {/* RICH EMAIL COMPOSER */}
-              <div className="p-4 border-t border-border bg-[#0B0B0C] relative z-30 space-y-3 shrink-0">
+              {/* STREAMLINED EMAIL COMPOSER */}
+              <div className="p-4 border-t border-border bg-[#090a0e] relative z-30 shrink-0">
                 {isUserScrolledUp && (
                   <button
                     type="button"
@@ -1636,17 +1565,11 @@ function MessagesPage() {
                       e.preventDefault();
                       scrollToBottom(true, "smooth");
                     }}
-                    className="absolute -top-14 left-1/2 -translate-x-1/2 z-50 pointer-events-auto flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[#141418]/95 border border-primary/50 text-primary shadow-2xl hover:bg-primary hover:text-black transition-all group cursor-pointer animate-in fade-in slide-in-from-bottom-2 duration-200"
-                    title="Scroll to latest messages"
+                    className="absolute -top-12 left-1/2 -translate-x-1/2 z-50 pointer-events-auto flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#141418]/95 border border-primary/50 text-primary shadow-xl hover:bg-primary hover:text-black transition-all cursor-pointer animate-in fade-in slide-in-from-bottom-1 duration-150 text-xs"
+                    title="Scroll to latest emails"
                   >
-                    <ChevronDown className="size-4 transition-transform group-hover:translate-y-0.5" />
-                    {newMessagesCount > 0 ? (
-                      <span className="flex size-4 items-center justify-center rounded-full bg-emerald-500 text-[10px] font-bold text-black shadow">
-                        {newMessagesCount}
-                      </span>
-                    ) : (
-                      <span className="text-[11px] font-medium tracking-tight">Latest Emails</span>
-                    )}
+                    <ChevronDown className="size-3.5" />
+                    <span>Latest Emails</span>
                   </button>
                 )}
 
@@ -1659,103 +1582,71 @@ function MessagesPage() {
                   accept="image/*,application/pdf,.doc,.docx,.cad,.dwg,.txt,.csv"
                 />
 
-                {/* Main Email Envelope Card */}
-                <div className="rounded-2xl border border-border bg-[#0f1015] shadow-lg overflow-hidden focus-within:border-primary/60 transition-all">
-                  {/* Composer Header Bar */}
-                  <div className="p-3 border-b border-border/40 bg-secondary/30 flex flex-col gap-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <span className="text-[10.5px] font-mono uppercase tracking-wider text-muted-foreground font-semibold shrink-0">
-                          To:
-                        </span>
-                        <div className="px-2.5 py-0.5 rounded-md bg-secondary border border-border text-xs font-mono text-foreground truncate max-w-xs sm:max-w-md">
-                          {selectedThread.leadName} &lt;{selectedThread.email || `${selectedThread.leadName?.toLowerCase().replace(/\s+/g, '')}@client.com`}&gt;
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => setShowCcDrawer(prev => !prev)}
-                        className={`text-[10px] font-mono px-2 py-1 rounded border transition-colors cursor-pointer shrink-0 ${
-                          showCcDrawer ? "bg-primary/20 border-primary text-primary" : "border-border text-muted-foreground hover:text-foreground"
-                        }`}
-                      >
-                        {showCcDrawer ? "Hide CC" : "+ CC / BCC"}
-                      </button>
+                {/* Pre-Send Attachment Banner (File) */}
+                {attachedFile && (
+                  <div className="mb-2.5 p-2 px-3 rounded-lg bg-secondary/60 border border-primary/30 flex items-center justify-between text-xs text-foreground animate-in slide-in-from-bottom-1">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <FileText className="size-4 text-primary shrink-0" />
+                      <span className="font-medium text-xs truncate">{attachedFile.name}</span>
+                      <span className="text-[10px] text-muted-foreground font-mono">({attachedFile.size})</span>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => setAttachedFile(null)}
+                      className="p-1 rounded hover:bg-white/10 text-muted-foreground hover:text-foreground cursor-pointer"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  </div>
+                )}
 
-                    {/* CC / BCC Drawer */}
-                    {showCcDrawer && (
-                      <div className="flex items-center gap-2 pt-2 border-t border-border/30 animate-in slide-in-from-top-1">
-                        <span className="text-[10.5px] font-mono uppercase tracking-wider text-muted-foreground font-semibold shrink-0">
-                          CC:
-                        </span>
+                {/* Pre-Send Attachment Banner (Link) */}
+                {attachedLink && (
+                  <div className="mb-2.5 p-2 px-3 rounded-lg bg-secondary/60 border border-[#c9a84c]/30 flex items-center justify-between text-xs text-foreground animate-in slide-in-from-bottom-1">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <Globe className="size-4 text-[#c9a84c] shrink-0" />
+                      <span className="font-medium text-xs truncate">{attachedLink.title}</span>
+                      <span className="text-[10px] text-muted-foreground font-mono truncate max-w-[200px]">({attachedLink.url})</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setAttachedLink(null)}
+                      className="p-1 rounded hover:bg-white/10 text-muted-foreground hover:text-foreground cursor-pointer"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Unified Clean Composer Box */}
+                <div className="rounded-xl border border-border bg-[#0d0e14] focus-within:border-primary/60 transition-all overflow-hidden shadow-sm">
+                  {/* Optional CC/Subject expander */}
+                  {showCcDrawer && (
+                    <div className="p-2.5 border-b border-border/40 bg-secondary/20 flex flex-col gap-2 text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-mono text-muted-foreground uppercase font-semibold shrink-0">Subject:</span>
+                        <input
+                          type="text"
+                          value={emailSubject}
+                          onChange={(e) => setEmailSubject(e.target.value)}
+                          className="w-full bg-transparent text-xs text-foreground focus:outline-none"
+                          placeholder={`Re: Custom Spec Home Inquiry · ${selectedThread.leadName}`}
+                        />
+                      </div>
+                      <div className="flex items-center gap-2 pt-1 border-t border-border/30">
+                        <span className="text-[10px] font-mono text-muted-foreground uppercase font-semibold shrink-0">CC:</span>
                         <input
                           type="email"
                           value={ccEmail}
                           onChange={(e) => setCcEmail(e.target.value)}
-                          placeholder="architect@yourcompany.com, pm@yourcompany.com"
-                          className="w-full bg-transparent text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none font-mono"
+                          placeholder="team@yourcompany.com"
+                          className="w-full bg-transparent text-xs text-foreground focus:outline-none font-mono"
                         />
                       </div>
-                    )}
-
-                    {/* Subject Line Field */}
-                    <div className="flex items-center gap-2 pt-1">
-                      <span className="text-[10.5px] font-mono uppercase tracking-wider text-muted-foreground font-semibold shrink-0">
-                        Subject:
-                      </span>
-                      <input
-                        type="text"
-                        value={emailSubject}
-                        onChange={(e) => setEmailSubject(e.target.value)}
-                        placeholder={`Re: Custom Spec Home Inquiry · ${selectedThread.leadName}`}
-                        className="w-full bg-transparent text-xs font-semibold text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Pre-Send Attachment Banner (File) */}
-                  {attachedFile && (
-                    <div className="m-3 p-2.5 px-3 rounded-xl bg-secondary/60 border border-primary/40 flex items-center justify-between text-xs text-white">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <FileText className="size-5 text-primary shrink-0" />
-                        <div className="min-w-0">
-                          <p className="font-semibold text-xs text-white truncate">{attachedFile.name}</p>
-                          <p className="text-[10px] text-muted-foreground font-mono">{attachedFile.size} · Ready to attach to email</p>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setAttachedFile(null)}
-                        className="size-6 rounded-full bg-white/5 hover:bg-rose-500/20 text-muted-foreground hover:text-rose-400 flex items-center justify-center transition-colors cursor-pointer"
-                      >
-                        <X className="size-3.5" />
-                      </button>
                     </div>
                   )}
 
-                  {/* Pre-Send Attachment Banner (Link) */}
-                  {attachedLink && (
-                    <div className="m-3 p-2.5 px-3 rounded-xl bg-secondary/60 border border-[#c9a84c]/40 flex items-center justify-between text-xs text-white">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <Globe className="size-5 text-[#c9a84c] shrink-0" />
-                        <div className="min-w-0">
-                          <p className="font-semibold text-xs text-white truncate">{attachedLink.title}</p>
-                          <p className="text-[10px] text-muted-foreground font-mono truncate">{attachedLink.url}</p>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setAttachedLink(null)}
-                        className="size-6 rounded-full bg-white/5 hover:bg-rose-500/20 text-muted-foreground hover:text-rose-400 flex items-center justify-center transition-colors cursor-pointer"
-                      >
-                        <X className="size-3.5" />
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Multi-line Email Body Editor */}
+                  {/* Textarea */}
                   <textarea
                     value={newMessageText}
                     onChange={(e) => setNewMessageText(e.target.value)}
@@ -1765,76 +1656,82 @@ function MessagesPage() {
                         handleSendMessage();
                       }
                     }}
-                    placeholder={`Compose email response to ${selectedThread.leadName}... (Press Ctrl+Enter to Send)`}
-                    className="w-full bg-transparent px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none resize-y min-h-[90px] font-sans leading-relaxed"
+                    placeholder={`Write an email reply to ${selectedThread.leadName}... (⌘ + Enter to send)`}
+                    className="w-full bg-transparent px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none resize-none min-h-[75px] max-h-[220px] font-sans leading-relaxed"
                   />
 
-                  {/* Email Actions Toolbar & Send Button */}
-                  <div className="p-3 bg-secondary/20 border-t border-border/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    {/* Attachment & Insert Buttons */}
-                    <div className="flex items-center gap-1.5 flex-wrap">
+                  {/* Action Toolbar */}
+                  <div className="px-3 py-2 border-t border-border/30 bg-secondary/10 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1">
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
                         disabled={isSending}
-                        className="px-2.5 py-1.5 rounded-lg border border-border hover:bg-secondary text-muted-foreground hover:text-foreground text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-                        title="Attach PDF, Blueprint, Specs, or Docs"
+                        className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
+                        title="Attach PDF, Blueprint, Specs, or File"
                       >
-                        <Paperclip className="size-3.5" />
-                        <span>Attach File</span>
+                        <Paperclip className="size-4" />
                       </button>
 
                       <button
                         type="button"
                         onClick={() => setIsLinkModalOpen(true)}
                         disabled={isSending}
-                        className="px-2.5 py-1.5 rounded-lg border border-border hover:bg-secondary text-muted-foreground hover:text-foreground text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-                        title="Insert 3D Virtual Tour, Lookbook Link, or URL"
+                        className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
+                        title="Insert 3D Tour / Web Link"
                       >
-                        <Globe className="size-3.5" />
-                        <span>Insert 3D Link</span>
+                        <Globe className="size-4" />
                       </button>
 
                       <button
                         type="button"
                         onClick={() => setIsPortfolioModalOpen(true)}
                         disabled={isSending}
-                        className="px-2.5 py-1.5 rounded-lg border border-border hover:bg-secondary text-muted-foreground hover:text-foreground text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-                        title="Share Floor Plan Lookbook"
+                        className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
+                        title="Share Architectural Specs Lookbook"
                       >
-                        <BookOpen className="size-3.5" />
-                        <span>Share Lookbook</span>
+                        <BookOpen className="size-4" />
                       </button>
 
                       <button
                         type="button"
                         onClick={() => setIsSchedulingOpen(true)}
                         disabled={isSending}
-                        className="px-2.5 py-1.5 rounded-lg border border-border hover:bg-secondary text-primary hover:bg-primary/10 text-xs flex items-center gap-1.5 transition-colors cursor-pointer font-medium"
-                        title="Schedule Discovery Call / Site Walkthrough"
+                        className="p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
+                        title="Schedule Site Visit / Walkthrough"
                       >
-                        <Calendar className="size-3.5" />
-                        <span>Book Meeting</span>
+                        <Calendar className="size-4" />
+                      </button>
+
+                      <div className="w-px h-4 bg-border mx-1" />
+
+                      <button
+                        type="button"
+                        onClick={() => setShowCcDrawer(prev => !prev)}
+                        className={`px-2 py-1 rounded text-[10.5px] font-mono transition-colors cursor-pointer ${
+                          showCcDrawer ? "bg-primary/20 text-primary font-bold" : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                        }`}
+                      >
+                        {showCcDrawer ? "Hide CC" : "+ CC / Subject"}
                       </button>
                     </div>
 
-                    {/* Send Email Action Button */}
+                    {/* Send Button */}
                     <button
                       type="button"
                       onClick={() => handleSendMessage()}
                       disabled={isSending || (!newMessageText.trim() && !attachedFile && !attachedLink)}
-                      className="px-5 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all flex items-center justify-center gap-2 shadow-md disabled:opacity-50 cursor-pointer shrink-0"
+                      className="px-4 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all flex items-center gap-1.5 shadow-sm disabled:opacity-40 cursor-pointer shrink-0"
                     >
                       {isSending ? (
                         <>
                           <Loader2 className="size-3.5 animate-spin" />
-                          <span>Sending Email...</span>
+                          <span>Sending...</span>
                         </>
                       ) : (
                         <>
                           <Send className="size-3.5" />
-                          <span>Send Email</span>
-                          <span className="text-[10px] opacity-70 font-mono hidden sm:inline">(Ctrl+↵)</span>
+                          <span>Send</span>
                         </>
                       )}
                     </button>
