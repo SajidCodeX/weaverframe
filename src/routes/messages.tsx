@@ -279,6 +279,7 @@ function MessagesPage() {
 
   // Input focus ref
   const inputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Quick schedule modal states
   const [isSchedulingOpen, setIsSchedulingOpen] = useState(false);
@@ -662,6 +663,9 @@ function MessagesPage() {
 
     const originalText = payloadContent;
     setNewMessageText("");
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+    }
     setAttachedFile(null);
     setAttachedLink(null);
     setIsSending(true);
@@ -1637,19 +1641,27 @@ function MessagesPage() {
                     </div>
                   )}
 
-                  {/* Textarea */}
-                  <textarea
-                    value={newMessageText}
-                    onChange={(e) => setNewMessageText(e.target.value)}
-                    onKeyDown={(e) => {
-                      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-                        e.preventDefault();
-                        handleSendMessage();
-                      }
-                    }}
-                    placeholder={`Reply to ${selectedThread.leadName}... (Ctrl+Enter to send)`}
-                    className="w-full bg-transparent px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none resize-none min-h-[75px] max-h-[220px] font-sans leading-relaxed"
-                  />
+                  {/* Single Line Default Auto-Expanding Textarea */}
+                  <div className="px-3 py-2 flex items-center">
+                    <textarea
+                      ref={textareaRef}
+                      rows={1}
+                      value={newMessageText}
+                      onChange={(e) => {
+                        setNewMessageText(e.target.value);
+                        e.target.style.height = "auto";
+                        e.target.style.height = `${Math.min(e.target.scrollHeight, 180)}px`;
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSendMessage();
+                        }
+                      }}
+                      placeholder={`Reply to ${selectedThread.leadName}... (Enter to send, Shift+Enter for new line)`}
+                      className="w-full bg-transparent p-0 text-xs sm:text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none resize-none min-h-[24px] max-h-[180px] font-sans leading-normal custom-scrollbar"
+                    />
+                  </div>
 
                   {/* Action Toolbar */}
                   <div className="px-3 py-2 border-t border-border/30 bg-secondary/10 flex items-center justify-between gap-2">
