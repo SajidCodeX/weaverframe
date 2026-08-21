@@ -925,7 +925,7 @@ function MessagesPage() {
   }, [conversationsList, selectedLeadId]);
 
   return (
-    <Shell title="Direct Lead Messages" noPadding>
+    <Shell title="Messages" noPadding>
       <div ref={containerRef} className="flex h-full w-full bg-card/40 backdrop-blur-xl relative">
 
         {/* LEFT COLUMN: Search & Thread List */}
@@ -938,7 +938,7 @@ function MessagesPage() {
             <div className="flex items-center justify-between">
               <span className="font-semibold text-xs text-foreground tracking-tight flex items-center gap-1.5">
                 <Mail className="size-3.5 text-primary" />
-                <span>Client Mailbox</span>
+                <span>Inbox</span>
               </span>
               <button
                 type="button"
@@ -948,7 +948,7 @@ function MessagesPage() {
                 }}
                 className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-[10.5px] font-semibold transition-colors cursor-pointer"
               >
-                <Plus className="size-3" /> New Email
+                <Plus className="size-3" /> New Message
               </button>
             </div>
 
@@ -956,7 +956,7 @@ function MessagesPage() {
               <Search className="absolute left-3 top-2.5 size-3.5 text-muted-foreground" />
               <input
                 type="text"
-                placeholder="Search emails or leads..."
+                placeholder="Search conversations..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full bg-secondary border border-border rounded-lg pl-8 pr-3 py-1.5 text-xs text-foreground focus:outline-none focus:border-primary/60 placeholder:text-muted-foreground transition-colors"
@@ -974,7 +974,7 @@ function MessagesPage() {
                     : "text-muted-foreground hover:text-foreground"
                     }`}
                 >
-                  {tab === "all" ? "All" : tab === "unread" ? "Unread" : "Hot Leads"}
+                  {tab === "all" ? "All" : tab === "unread" ? "Unread" : "Hot"}
                 </button>
               ))}
             </div>
@@ -1001,7 +1001,7 @@ function MessagesPage() {
                       setActiveChat(null);
                       setIsLoadingChat(true);
                     }}
-                    className={`w-full text-left p-4 flex gap-3 transition-colors hover:bg-secondary/40 select-none outline-none focus:bg-secondary/40 relative ${isActive ? "bg-secondary text-foreground" : "text-muted-foreground"
+                    className={`w-full text-left p-3.5 flex gap-3 transition-colors hover:bg-secondary/40 select-none outline-none focus:bg-secondary/40 relative ${isActive ? "bg-secondary text-foreground" : "text-muted-foreground"
                       }`}
                   >
                     {/* Left border active bar */}
@@ -1011,16 +1011,16 @@ function MessagesPage() {
 
                     {/* Avatar Container */}
                     <div className="relative shrink-0">
-                      <div className={`size-10 rounded-full flex items-center justify-center text-xs font-semibold tracking-tighter border transition-all ${isActive
+                      <div className={`size-9 rounded-full flex items-center justify-center text-xs font-semibold border transition-all ${isActive
                         ? "bg-primary/10 border-primary/20 text-white"
-                        : "bg-white/[0.02] border-white/[0.05] text-muted-foreground"
+                        : "bg-secondary border-border text-muted-foreground"
                         }`}>
                         {initials}
                       </div>
 
                       {/* Online Status Dot */}
                       {thread.isOnline && (
-                        <div className="absolute bottom-0 right-0 size-2.5 rounded-full bg-success ring-2 ring-[#080808]" />
+                        <div className="absolute bottom-0 right-0 size-2 rounded-full bg-emerald-500 ring-2 ring-[#080808]" />
                       )}
                     </div>
 
@@ -1035,35 +1035,35 @@ function MessagesPage() {
                         </span>
                       </div>
 
-                      {/* Score Badge (Vivid styling, no emojis per rules) */}
+                      {/* Clean Score & Status */}
                       <div className="flex items-center gap-1.5">
                         {thread.scoreTier === "Hot" && (
-                          <span className="px-1.5 py-0.5 rounded text-[8px] font-bold tracking-wider uppercase bg-red-500/10 text-red-400 border border-red-500/20">
-                            Hot Tier
+                          <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-red-500/10 text-red-400 border border-red-500/20">
+                            Hot
                           </span>
                         )}
                         {thread.scoreTier === "Warm" && (
-                          <span className="px-1.5 py-0.5 rounded text-[8px] font-bold tracking-wider uppercase bg-warning/10 text-warning border border-warning/20">
-                            Warm Tier
+                          <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-warning/10 text-warning border border-warning/20">
+                            Warm
                           </span>
                         )}
                         {thread.scoreTier === "Cold" && (
-                          <span className="px-1.5 py-0.5 rounded text-[8px] font-bold tracking-wider uppercase bg-cold/10 text-cold border border-cold/20">
-                            Cold Tier
+                          <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-muted text-muted-foreground border border-border">
+                            Cold
                           </span>
                         )}
-                        <span className="text-[9px] uppercase font-mono tracking-widest text-muted-foreground/60 select-none">
+                        <span className="text-[9px] font-mono text-muted-foreground/60 select-none">
                           · {thread.status}
                         </span>
                       </div>
 
-                      {/* Last Message Preview & WhatsApp-style Unread Badge Container */}
+                      {/* Last Message Preview & Unread Badge */}
                       <div className="flex items-center justify-between gap-2 mt-0.5">
                         <p className="text-[11px] text-muted-foreground truncate leading-relaxed flex-1">
                           {thread.lastMessage}
                         </p>
                         {!isActive && thread.unreadCount > 0 && (
-                          <span className="shrink-0 size-5 bg-[#30D158] text-black text-[10px] font-black flex items-center justify-center rounded-full shadow-md select-none animate-in scale-in duration-150">
+                          <span className="shrink-0 size-4.5 bg-primary text-primary-foreground text-[9.5px] font-bold flex items-center justify-center rounded-full select-none">
                             {thread.unreadCount}
                           </span>
                         )}
@@ -1096,7 +1096,7 @@ function MessagesPage() {
 
           {selectedThread && activeChat ? (
             <>
-              {/* UNIFIED STREAMLINED THREAD HEADER */}
+              {/* CLEAN THREAD HEADER */}
               <div className="px-6 py-3.5 border-b border-border bg-[#090a0e] flex items-center justify-between gap-4 shrink-0">
                 {/* Left: Lead Identity & Metadata */}
                 <div className="flex items-center gap-3 min-w-0">
@@ -1115,18 +1115,13 @@ function MessagesPage() {
                         {selectedThread.leadName}
                       </h3>
                       {selectedThread.scoreTier === "Hot" && (
-                        <span className="px-1.5 py-0.5 rounded text-[8.5px] font-bold uppercase tracking-wider bg-red-500/10 text-red-400 border border-red-500/20 shrink-0">
-                          Hot Lead
+                        <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-red-500/10 text-red-400 border border-red-500/20 shrink-0">
+                          Hot
                         </span>
                       )}
                       {selectedThread.scoreTier === "Warm" && (
-                        <span className="px-1.5 py-0.5 rounded text-[8.5px] font-bold uppercase tracking-wider bg-warning/10 text-warning border border-warning/20 shrink-0">
+                        <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-warning/10 text-warning border border-warning/20 shrink-0">
                           Warm
-                        </span>
-                      )}
-                      {selectedThread.estimatedBudget > 0 && (
-                        <span className="text-[10px] text-muted-foreground font-mono hidden sm:inline shrink-0">
-                          · Est. ${Math.round(selectedThread.estimatedBudget / 1000)}K
                         </span>
                       )}
                     </div>
@@ -1153,13 +1148,13 @@ function MessagesPage() {
                     }}
                     className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
                       isAiActive
-                        ? "bg-[#c9a84c]/10 border-[#c9a84c]/30 text-[#c9a84c]"
+                        ? "bg-primary/10 border-primary/30 text-primary"
                         : "bg-secondary border-border text-muted-foreground hover:text-foreground"
                     }`}
-                    title={isAiActive ? "AI Concierge is autonomously managing replies" : "AI Concierge paused"}
+                    title={isAiActive ? "AI Auto-reply enabled" : "AI Auto-reply paused"}
                   >
                     <Sparkles className="size-3.5" />
-                    <span className="hidden sm:inline">{isAiActive ? "AI Active" : "AI Paused"}</span>
+                    <span className="hidden sm:inline">{isAiActive ? "AI Active" : "AI Off"}</span>
                   </button>
 
                   {/* AI Summary */}
@@ -1167,20 +1162,20 @@ function MessagesPage() {
                     onClick={handleSummarizeChat}
                     disabled={isSummarizing || !activeChat || activeChat.messages.length === 0}
                     className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-secondary border border-border hover:bg-secondary/80 text-foreground text-xs font-medium transition-colors cursor-pointer disabled:opacity-50"
-                    title="Generate AI Briefing Summary"
+                    title="Generate conversation summary"
                   >
                     {isSummarizing ? <Loader2 className="size-3.5 animate-spin text-primary" /> : <BrainCircuit className="size-3.5 text-primary" />}
                     <span className="hidden md:inline">Summarize</span>
                   </button>
 
-                  {/* Schedule Site Visit Button */}
+                  {/* Schedule Meeting Button */}
                   <button
                     onClick={() => setIsSchedulingOpen(true)}
                     className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-primary hover:bg-primary/20 text-xs font-medium transition-colors cursor-pointer"
-                    title="Book Discovery Call / Site Visit"
+                    title="Schedule Meeting"
                   >
                     <Calendar className="size-3.5" />
-                    <span className="hidden md:inline">Book Visit</span>
+                    <span className="hidden md:inline">Schedule</span>
                   </button>
 
                   {/* More Dropdown */}
@@ -1197,7 +1192,7 @@ function MessagesPage() {
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => setIsPortfolioModalOpen(true)} className="flex items-center gap-2 cursor-pointer">
                         <BookOpen className="size-4 text-muted-foreground" />
-                        <span>Manage Spec Portfolios</span>
+                        <span>Manage Documents</span>
                       </DropdownMenuItem>
                       {canSimulate && (
                         <DropdownMenuItem onClick={() => setIsSimulateOpen(true)} className="flex items-center gap-2 cursor-pointer">
@@ -1215,15 +1210,15 @@ function MessagesPage() {
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground/70 font-semibold shrink-0">Subject:</span>
                   <span className="font-medium text-foreground text-xs truncate">
-                    {emailSubject || `Re: Custom Spec Home Inquiry · ${selectedThread.leadName}`}
+                    {emailSubject || `Re: Inquiry · ${selectedThread.leadName}`}
                   </span>
                 </div>
                 <span className="text-[10.5px] font-mono text-muted-foreground/60 shrink-0 hidden sm:flex items-center gap-1">
-                  <Check className="size-3 text-emerald-400" /> Synced via Company Email
+                  <Check className="size-3 text-emerald-400" /> Synced with Mailbox
                 </span>
               </div>
 
-              {/* AI CHAT EXECUTIVE PRE-MEETING BRIEFING SHEET */}
+              {/* AI BRIEFING SHEET */}
               {chatSummary && (
                 <div className="mx-6 mt-4 p-4 rounded-xl bg-[#0f0f14] border border-primary/40 shadow-2xl animate-in fade-in slide-in-from-top-4 relative z-30 shrink-0 max-h-[260px] overflow-y-auto">
                   <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-white/10 sticky top-0 bg-[#0f0f14] z-10">
@@ -1232,7 +1227,7 @@ function MessagesPage() {
                         <BrainCircuit className="size-3.5 text-primary" />
                       </div>
                       <div>
-                        <h4 className="text-xs font-bold text-white tracking-wider uppercase font-display">Builder Deal Briefing</h4>
+                        <h4 className="text-xs font-semibold text-white">Conversation Summary</h4>
                       </div>
                     </div>
                     <button
@@ -1247,7 +1242,7 @@ function MessagesPage() {
                 </div>
               )}
 
-              {/* EMAIL THREAD STREAM CANVAS */}
+              {/* MESSAGE THREAD STREAM CANVAS */}
               <div className="flex-1 flex flex-col min-h-0 relative bg-[#07080b] overflow-hidden">
                 {/* Messages Scroll Container */}
                 <div
@@ -1305,15 +1300,15 @@ function MessagesPage() {
                             </div>
                           )}
 
-                          {/* Flowing Email Entry */}
-                          <div className="py-3.5 border-b border-border/30 last:border-0 group animate-in fade-in duration-150">
+                          {/* Flowing Message Entry */}
+                          <div className="py-3 border-b border-border/30 last:border-0 group animate-in fade-in duration-150">
                             {/* Sender Header Row */}
                             <div className="flex items-start justify-between gap-3 mb-1.5">
                               <div className="flex items-center gap-2.5 min-w-0">
                                 <div
-                                  className={`size-7 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 ${
+                                  className={`size-7 rounded-full flex items-center justify-center text-[11px] font-semibold shrink-0 ${
                                     isAI
-                                      ? "bg-[#c9a84c]/20 text-[#c9a84c] border border-[#c9a84c]/40"
+                                      ? "bg-primary/20 text-primary border border-primary/30"
                                       : isUser
                                         ? "bg-primary/20 text-primary border border-primary/40"
                                         : "bg-secondary text-foreground border border-border"
@@ -1324,19 +1319,19 @@ function MessagesPage() {
 
                                 <div className="flex items-center gap-2 flex-wrap min-w-0">
                                   <span className="font-semibold text-xs text-foreground">
-                                    {isAI ? "AI Lead Concierge" : isUser ? "You" : (activeChat.lead?.name || "Client")}
+                                    {isAI ? "AI Assistant" : isUser ? "You" : (activeChat.lead?.name || "Client")}
                                   </span>
                                   <span className="text-[11px] text-muted-foreground font-mono">
-                                    &lt;{isAI ? "concierge@buildersedge.ai" : isUser ? "sales@yourcompany.com" : (activeChat.lead?.email || `${activeChat.lead?.name?.toLowerCase().replace(/\s+/g, '') || 'client'}@email.com`)}&gt;
+                                    &lt;{isAI ? "ai@buildersedge.ai" : isUser ? "sales@yourcompany.com" : (activeChat.lead?.email || `${activeChat.lead?.name?.toLowerCase().replace(/\s+/g, '') || 'client'}@email.com`)}&gt;
                                   </span>
                                   {isAI && (
-                                    <span className="px-1.5 py-0.5 rounded text-[8.5px] font-mono font-semibold bg-[#c9a84c]/15 text-[#c9a84c] border border-[#c9a84c]/30">
-                                      ✦ AI Auto-Reply
+                                    <span className="px-1.5 py-0.5 rounded text-[8.5px] font-mono font-medium bg-primary/10 text-primary border border-primary/20">
+                                      AI Auto-Reply
                                     </span>
                                   )}
                                   {isUser && (
-                                    <span className="px-1.5 py-0.5 rounded text-[8.5px] font-mono font-semibold bg-primary/15 text-primary border border-primary/30">
-                                      Direct Reply
+                                    <span className="px-1.5 py-0.5 rounded text-[8.5px] font-mono font-medium bg-secondary text-muted-foreground border border-border">
+                                      Sent
                                     </span>
                                   )}
                                 </div>
@@ -1347,22 +1342,22 @@ function MessagesPage() {
                               </span>
                             </div>
 
-                            {/* Email Message Content Body */}
+                            {/* Message Content Body */}
                             <div className="pl-9 text-xs sm:text-[13px] text-foreground/90 leading-relaxed font-sans select-text space-y-2.5">
                               {isBrochureCard ? (
-                                /* Digital specs brochure presentation card */
-                                <div className="bg-[#12131a] border border-white/10 rounded-xl p-3.5 max-w-[420px] shadow-md relative overflow-hidden">
+                                /* Shared document card */
+                                <div className="bg-[#12131a] border border-border rounded-xl p-3.5 max-w-[420px] shadow-sm relative overflow-hidden">
                                   <div className="flex gap-3 items-center">
                                     <div className="size-9 bg-primary/10 rounded-lg flex items-center justify-center border border-primary/20 shrink-0 text-primary">
                                       <FileText className="size-4.5" />
                                     </div>
                                     <div className="min-w-0 flex-1">
                                       <h4 className="text-xs font-semibold text-white truncate">{msg.content.replace("📄 Document Shared: ", "").split(".pdf|size=")[0]}</h4>
-                                      <p className="text-[10px] text-muted-foreground mt-0.5">Floor Plan Specifications · {msg.content.includes("|size=") ? msg.content.split("|size=")[1] : "4.8 MB"}</p>
+                                      <p className="text-[10px] text-muted-foreground mt-0.5">PDF Document · {msg.content.includes("|size=") ? msg.content.split("|size=")[1] : "4.8 MB"}</p>
                                     </div>
                                   </div>
                                   <div className="border-t border-border/40 mt-3 pt-2.5 flex items-center justify-between">
-                                    <span className="text-[9px] text-muted-foreground font-mono">Architectural Lookbook</span>
+                                    <span className="text-[9px] text-muted-foreground font-mono">Attachment</span>
                                     <a
                                       href="#"
                                       onClick={(e) => {
@@ -1370,29 +1365,29 @@ function MessagesPage() {
                                         setIsLookbookOpen(true);
                                         setLookbookPage(0);
                                       }}
-                                      className="inline-flex items-center gap-1 text-[10.5px] font-bold text-primary hover:underline"
+                                      className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-primary hover:underline"
                                     >
-                                      Preview lookbook <ExternalLink className="size-3" />
+                                      View PDF <ExternalLink className="size-3" />
                                     </a>
                                   </div>
                                 </div>
                               ) : isAppointmentCard ? (
-                                /* Calendar Confirmation Card */
-                                <div className="bg-success/5 border border-success/30 rounded-xl p-3.5 max-w-[420px] shadow-md relative overflow-hidden">
+                                /* Meeting Scheduled Card */
+                                <div className="bg-success/5 border border-success/30 rounded-xl p-3.5 max-w-[420px] shadow-sm relative overflow-hidden">
                                   <div className="flex gap-3 items-center">
                                     <div className="size-9 bg-success/15 rounded-lg flex items-center justify-center border border-success/30 shrink-0 text-success">
                                       <Calendar className="size-4.5" />
                                     </div>
                                     <div className="min-w-0 flex-1">
-                                      <h4 className="text-xs font-semibold text-white">Discovery Call & Site Walkthrough</h4>
+                                      <h4 className="text-xs font-semibold text-white">Meeting Scheduled</h4>
                                       <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">
                                         {msg.content.replace("📆 Site Visit Booked: ", "")}
                                       </p>
                                     </div>
                                   </div>
                                   <div className="border-t border-success/10 mt-3 pt-2 flex items-center justify-between">
-                                    <span className="inline-flex items-center gap-1 text-[9px] text-success font-semibold uppercase font-mono">
-                                      <Check className="size-2.5" /> Confirmed Calendar Booking
+                                    <span className="inline-flex items-center gap-1 text-[9px] text-success font-medium font-mono">
+                                      <Check className="size-2.5" /> Confirmed
                                     </span>
                                   </div>
                                 </div>
@@ -1408,15 +1403,15 @@ function MessagesPage() {
                                   const dataUrl = dataParam ? dataParam.replace("data=", "") : undefined;
 
                                   return (
-                                    <div className="bg-[#12131a] border border-white/10 rounded-xl p-3 max-w-[420px] shadow-md space-y-2">
+                                    <div className="bg-[#12131a] border border-border rounded-xl p-3 max-w-[420px] shadow-sm space-y-2">
                                       <div className="flex gap-2.5 items-center">
                                         <div className="size-9 bg-primary/10 rounded-lg flex items-center justify-center border border-primary/20 shrink-0 text-primary">
                                           <FileText className="size-4.5" />
                                         </div>
                                         <div className="min-w-0 flex-1">
-                                          <h4 className="text-xs font-semibold text-white truncate">{fileName || "Attached Document"}</h4>
+                                          <h4 className="text-xs font-semibold text-white truncate">{fileName || "Attachment"}</h4>
                                           <span className="text-[10px] text-muted-foreground font-mono">
-                                            {fileSize} · {fileType.includes("pdf") ? "PDF Document" : "Engineering Specs"}
+                                            {fileSize} · {fileType.includes("pdf") ? "PDF" : "File"}
                                           </span>
                                         </div>
                                       </div>
@@ -1426,14 +1421,14 @@ function MessagesPage() {
                                         </p>
                                       )}
                                       <div className="border-t border-white/5 pt-2 flex items-center justify-between">
-                                        <span className="text-[9px] text-muted-foreground font-mono">Direct Attachment</span>
+                                        <span className="text-[9px] text-muted-foreground font-mono">Attachment</span>
                                         {dataUrl ? (
                                           <a
                                             href={dataUrl}
                                             download={fileName}
-                                            className="inline-flex items-center gap-1 text-[11px] font-bold text-primary hover:underline cursor-pointer"
+                                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline cursor-pointer"
                                           >
-                                            <Download className="size-3" /> Download / View
+                                            <Download className="size-3" /> Download
                                           </a>
                                         ) : (
                                           <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
@@ -1455,11 +1450,11 @@ function MessagesPage() {
                                   const dataUrl = dataParam ? dataParam.replace("data=", "") : undefined;
 
                                   return (
-                                    <div className="bg-[#12131a] border border-white/10 rounded-xl p-2.5 max-w-[420px] shadow-md space-y-2">
+                                    <div className="bg-[#12131a] border border-border rounded-xl p-2.5 max-w-[420px] shadow-sm space-y-2">
                                       {dataUrl && (
                                         <div
                                           onClick={() => setActiveImageModalUrl(dataUrl)}
-                                          className="relative rounded-lg overflow-hidden border border-white/10 max-h-[240px] bg-black/40 cursor-pointer group/img"
+                                          className="relative rounded-lg overflow-hidden border border-border max-h-[240px] bg-black/40 cursor-pointer group/img"
                                         >
                                           <img src={dataUrl} alt={fileName} className="w-full h-auto object-cover max-h-[240px] group-hover/img:scale-105 transition-transform duration-200" />
                                         </div>
@@ -1477,26 +1472,22 @@ function MessagesPage() {
                                   );
                                 })()
                               ) : isLinkShared ? (
-                                /* Link / 3D Virtual Tour */
+                                /* Shared Link */
                                 (() => {
                                   const parts = msg.content.replace("🔗 Link Shared: ", "").split("\n\n");
                                   const metaStr = parts[0] || "";
                                   const caption = parts.slice(1).join("\n\n");
-                                  const [titleParam, urlParam, categoryParam] = metaStr.split("|");
-                                  const title = titleParam || "Shared Web Link";
+                                  const [titleParam, urlParam] = metaStr.split("|");
+                                  const title = titleParam || "Shared Link";
                                   const url = urlParam ? urlParam.replace("url=", "") : "#";
-                                  const category = categoryParam ? categoryParam.replace("category=", "") : "Virtual Tour";
 
                                   return (
-                                    <div className="bg-[#12131a] border border-[#c9a84c]/30 rounded-xl p-3 max-w-[420px] shadow-md space-y-2">
+                                    <div className="bg-[#12131a] border border-border rounded-xl p-3 max-w-[420px] shadow-sm space-y-2">
                                       <div className="flex gap-2.5 items-start">
-                                        <div className="size-9 bg-[#c9a84c]/15 rounded-lg flex items-center justify-center border border-[#c9a84c]/30 shrink-0 text-[#c9a84c]">
+                                        <div className="size-9 bg-primary/10 rounded-lg flex items-center justify-center border border-primary/20 shrink-0 text-primary">
                                           <Globe className="size-4.5" />
                                         </div>
                                         <div className="min-w-0 flex-1">
-                                          <span className="text-[9px] uppercase tracking-wider font-mono font-bold text-[#c9a84c] block">
-                                            {category}
-                                          </span>
                                           <h4 className="text-xs font-semibold text-white truncate">{title}</h4>
                                           <p className="text-[10px] text-muted-foreground truncate font-mono">{url}</p>
                                         </div>
@@ -1507,12 +1498,12 @@ function MessagesPage() {
                                         </p>
                                       )}
                                       <div className="border-t border-white/5 pt-2 flex items-center justify-between">
-                                        <span className="text-[9px] text-muted-foreground font-mono">External Link</span>
+                                        <span className="text-[9px] text-muted-foreground font-mono">Link</span>
                                         <a
                                           href={url}
                                           target="_blank"
                                           rel="noopener noreferrer"
-                                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-[#c9a84c]/20 hover:bg-[#c9a84c]/30 text-[#c9a84c] text-xs font-bold transition-colors cursor-pointer"
+                                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-secondary hover:bg-secondary/80 text-foreground text-xs font-medium transition-colors cursor-pointer border border-border"
                                         >
                                           Open <ExternalLink className="size-3" />
                                         </a>
@@ -1521,7 +1512,7 @@ function MessagesPage() {
                                   );
                                 })()
                               ) : (
-                                /* Standard Clean Email Text */
+                                /* Standard Clean Message Text */
                                 <p className="whitespace-pre-line leading-relaxed text-[13.5px] text-foreground/90 font-sans">
                                   {msg.content}
                                 </p>
@@ -1536,9 +1527,9 @@ function MessagesPage() {
                       <div className="size-12 rounded-2xl bg-secondary/60 border border-border flex items-center justify-center mb-3">
                         <Mail className="size-6 text-muted-foreground" />
                       </div>
-                      <p className="text-sm text-foreground font-semibold">No emails exchanged yet</p>
+                      <p className="text-sm text-foreground font-semibold">No messages yet</p>
                       <p className="text-xs text-muted-foreground mt-1 max-w-sm leading-relaxed">
-                        Use the composer below to start your conversation with {selectedThread.leadName}.
+                        Send a message below to start your conversation with {selectedThread.leadName}.
                       </p>
                     </div>
                   )}
@@ -1547,7 +1538,7 @@ function MessagesPage() {
                   {isSimulating && (
                     <div className="flex items-center gap-2 p-3 text-xs text-muted-foreground font-mono animate-in fade-in duration-150">
                       <Loader2 className="size-3.5 animate-spin text-primary" />
-                      <span>AI Concierge is generating client email response...</span>
+                      <span>AI is generating reply...</span>
                     </div>
                   )}
 
@@ -1556,7 +1547,7 @@ function MessagesPage() {
                 </div>
               </div>
 
-              {/* STREAMLINED EMAIL COMPOSER */}
+              {/* SIMPLE COMPACT COMPOSER */}
               <div className="p-4 border-t border-border bg-[#090a0e] relative z-30 shrink-0">
                 {isUserScrolledUp && (
                   <button
@@ -1566,10 +1557,10 @@ function MessagesPage() {
                       scrollToBottom(true, "smooth");
                     }}
                     className="absolute -top-12 left-1/2 -translate-x-1/2 z-50 pointer-events-auto flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#141418]/95 border border-primary/50 text-primary shadow-xl hover:bg-primary hover:text-black transition-all cursor-pointer animate-in fade-in slide-in-from-bottom-1 duration-150 text-xs"
-                    title="Scroll to latest emails"
+                    title="Scroll to latest messages"
                   >
                     <ChevronDown className="size-3.5" />
-                    <span>Latest Emails</span>
+                    <span>Latest Messages</span>
                   </button>
                 )}
 
@@ -1584,7 +1575,7 @@ function MessagesPage() {
 
                 {/* Pre-Send Attachment Banner (File) */}
                 {attachedFile && (
-                  <div className="mb-2.5 p-2 px-3 rounded-lg bg-secondary/60 border border-primary/30 flex items-center justify-between text-xs text-foreground animate-in slide-in-from-bottom-1">
+                  <div className="mb-2.5 p-2 px-3 rounded-lg bg-secondary border border-border flex items-center justify-between text-xs text-foreground animate-in slide-in-from-bottom-1">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <FileText className="size-4 text-primary shrink-0" />
                       <span className="font-medium text-xs truncate">{attachedFile.name}</span>
@@ -1602,9 +1593,9 @@ function MessagesPage() {
 
                 {/* Pre-Send Attachment Banner (Link) */}
                 {attachedLink && (
-                  <div className="mb-2.5 p-2 px-3 rounded-lg bg-secondary/60 border border-[#c9a84c]/30 flex items-center justify-between text-xs text-foreground animate-in slide-in-from-bottom-1">
+                  <div className="mb-2.5 p-2 px-3 rounded-lg bg-secondary border border-border flex items-center justify-between text-xs text-foreground animate-in slide-in-from-bottom-1">
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <Globe className="size-4 text-[#c9a84c] shrink-0" />
+                      <Globe className="size-4 text-primary shrink-0" />
                       <span className="font-medium text-xs truncate">{attachedLink.title}</span>
                       <span className="text-[10px] text-muted-foreground font-mono truncate max-w-[200px]">({attachedLink.url})</span>
                     </div>
@@ -1630,7 +1621,7 @@ function MessagesPage() {
                           value={emailSubject}
                           onChange={(e) => setEmailSubject(e.target.value)}
                           className="w-full bg-transparent text-xs text-foreground focus:outline-none"
-                          placeholder={`Re: Custom Spec Home Inquiry · ${selectedThread.leadName}`}
+                          placeholder={`Re: Inquiry · ${selectedThread.leadName}`}
                         />
                       </div>
                       <div className="flex items-center gap-2 pt-1 border-t border-border/30">
@@ -1656,7 +1647,7 @@ function MessagesPage() {
                         handleSendMessage();
                       }
                     }}
-                    placeholder={`Write an email reply to ${selectedThread.leadName}... (⌘ + Enter to send)`}
+                    placeholder={`Reply to ${selectedThread.leadName}... (Ctrl+Enter to send)`}
                     className="w-full bg-transparent px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none resize-none min-h-[75px] max-h-[220px] font-sans leading-relaxed"
                   />
 
@@ -1668,7 +1659,7 @@ function MessagesPage() {
                         onClick={() => fileInputRef.current?.click()}
                         disabled={isSending}
                         className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
-                        title="Attach PDF, Blueprint, Specs, or File"
+                        title="Attach File"
                       >
                         <Paperclip className="size-4" />
                       </button>
@@ -1678,7 +1669,7 @@ function MessagesPage() {
                         onClick={() => setIsLinkModalOpen(true)}
                         disabled={isSending}
                         className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
-                        title="Insert 3D Tour / Web Link"
+                        title="Add Link"
                       >
                         <Globe className="size-4" />
                       </button>
@@ -1688,7 +1679,7 @@ function MessagesPage() {
                         onClick={() => setIsPortfolioModalOpen(true)}
                         disabled={isSending}
                         className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
-                        title="Share Architectural Specs Lookbook"
+                        title="Attach PDF"
                       >
                         <BookOpen className="size-4" />
                       </button>
@@ -1698,7 +1689,7 @@ function MessagesPage() {
                         onClick={() => setIsSchedulingOpen(true)}
                         disabled={isSending}
                         className="p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
-                        title="Schedule Site Visit / Walkthrough"
+                        title="Schedule Meeting"
                       >
                         <Calendar className="size-4" />
                       </button>
@@ -1740,25 +1731,22 @@ function MessagesPage() {
               </div>
             </>
           ) : (
-            /* LOADING / EMPTY VIEW: Direct Lead Channel Overview */
+            /* LOADING / EMPTY VIEW */
             <div className="flex-1 flex flex-col items-center justify-center p-12 text-center bg-[#070708]/30">
               {isLoadingChat ? (
                 <div className="flex flex-col items-center justify-center gap-2">
                   <Loader2 className="size-8 animate-spin text-muted-foreground" />
-                  <span className="text-xs text-muted-foreground font-mono">Retrieving lead conversation...</span>
+                  <span className="text-xs text-muted-foreground font-mono">Loading conversation...</span>
                 </div>
               ) : (
                 <>
-                  <div className="size-16 mx-auto rounded-full bg-white/[0.02] border border-white/[0.06] flex items-center justify-center mb-6">
-                    <MessageSquare className="size-7 text-muted-foreground" />
+                  <div className="size-14 mx-auto rounded-full bg-secondary border border-border flex items-center justify-center mb-4">
+                    <MessageSquare className="size-6 text-muted-foreground" />
                   </div>
-                  <h2 className="text-md font-bold tracking-tight text-white mb-2">Direct Messaging Channel</h2>
-                  <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto leading-relaxed mb-8">
-                    Communicate directly with your qualified prospects in real-time. Share high-fidelity custom home specifications, schedule private walkthroughs, or let the AI concierge manage threads.
+                  <h2 className="text-sm font-semibold text-foreground mb-1">No conversation selected</h2>
+                  <p className="text-xs text-muted-foreground max-w-sm mx-auto leading-relaxed mb-6">
+                    Choose a conversation from the left to view messages and reply.
                   </p>
-                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.02] border border-white/[0.05] text-[10px] text-muted-foreground font-mono uppercase tracking-widest">
-                    Select a conversation thread to begin
-                  </div>
                 </>
               )}
             </div>
@@ -1772,16 +1760,16 @@ function MessagesPage() {
                 {/* Modal Header */}
                 <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-[#101011]">
                   <div>
-                    <h3 className="font-semibold text-xs text-white uppercase tracking-wider font-mono">
-                      Quick Schedule Site Visit
+                    <h3 className="font-semibold text-xs text-white">
+                      Schedule Meeting
                     </h3>
                     <p className="text-[10px] text-muted-foreground mt-0.5">
-                      Booking for {selectedThread.leadName}
+                      With {selectedThread.leadName}
                     </p>
                   </div>
                   <button
                     onClick={() => setIsSchedulingOpen(false)}
-                    className="p-1 text-muted-foreground hover:text-white rounded-md hover:bg-white/[0.04] transition-colors"
+                    className="p-1 text-muted-foreground hover:text-white rounded-md hover:bg-white/[0.04] transition-colors cursor-pointer"
                   >
                     <X className="size-4" />
                   </button>
@@ -1794,19 +1782,19 @@ function MessagesPage() {
                       <div className="size-12 rounded-full bg-success/15 border border-success/30 flex items-center justify-center text-success animate-bounce">
                         <Check className="size-6" />
                       </div>
-                      <h4 className="text-xs font-bold text-white uppercase tracking-wider font-mono">
-                        Walkthrough Confirmed!
+                      <h4 className="text-xs font-semibold text-white">
+                        Meeting Scheduled!
                       </h4>
                       <p className="text-[10px] text-muted-foreground leading-relaxed">
-                        Site visit logged, invitation emailed, and notification message sent to {selectedThread.leadName}.
+                        Meeting has been scheduled and details sent to {selectedThread.leadName}.
                       </p>
                     </div>
                   ) : (
                     <>
                       {/* Appointment Type */}
                       <div className="space-y-1.5">
-                        <label className="block text-[9px] uppercase tracking-widest text-muted-foreground font-mono font-bold">
-                          Appointment Type
+                        <label className="block text-[10px] font-medium text-muted-foreground">
+                          Meeting Type
                         </label>
                         <div ref={dropdownRef} className="relative w-full">
                           <button
@@ -1853,8 +1841,8 @@ function MessagesPage() {
 
                       {/* Date & Time */}
                       <div className="space-y-1.5">
-                        <label className="block text-[9px] uppercase tracking-widest text-muted-foreground font-mono font-bold">
-                          Date & Time Selection *
+                        <label className="block text-[10px] font-medium text-muted-foreground">
+                          Date & Time *
                         </label>
                         <input
                           type="datetime-local"
@@ -1867,29 +1855,29 @@ function MessagesPage() {
 
                       {/* Location */}
                       <div className="space-y-1.5">
-                        <label className="block text-[9px] uppercase tracking-widest text-muted-foreground font-mono font-bold">
-                          Meeting Location
+                        <label className="block text-[10px] font-medium text-muted-foreground">
+                          Location
                         </label>
                         <input
                           type="text"
                           required
                           value={apptLocation}
                           onChange={(e) => setApptLocation(e.target.value)}
-                          placeholder="e.g. Lakeway Model Estate or Client Lot"
+                          placeholder="e.g. Office or Site Location"
                           className="w-full bg-[#141414] border border-border focus:border-primary/60 rounded-md px-3 py-2 text-xs text-white focus:outline-none"
                         />
                       </div>
 
                       {/* Notes */}
                       <div className="space-y-1.5">
-                        <label className="block text-[9px] uppercase tracking-widest text-muted-foreground font-mono font-bold">
-                          Staff Notes / Directives
+                        <label className="block text-[10px] font-medium text-muted-foreground">
+                          Notes
                         </label>
                         <textarea
                           rows={2}
                           value={apptNotes}
                           onChange={(e) => setApptNotes(e.target.value)}
-                          placeholder="Bring blueprint files, structural lot surveys, or builder contracts..."
+                          placeholder="Add any details or instructions for this meeting..."
                           className="w-full bg-[#141414] border border-border focus:border-primary/60 rounded-md p-3 text-xs text-white focus:outline-none resize-none placeholder:text-muted-foreground/60 leading-relaxed font-sans"
                         />
                       </div>
@@ -1899,7 +1887,7 @@ function MessagesPage() {
                         <button
                           type="button"
                           onClick={() => setIsSchedulingOpen(false)}
-                          className="px-4 py-2 text-xs font-semibold text-muted-foreground hover:text-white hover:bg-white/[0.02] rounded-md transition-colors"
+                          className="px-4 py-2 text-xs font-semibold text-muted-foreground hover:text-white hover:bg-white/[0.02] rounded-md transition-colors cursor-pointer"
                         >
                           Cancel
                         </button>
@@ -1907,15 +1895,15 @@ function MessagesPage() {
                         <button
                           type="submit"
                           disabled={isBooking || !apptDateTime}
-                          className="px-4 py-2 bg-white text-black text-xs font-bold rounded-md hover:bg-white/90 transition-colors disabled:opacity-40 flex items-center gap-1.5"
+                          className="px-4 py-2 bg-primary text-primary-foreground text-xs font-semibold rounded-md hover:bg-primary/90 transition-colors disabled:opacity-40 flex items-center gap-1.5 cursor-pointer"
                         >
                           {isBooking ? (
                             <>
-                              <Loader2 className="size-3.5 animate-spin text-black" /> Booking...
+                              <Loader2 className="size-3.5 animate-spin" /> Scheduling...
                             </>
                           ) : (
                             <>
-                              Lock Appointment & Notify
+                              Schedule Meeting
                             </>
                           )}
                         </button>
@@ -1928,7 +1916,7 @@ function MessagesPage() {
             </div>
           )}
 
-          {/* LOOKBOOK PREVIEW MODAL */}
+          {/* DOCUMENT PREVIEW MODAL */}
           {isLookbookOpen && (
             <div className="absolute inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-6 animate-in fade-in duration-200">
               <div className="w-full max-w-2xl bg-[#09090a]/95 border border-white/[0.08] rounded-2xl shadow-2xl flex flex-col h-[520px] overflow-hidden animate-in zoom-in-95 duration-150">
@@ -1937,18 +1925,18 @@ function MessagesPage() {
                   <div className="flex items-center gap-2">
                     <FileText className="size-4 text-primary" />
                     <div>
-                      <h3 className="font-semibold text-xs text-white uppercase tracking-wider font-mono">
-                        Lookbook Preview: Your Company Portfolio
+                      <h3 className="font-semibold text-xs text-white">
+                        Document Preview
                       </h3>
                       <p className="text-[10px] text-muted-foreground mt-0.5">
-                        High-Fidelity Architectural & Custom Specifications
+                        Project Overview & Specifications
                       </p>
                     </div>
                   </div>
                   <button
                     type="button"
                     onClick={() => setIsLookbookOpen(false)}
-                    className="p-1.5 text-muted-foreground hover:text-white rounded-md hover:bg-white/[0.04] transition-colors"
+                    className="p-1.5 text-muted-foreground hover:text-white rounded-md hover:bg-white/[0.04] transition-colors cursor-pointer"
                   >
                     <X className="size-4" />
                   </button>
@@ -2367,18 +2355,18 @@ function MessagesPage() {
         </div>
       )}
 
-      {/* INSERT LINK / VIRTUAL TOUR DIALOG */}
+      {/* INSERT LINK DIALOG */}
       {isLinkModalOpen && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-[#0e0f14] border border-border w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
             <div className="px-6 py-4 border-b border-border flex items-center justify-between bg-[#12131b]">
               <div className="flex items-center gap-2.5">
-                <div className="size-8 rounded-xl bg-[#c9a84c]/15 border border-[#c9a84c]/30 flex items-center justify-center text-[#c9a84c] dark:text-[#e5d9c5]">
+                <div className="size-8 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
                   <Globe className="size-4" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-sm text-foreground">Share Link / 3D Virtual Tour</h3>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">Send a clickable web link or Matterport walkthrough.</p>
+                  <h3 className="font-semibold text-sm text-foreground">Add Web Link</h3>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Attach a web link or online resource to your message.</p>
                 </div>
               </div>
               <button
@@ -2390,47 +2378,17 @@ function MessagesPage() {
             </div>
 
             <form onSubmit={handleAddLink} className="p-6 space-y-4">
-              {/* Category Quick Presets */}
-              <div className="space-y-1.5">
-                <label className="block text-[10px] uppercase font-mono tracking-wider text-muted-foreground font-bold">
-                  Resource Category
-                </label>
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  {[
-                    "3D Virtual Tour",
-                    "Design Lookbook",
-                    "Cost Estimator",
-                    "Client Portal",
-                    "Video Walkthrough",
-                    "Other Link"
-                  ].map((cat) => (
-                    <button
-                      key={cat}
-                      type="button"
-                      onClick={() => setLinkInputCategory(cat)}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-mono transition-all cursor-pointer border ${
-                        linkInputCategory === cat
-                          ? "bg-primary text-black border-primary font-bold shadow-sm"
-                          : "bg-white/5 text-muted-foreground border-white/5 hover:text-white"
-                      }`}
-                    >
-                      {cat}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               {/* URL Input */}
               <div className="space-y-1.5">
-                <label className="block text-[10px] uppercase font-mono tracking-wider text-muted-foreground font-bold">
-                  Website / Tour URL *
+                <label className="block text-[10px] font-medium text-muted-foreground">
+                  URL *
                 </label>
                 <input
-                  type="text"
+                  type="url"
                   required
                   value={linkInputUrl}
                   onChange={(e) => setLinkInputUrl(e.target.value)}
-                  placeholder="https://my.matterport.com/show/?m=... or https://..."
+                  placeholder="https://example.com/..."
                   className="w-full bg-[#181924] border border-border focus:border-primary rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none font-mono"
                   autoFocus
                 />
@@ -2438,14 +2396,14 @@ function MessagesPage() {
 
               {/* Title / Description */}
               <div className="space-y-1.5">
-                <label className="block text-[10px] uppercase font-mono tracking-wider text-muted-foreground font-bold">
+                <label className="block text-[10px] font-medium text-muted-foreground">
                   Display Title (Optional)
                 </label>
                 <input
                   type="text"
                   value={linkInputTitle}
                   onChange={(e) => setLinkInputTitle(e.target.value)}
-                  placeholder="e.g. 3D Model Walkthrough - Lakeway Estate"
+                  placeholder="e.g. Project Photos / Spec Sheet"
                   className="w-full bg-[#181924] border border-border focus:border-primary rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none"
                 />
               </div>
