@@ -38,6 +38,7 @@ import {
   MoreVertical,
   Paperclip,
   Link2,
+  RefreshCw,
   Globe,
   Download,
   Eye,
@@ -292,6 +293,7 @@ function MessagesPage() {
   const [aiToggleMap, setAiToggleMap] = useState<Record<string, boolean>>(initialAiToggleMap || {});
   const isAiActive = selectedLeadId ? (aiToggleMap[selectedLeadId] ?? true) : true;
 
+  const [isManualSyncing, setIsManualSyncing] = useState(false);
   // Summarize feature
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [chatSummary, setChatSummary] = useState<string | null>(null);
@@ -922,16 +924,35 @@ function MessagesPage() {
                 <Mail className="size-3.5 text-primary" />
                 <span>Inbox</span>
               </span>
-              <button
-                type="button"
-                onClick={() => {
-                  setNewChatSearchQuery("");
-                  setIsNewChatModalOpen(true);
-                }}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-[10.5px] font-semibold transition-colors cursor-pointer"
-              >
-                <Plus className="size-3" /> New Message
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (isManualSyncing) return;
+                    setIsManualSyncing(true);
+                    try {
+                      await router.invalidate();
+                    } finally {
+                      setTimeout(() => setIsManualSyncing(false), 800);
+                    }
+                  }}
+                  disabled={isManualSyncing}
+                  className="size-7 rounded-md bg-secondary/80 hover:bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer disabled:opacity-80 border border-border/50"
+                  title="Sync Inbox Threads"
+                >
+                  <RefreshCw className={`size-3 transition-transform duration-300 ${isManualSyncing ? 'animate-spin text-[#c9a84c] dark:text-[#e5d9c5]' : ''}`} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewChatSearchQuery("");
+                    setIsNewChatModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-[10.5px] font-semibold transition-colors cursor-pointer"
+                >
+                  <Plus className="size-3" /> New Message
+                </button>
+              </div>
             </div>
 
             <div className="relative">

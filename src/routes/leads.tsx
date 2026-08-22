@@ -94,6 +94,7 @@ function LeadsPage() {
     }
   }, [search.stage]);
 
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedScores, setSelectedScores] = useState<string[]>([]);
   const [selectedSources, setSelectedSources] = useState<string[]>([]);
   const [selectedDateRange, setSelectedDateRange] = useState<string>(initialDate.range);
@@ -593,17 +594,21 @@ function LeadsPage() {
             </div>
 
             <button
-              onClick={() => {
-                const icon = document.getElementById('leads-refresh-icon');
-                if (icon) icon.classList.add('animate-spin');
-                router.invalidate().finally(() => {
-                  if (icon) icon.classList.remove('animate-spin');
-                });
+              onClick={async () => {
+                if (isRefreshing) return;
+                setIsRefreshing(true);
+                try {
+                  await router.invalidate();
+                } finally {
+                  setTimeout(() => setIsRefreshing(false), 800);
+                }
               }}
-              className="inline-flex items-center gap-1 text-xs border border-border rounded-md px-2.5 py-1.5 text-foreground hover:bg-secondary transition-colors"
+              disabled={isRefreshing}
+              className="inline-flex items-center gap-1.5 text-xs border border-border rounded-lg px-2.5 py-1.5 text-foreground hover:bg-secondary transition-colors cursor-pointer disabled:opacity-80 shadow-sm"
               title="Refresh Data"
             >
-              <RefreshCw id="leads-refresh-icon" className="size-3.5" /> Refresh
+              <RefreshCw className={`size-3.5 transition-transform duration-300 ${isRefreshing ? 'animate-spin text-[#c9a84c] dark:text-[#e5d9c5]' : ''}`} />
+              <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
             </button>
             <button
               onClick={exportToCSV}

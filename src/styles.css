@@ -338,3 +338,17 @@
 .animate-marquee {
   animation: marquee 30s linear infinite;
 }
+
+@keyframes spinSmooth {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spinSmooth 0.75s linear infinite !important;
+}
+

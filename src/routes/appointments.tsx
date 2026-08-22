@@ -26,7 +26,8 @@ import {
   Edit, 
   Check, 
   FileText,
-  AlertCircle
+  AlertCircle,
+  RefreshCw
 } from "lucide-react";
 import { getCleanLeadName } from "./ai-activity";
 
@@ -170,6 +171,7 @@ function ApptPage() {
   const [successMsg, setSuccessMsg] = useState("");
 
   // Reschedule & Detail Modals
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedApptDetails, setSelectedApptDetails] = useState<any | null>(null);
   const [rescheduleApptId, setRescheduleApptId] = useState<string | null>(null);
   const [newDateTime, setNewDateTime] = useState("");
@@ -561,18 +563,38 @@ function ApptPage() {
   return (
     <Shell title="Appointments">
       <div className="flex items-center justify-between mb-2">
-        <div className="inline-flex bg-[#161618] border border-white/10 rounded-md p-0.5">
-          {(["calendar", "list"] as const).map((v) => (
-            <button 
-              key={v} 
-              onClick={() => setView(v)} 
-              className={`px-3 py-1 text-xs font-semibold rounded transition-all duration-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-white/20 focus-visible:border-white/30 ${
-                view === v ? "bg-white text-black shadow-md" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {v === "calendar" ? "Calendar" : "List View"}
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          <div className="inline-flex bg-[#161618] border border-white/10 rounded-md p-0.5">
+            {(["calendar", "list"] as const).map((v) => (
+              <button 
+                key={v} 
+                onClick={() => setView(v)} 
+                className={`px-3 py-1 text-xs font-semibold rounded transition-all duration-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-white/20 focus-visible:border-white/30 cursor-pointer ${
+                  view === v ? "bg-white text-black shadow-md" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {v === "calendar" ? "Calendar" : "List View"}
+              </button>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            onClick={async () => {
+              if (isRefreshing) return;
+              setIsRefreshing(true);
+              try {
+                await router.invalidate();
+              } finally {
+                setTimeout(() => setIsRefreshing(false), 800);
+              }
+            }}
+            disabled={isRefreshing}
+            className="size-7 rounded-md bg-[#161618] border border-white/10 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer disabled:opacity-80"
+            title="Refresh Appointments"
+          >
+            <RefreshCw className={`size-3 transition-transform duration-300 ${isRefreshing ? 'animate-spin text-[#c9a84c] dark:text-[#e5d9c5]' : ''}`} />
+          </button>
         </div>
 
         {view === "calendar" && (

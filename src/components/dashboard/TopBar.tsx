@@ -149,6 +149,7 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
   });
 
   // Popover states
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [isDateOpen, setIsDateOpen] = useState(false);
   const [selectedRange, setSelectedRange] = useState(() => {
@@ -356,17 +357,20 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
         <div className="flex items-center gap-2">
           {/* Refresh Button */}
           <button
-            onClick={() => {
-              const icon = document.getElementById('global-refresh-icon');
-              if (icon) icon.classList.add('animate-spin');
-              router.invalidate().finally(() => {
-                if (icon) icon.classList.remove('animate-spin');
-              });
+            onClick={async () => {
+              if (isRefreshing) return;
+              setIsRefreshing(true);
+              try {
+                await router.invalidate();
+              } finally {
+                setTimeout(() => setIsRefreshing(false), 800);
+              }
             }}
-            className="hidden sm:flex items-center justify-center size-9 text-muted-foreground bg-card border border-border rounded-xl hover:border-primary/40 hover:text-foreground transition-all duration-150 cursor-pointer shadow-sm shrink-0"
+            disabled={isRefreshing}
+            className="hidden sm:flex items-center justify-center size-9 text-muted-foreground bg-card border border-border rounded-xl hover:border-primary/40 hover:text-foreground transition-all duration-150 cursor-pointer shadow-sm shrink-0 disabled:opacity-80"
             title="Refresh Page Data"
           >
-            <RefreshCw id="global-refresh-icon" className="size-3.5 text-muted-foreground" />
+            <RefreshCw className={`size-3.5 transition-transform duration-300 ${isRefreshing ? 'animate-spin text-[#c9a84c] dark:text-[#e5d9c5]' : 'text-muted-foreground'}`} />
           </button>
 
           {/* Cmd+K Search trigger */}

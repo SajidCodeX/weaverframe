@@ -163,6 +163,7 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
     return { range: "All Time", start: "", end: "" };
   };
 
+  const [isSyncing, setIsSyncing] = useState(false);
   const [initialDate] = useState(() => getInitialDateRange());
   const [selectedDateRange, setSelectedDateRange] = useState<string>(initialDate.range);
   const [customStart, setCustomStart] = useState<string>(initialDate.start);
@@ -371,18 +372,21 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
               : selectedDateRange}
           </div>
           <button
-            onClick={() => {
-              const icon = document.getElementById('overview-refresh-icon');
-              if (icon) icon.classList.add('animate-spin');
-              router.invalidate().finally(() => {
-                if (icon) icon.classList.remove('animate-spin');
-              });
+            onClick={async () => {
+              if (isSyncing) return;
+              setIsSyncing(true);
+              try {
+                await router.invalidate();
+              } finally {
+                setTimeout(() => setIsSyncing(false), 800);
+              }
             }}
-            className="inline-flex items-center gap-1.5 text-xs border border-border/80 bg-secondary/60 rounded-xl px-3 py-1.5 text-foreground hover:bg-secondary transition-colors cursor-pointer shadow-sm"
+            disabled={isSyncing}
+            className="inline-flex items-center gap-1.5 text-xs border border-border/80 bg-secondary/60 rounded-xl px-3 py-1.5 text-foreground hover:bg-secondary transition-colors cursor-pointer shadow-sm disabled:opacity-80"
             title="Refresh Data"
           >
-            <RefreshCw id="overview-refresh-icon" className="size-3 text-muted-foreground" />
-            <span className="text-[11px] font-mono">Sync</span>
+            <RefreshCw className={`size-3 transition-transform duration-300 ${isSyncing ? 'animate-spin text-[#c9a84c] dark:text-[#e5d9c5]' : 'text-muted-foreground'}`} />
+            <span className="text-[11px] font-mono">{isSyncing ? 'Syncing...' : 'Sync'}</span>
           </button>
         </div>
       </div>
