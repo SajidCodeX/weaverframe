@@ -667,7 +667,7 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
                   </Link>
 
                   {/* Arrow connector */}
-                  {i < funnel.length - 1 && (
+                  {i < dynamicStats.funnel.length - 1 && (
                     <div className="flex items-center px-1 shrink-0">
                       <ArrowRight className="size-3.5" style={{ color: "#5A5A6A" }} />
                     </div>
