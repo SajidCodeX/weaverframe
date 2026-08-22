@@ -257,19 +257,21 @@ export const getNotificationsData = createServerFn({ method: 'POST' })
     })
     return activities.map(act => {
       let title = "Lead Activity"
-      if (act.action.toLowerCase().includes("schedule") || act.action.toLowerCase().includes("appointment")) {
-        title = "Appointment Set"
-      } else if (act.action.toLowerCase().includes("qualif")) {
-        title = "AI Qualified"
+      if (act.action.includes("🚨 High Alert")) {
+        title = "🚨 High Priority Alert"
+      } else if (act.action.toLowerCase().includes("schedule") || act.action.toLowerCase().includes("appointment") || act.action.toLowerCase().includes("site visit")) {
+        title = "📅 Meeting Scheduled"
+      } else if (act.action.toLowerCase().includes("hot lead") || act.action.toLowerCase().includes("qualif")) {
+        title = "🔥 Hot Lead"
       } else if (act.action.toLowerCase().includes("added") || act.action.toLowerCase().includes("manually")) {
-        title = "Manual Lead"
+        title = "👤 New Lead Added"
       } else if (act.action.toLowerCase().includes("replied") || act.action.toLowerCase().includes("response")) {
-        title = "Lead Replied"
+        title = "💬 Lead Replied"
       }
       return {
         id: act.id,
         title,
-        desc: `${act.lead.name}: ${act.action}`,
+        desc: `${act.lead?.name || 'Lead'}: ${act.action}`,
         time: act.createdAt.toISOString(),
         unread: new Date().getTime() - act.createdAt.getTime() < 3600000
       }
@@ -280,34 +282,41 @@ export const getNotificationsData = createServerFn({ method: 'POST' })
   }
 })
 
+export async function createHighAlertNotification({
+  builderId,
+  leadId,
+  leadName,
+  title,
+  message,
+  type = 'hot_lead'
+}: {
+  builderId: string;
+  leadId: string;
+  leadName: string;
+  title: string;
+  message: string;
+  type?: 'hot_lead' | 'booking' | 'urgent_inquiry';
+}) {
+  try {
+    const { db } = await import('./db');
+    await db.activity.create({
+      data: {
+        builderId,
+        leadId,
+        action: `🚨 High Alert [${title}]: ${message}`,
+      }
+    });
+    invalidateCache("dashboard_");
+  } catch (err) {
+    console.error("Failed to log high alert notification:", err);
+  }
+}
 
 export function determineLeadSource(lead: { source?: string | null; county?: string | null }) {
-  const currentSource = (lead.source || "").trim();
-  const lowerSource = currentSource.toLowerCase();
-  const lowerCounty = (lead.county || "").toLowerCase();
-
-  if (
-    !lowerSource ||
-    lowerSource === "public record" ||
-    lowerSource === "austin permits" ||
-    lowerSource === "organic / local seo" ||
-    lowerSource === "organic" ||
-    lowerSource === "m" ||
-    lowerSource === "r" ||
-    lowerSource === "g" ||
-    lowerSource === "google" ||
-    lowerSource === "google map" ||
-    lowerSource === "google maps" ||
-    lowerSource === "facebook" ||
-    lowerSource === "referral"
-  ) {
-    if (lowerCounty.includes("travis") || lowerCounty.includes("austin")) {
-      return "Austin Building Permits";
-    }
-    return "Travis County Public Records";
+  if (lead.source && lead.source.trim() && lead.source !== "Austin Building Permits") {
+    return lead.source.trim();
   }
-
-  return lead.source || "Austin Building Permits";
+  return lead.source || "Website Contact Form";
 }
 
 export const getLeadsData = createServerFn({ method: 'POST' })
@@ -323,9 +332,13 @@ export const getLeadsData = createServerFn({ method: 'POST' })
     }
     const leads = await db.lead.findMany({
       where: whereClause,
-      orderBy: { purchaseDate: 'desc' },
+      orderBy: { createdAt: 'desc' },
       include: {
-        activities: {
+        appointments: {
+          orderBy: { dateTime: 'desc' },
+          take: 1
+        },
+        messages: {
           orderBy: { createdAt: 'desc' },
           take: 5
         }
@@ -345,49 +358,85 @@ export const getLeadsData = createServerFn({ method: 'POST' })
 export const addManualLead = createServerFn({ method: 'POST' })
   .inputValidator((data: {
     name: string;
+    email: string;
     phone?: string;
-    email?: string;
-    county: string;
-    state: string;
-    landPrice: number;
+    projectType?: string;
+    county?: string;
+    state?: string;
+    landPrice?: number;
     estimatedBudget?: number;
-    status: string;
-    scoreTier: string;
-    source: string;
+    status?: string;
+    scoreTier?: string;
+    source?: string;
+    notes?: string;
   }) => data)
   .handler(async ({ data }) => {
     const { getTenantDb, requireAuth } = await import('./server-utils.server');
     const session = await requireAuth()
     const db = await getTenantDb()
     try {
-      const estimatedBudget = data.estimatedBudget || data.landPrice * 4
-      const assignedToId = (session.role === 'builder' && session.builderRole === 'sales') ? session.userId : undefined
+      const estimatedBudget = data.estimatedBudget || (data.landPrice ? data.landPrice * 4 : 500000);
+      const landPrice = data.landPrice || Math.round(estimatedBudget * 0.25);
+      const assignedToId = (session.role === 'builder' && session.builderRole === 'sales') ? session.userId : undefined;
+      const scoreTier = data.scoreTier || "Hot";
+      const status = data.status || "New";
+      const source = data.source || "Website Contact Form";
+      const projectType = data.projectType || data.county || "Custom Home Build";
+
       const lead = await db.lead.create({
         data: {
           builderId: session.builderId || '',
           assignedToId,
           name: data.name,
           phone: data.phone || null,
-          email: data.email || null,
-          county: data.county,
-          state: data.state,
-          landPrice: data.landPrice,
+          email: data.email,
+          county: projectType,
+          state: data.state || "US",
+          landPrice,
           estimatedBudget,
           purchaseDate: new Date(),
-          status: data.status,
-          scoreTier: data.scoreTier,
-          source: determineLeadSource({ source: data.source, county: data.county }),
+          status,
+          scoreTier,
+          source,
+          lastAiSummary: data.notes ? `Initial inquiry: ${data.notes}` : "New lead captured",
+          dealScore: scoreTier === "Hot" ? 85 : scoreTier === "Warm" ? 60 : 35,
         }
-      })
+      });
+
+      // If initial notes were provided, create an initial lead message in thread
+      if (data.notes && data.notes.trim()) {
+        await db.message.create({
+          data: {
+            builderId: session.builderId || '',
+            leadId: lead.id,
+            sender: 'lead',
+            content: data.notes.trim(),
+            channel: 'portal',
+            isRead: false,
+          }
+        });
+      }
 
       // Log activity
       await db.activity.create({
         data: {
           builderId: session.builderId || '',
           leadId: lead.id,
-          action: "Lead manually added",
+          action: `Lead manually added (${source})`,
         }
-      })
+      });
+
+      // Trigger High Alert Notification if Hot lead
+      if (scoreTier === "Hot") {
+        await createHighAlertNotification({
+          builderId: session.builderId || '',
+          leadId: lead.id,
+          leadName: data.name,
+          title: "🔥 High-Priority Hot Lead",
+          message: `${data.name} with project budget $${estimatedBudget.toLocaleString()} added from ${source}.`,
+          type: "hot_lead"
+        });
+      }
 
       invalidateCache("dashboard_");
       return lead
@@ -1744,30 +1793,22 @@ export const bookAppointment = createServerFn({ method: 'POST' })
           leadId: data.leadId,
           sender: 'system',
           content: `📆 Site Visit Booked: ${data.type} scheduled for ${formattedDate} at ${data.location}.`,
+          channel: 'portal',
           isRead: true
         }
-      })
+      });
 
-      if (data.sendSms) {
-        const smsContent = `Hi ${lead.name}, your ${data.type} is scheduled for ${formattedDate} at ${data.location}. See you then!`
-        await db.activity.create({
-          data: {
-            builderId: session.builderId || '',
-            leadId: data.leadId,
-            action: `💬 AI Engine sent automated SMS appointment confirmation to ${lead.name}: "${smsContent}"`,
-          }
-        })
-        await db.message.create({
-          data: {
-            builderId: session.builderId || '',
-            leadId: data.leadId,
-            sender: 'system',
-            content: smsContent,
-            isRead: true
-          }
-        })
-      }
+      // Trigger High Alert Notification to builder
+      await createHighAlertNotification({
+        builderId: session.builderId || '',
+        leadId: data.leadId,
+        leadName: lead.name,
+        title: "📅 New Meeting Scheduled",
+        message: `${lead.name} scheduled ${data.type} for ${formattedDate} at ${data.location}.`,
+        type: "booking"
+      });
 
+      invalidateCache("dashboard_");
       return appt
     } catch (error) {
       console.error("Error in bookAppointment:", error)
@@ -3038,4 +3079,73 @@ export const generatePasswordResetLink = createServerFn({ method: 'POST' })
 
     return { success: true, inviteLink: `/invite/${token}` };
   });
+
+export const createStripeCheckoutSession = createServerFn({ method: 'POST' })
+  .inputValidator((data: { planId: string; returnUrl?: string }) => data)
+  .handler(async ({ data }) => {
+    const { requireAuth, getTenantDb } = await import('./server-utils.server');
+    const session = await requireAuth();
+    const stripeKey = process.env.STRIPE_SECRET_KEY;
+
+    const planPrices: Record<string, { name: string; amountCents: number }> = {
+      trial: { name: "Evaluation Trial", amountCents: 0 },
+      professional: { name: "Professional Tier", amountCents: 39900 },
+      enterprise: { name: "Enterprise Scale", amountCents: 79900 },
+    };
+
+    const selectedPlan = planPrices[data.planId];
+    if (!selectedPlan) throw new Error("Invalid plan selected");
+
+    if (!stripeKey) {
+      return {
+        url: null,
+        simulated: true,
+        message: "Stripe key not configured. Set STRIPE_SECRET_KEY in Vercel environment variables to enable live payments."
+      };
+    }
+
+    try {
+      const db = await getTenantDb();
+      const builder = await db.builder.findUnique({
+        where: { id: session.builderId || '' }
+      });
+
+      const params = new URLSearchParams();
+      params.append('payment_method_types[0]', 'card');
+      params.append('line_items[0][price_data][currency]', 'usd');
+      params.append('line_items[0][price_data][product_data][name]', `WeaverFrame ${selectedPlan.name}`);
+      params.append('line_items[0][price_data][recurring][interval]', 'month');
+      params.append('line_items[0][price_data][unit_amount]', selectedPlan.amountCents.toString());
+      params.append('line_items[0][quantity]', '1');
+      params.append('mode', 'subscription');
+      params.append('success_url', `${data.returnUrl || 'https://weaverframe.in'}/settings?billing=success`);
+      params.append('cancel_url', `${data.returnUrl || 'https://weaverframe.in'}/settings?billing=cancel`);
+      params.append('client_reference_id', session.builderId || '');
+      if (builder?.email) {
+        params.append('customer_email', builder.email);
+      }
+
+      const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${stripeKey}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: params.toString()
+      });
+
+      if (!res.ok) {
+        const err = await res.text();
+        console.error("Stripe session creation error:", err);
+        throw new Error(`Stripe API error: ${err}`);
+      }
+
+      const stripeSession = await res.json();
+      return { url: stripeSession.url, simulated: false };
+    } catch (error: any) {
+      console.error("Error creating Stripe checkout session:", error);
+      throw error;
+    }
+  });
+
 

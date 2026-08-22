@@ -334,28 +334,6 @@ function MessagesPage() {
     }
   };
 
-  const handleCopyPortalLink = async () => {
-    if (!activeChat) return;
-    try {
-      let token = selectedThread?.portalToken || activeChat.lead.portalToken;
-      if (!token) {
-        const activeRole = sessionStorage.getItem('active_role') ?? undefined;
-        // activeChat.lead has id from DB but might just be the mapped thread which has leadId
-        const targetLeadId = selectedThread?.leadId || activeChat.lead.id || activeChat.lead.leadId;
-        token = await generatePortalToken({ data: { leadId: targetLeadId, activeRole } });
-        if (selectedThread) selectedThread.portalToken = token;
-      }
-      const link = `${window.location.origin}/portal/${token}`;
-      await navigator.clipboard.writeText(link);
-      toast.success("Client portal link copied!", {
-        description: "Anyone with this link can chat with you as this lead."
-      });
-    } catch (e) {
-      toast.error("Failed to copy link");
-      console.error(e);
-    }
-  };
-
   // Scroll active chat feed to bottom (respects user scroll position unless forced)
   const scrollToBottom = (force = false, mode: ScrollBehavior = "smooth") => {
     if (!force && isUserScrolledUpRef.current) return;
@@ -1190,10 +1168,6 @@ function MessagesPage() {
                       </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-56 bg-[#0a0a0c] border border-border">
-                      <DropdownMenuItem onClick={handleCopyPortalLink} className="flex items-center gap-2 cursor-pointer">
-                        <ExternalLink className="size-4 text-muted-foreground" />
-                        <span>Copy Client Portal Link</span>
-                      </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => setIsPortfolioModalOpen(true)} className="flex items-center gap-2 cursor-pointer">
                         <BookOpen className="size-4 text-muted-foreground" />
                         <span>Manage Documents</span>

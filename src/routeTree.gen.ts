@@ -29,7 +29,9 @@ import { Route as AdminUsersRouteImport } from './routes/admin/users'
 import { Route as AdminSettingsRouteImport } from './routes/admin/settings'
 import { Route as AdminBuildersRouteImport } from './routes/admin/builders'
 import { Route as AdminBillingRouteImport } from './routes/admin/billing'
+import { Route as ApiLeadsInboundRouteImport } from './routes/api.leads.inbound'
 import { Route as ApiCronSyncLeadsRouteImport } from './routes/api.cron.sync-leads'
+import { Route as ApiBillingWebhookRouteImport } from './routes/api.billing.webhook'
 
 const WelcomeRoute = WelcomeRouteImport.update({
   id: '/welcome',
@@ -131,9 +133,19 @@ const AdminBillingRoute = AdminBillingRouteImport.update({
   path: '/admin/billing',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiLeadsInboundRoute = ApiLeadsInboundRouteImport.update({
+  id: '/api/leads/inbound',
+  path: '/api/leads/inbound',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiCronSyncLeadsRoute = ApiCronSyncLeadsRouteImport.update({
   id: '/api/cron/sync-leads',
   path: '/api/cron/sync-leads',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiBillingWebhookRoute = ApiBillingWebhookRouteImport.update({
+  id: '/api/billing/webhook',
+  path: '/api/billing/webhook',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -158,7 +170,9 @@ export interface FileRoutesByFullPath {
   '/invite/$token': typeof InviteTokenRoute
   '/portal/$token': typeof PortalTokenRoute
   '/admin/': typeof AdminIndexRoute
+  '/api/billing/webhook': typeof ApiBillingWebhookRoute
   '/api/cron/sync-leads': typeof ApiCronSyncLeadsRoute
+  '/api/leads/inbound': typeof ApiLeadsInboundRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -181,7 +195,9 @@ export interface FileRoutesByTo {
   '/invite/$token': typeof InviteTokenRoute
   '/portal/$token': typeof PortalTokenRoute
   '/admin': typeof AdminIndexRoute
+  '/api/billing/webhook': typeof ApiBillingWebhookRoute
   '/api/cron/sync-leads': typeof ApiCronSyncLeadsRoute
+  '/api/leads/inbound': typeof ApiLeadsInboundRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -205,7 +221,9 @@ export interface FileRoutesById {
   '/invite/$token': typeof InviteTokenRoute
   '/portal/$token': typeof PortalTokenRoute
   '/admin/': typeof AdminIndexRoute
+  '/api/billing/webhook': typeof ApiBillingWebhookRoute
   '/api/cron/sync-leads': typeof ApiCronSyncLeadsRoute
+  '/api/leads/inbound': typeof ApiLeadsInboundRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -230,7 +248,9 @@ export interface FileRouteTypes {
     | '/invite/$token'
     | '/portal/$token'
     | '/admin/'
+    | '/api/billing/webhook'
     | '/api/cron/sync-leads'
+    | '/api/leads/inbound'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -253,7 +273,9 @@ export interface FileRouteTypes {
     | '/invite/$token'
     | '/portal/$token'
     | '/admin'
+    | '/api/billing/webhook'
     | '/api/cron/sync-leads'
+    | '/api/leads/inbound'
   id:
     | '__root__'
     | '/'
@@ -276,7 +298,9 @@ export interface FileRouteTypes {
     | '/invite/$token'
     | '/portal/$token'
     | '/admin/'
+    | '/api/billing/webhook'
     | '/api/cron/sync-leads'
+    | '/api/leads/inbound'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -300,7 +324,9 @@ export interface RootRouteChildren {
   InviteTokenRoute: typeof InviteTokenRoute
   PortalTokenRoute: typeof PortalTokenRoute
   AdminIndexRoute: typeof AdminIndexRoute
+  ApiBillingWebhookRoute: typeof ApiBillingWebhookRoute
   ApiCronSyncLeadsRoute: typeof ApiCronSyncLeadsRoute
+  ApiLeadsInboundRoute: typeof ApiLeadsInboundRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -445,11 +471,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminBillingRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/leads/inbound': {
+      id: '/api/leads/inbound'
+      path: '/api/leads/inbound'
+      fullPath: '/api/leads/inbound'
+      preLoaderRoute: typeof ApiLeadsInboundRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/cron/sync-leads': {
       id: '/api/cron/sync-leads'
       path: '/api/cron/sync-leads'
       fullPath: '/api/cron/sync-leads'
       preLoaderRoute: typeof ApiCronSyncLeadsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/billing/webhook': {
+      id: '/api/billing/webhook'
+      path: '/api/billing/webhook'
+      fullPath: '/api/billing/webhook'
+      preLoaderRoute: typeof ApiBillingWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -476,7 +516,9 @@ const rootRouteChildren: RootRouteChildren = {
   InviteTokenRoute: InviteTokenRoute,
   PortalTokenRoute: PortalTokenRoute,
   AdminIndexRoute: AdminIndexRoute,
+  ApiBillingWebhookRoute: ApiBillingWebhookRoute,
   ApiCronSyncLeadsRoute: ApiCronSyncLeadsRoute,
+  ApiLeadsInboundRoute: ApiLeadsInboundRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

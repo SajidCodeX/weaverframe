@@ -118,15 +118,14 @@ function LeadsPage() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [modalForm, setModalForm] = useState({
     name: "",
-    phone: "",
     email: "",
-    county: "Travis CAD",
-    state: "TX",
-    landPrice: "",
-    estimatedBudget: "",
-    status: "New",
+    phone: "",
+    projectType: "Custom Home Build",
+    estimatedBudget: "500000",
+    source: "Website Contact Form",
     scoreTier: "Hot",
-    source: "Austin Building Permits"
+    status: "New",
+    notes: ""
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalError, setModalError] = useState("");
@@ -331,14 +330,14 @@ function LeadsPage() {
   // Submit manual lead dialog form
   const handleAddManualLead = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!modalForm.name || !modalForm.landPrice) {
-      setModalError("Please provide name and land purchase price");
+    if (!modalForm.name.trim() || !modalForm.email.trim()) {
+      setModalError("Please provide both Full Name and Email Address.");
       return;
     }
 
-    const price = parseInt(modalForm.landPrice);
-    if (isNaN(price) || price <= 0) {
-      setModalError("Land purchase price must be a positive number");
+    const budget = modalForm.estimatedBudget ? parseInt(modalForm.estimatedBudget) : 500000;
+    if (isNaN(budget) || budget <= 0) {
+      setModalError("Estimated Project Budget must be a positive number.");
       return;
     }
 
@@ -348,37 +347,35 @@ function LeadsPage() {
     try {
       await addManualLead({
         data: {
-          name: modalForm.name,
-          phone: modalForm.phone || undefined,
-          email: modalForm.email || undefined,
-          county: modalForm.county,
-          state: modalForm.state,
-          landPrice: price,
-          estimatedBudget: modalForm.estimatedBudget ? parseInt(modalForm.estimatedBudget) : 0,
+          name: modalForm.name.trim(),
+          email: modalForm.email.trim(),
+          phone: modalForm.phone?.trim() || undefined,
+          projectType: modalForm.projectType,
+          estimatedBudget: budget,
           status: modalForm.status,
           scoreTier: modalForm.scoreTier,
-          source: modalForm.source
+          source: modalForm.source,
+          notes: modalForm.notes?.trim() || undefined
         }
       });
 
       // Clear form and reload route state
       setModalForm({
         name: "",
-        phone: "",
         email: "",
-        county: "Travis CAD",
-        state: "TX",
-        landPrice: "",
-        estimatedBudget: "",
-        status: "New",
+        phone: "",
+        projectType: "Custom Home Build",
+        estimatedBudget: "500000",
+        source: "Website Contact Form",
         scoreTier: "Hot",
-        source: "Austin Building Permits"
+        status: "New",
+        notes: ""
       });
       setIsAddModalOpen(false);
       await router.invalidate();
     } catch (err: any) {
       console.error(err);
-      setModalError(err.message || "Failed to create manual lead.");
+      setModalError(err.message || "Failed to create lead.");
     } finally {
       setIsSubmitting(false);
     }
@@ -1024,95 +1021,102 @@ function LeadsPage() {
             <form onSubmit={handleAddManualLead} className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs text-muted-foreground mb-1">Full Name *</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Full Name *</label>
                   <input
                     required
                     value={modalForm.name}
                     onChange={(e) => setModalForm({ ...modalForm, name: e.target.value })}
                     placeholder="e.g. John Doe"
-                    className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:border-white/60"
+                    className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-muted-foreground mb-1">Land Purchase Price ($) *</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Email Address *</label>
                   <input
                     required
-                    type="number"
-                    value={modalForm.landPrice}
-                    onChange={(e) => setModalForm({ ...modalForm, landPrice: e.target.value })}
-                    placeholder="e.g. 150000"
-                    className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:border-white/60"
+                    type="email"
+                    value={modalForm.email}
+                    onChange={(e) => setModalForm({ ...modalForm, email: e.target.value })}
+                    placeholder="e.g. john@example.com"
+                    className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Phone Number</label>
+                  <input
+                    value={modalForm.phone}
+                    onChange={(e) => setModalForm({ ...modalForm, phone: e.target.value })}
+                    placeholder="e.g. (512) 555-0199"
+                    className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-muted-foreground mb-1">Project Budget ($) *</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Project Type</label>
+                  <div className="mt-1">
+                    <CustomSelect
+                      value={modalForm.projectType}
+                      onChange={(val) => setModalForm({ ...modalForm, projectType: val })}
+                      options={[
+                        { label: "Custom Home Build", value: "Custom Home Build" },
+                        { label: "Major Renovation / Remodel", value: "Major Renovation / Remodel" },
+                        { label: "Luxury Spec Home", value: "Luxury Spec Home" },
+                        { label: "Architectural Consultation", value: "Architectural Consultation" },
+                        { label: "Commercial / Other", value: "Commercial / Other" }
+                      ]}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Estimated Budget ($) *</label>
                   <input
                     required
                     type="number"
                     value={modalForm.estimatedBudget}
                     onChange={(e) => setModalForm({ ...modalForm, estimatedBudget: e.target.value })}
-                    placeholder="e.g. 600000"
-                    className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:border-white/60"
+                    placeholder="e.g. 750000"
+                    className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60"
                   />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Lead Source</label>
+                  <div className="mt-1">
+                    <CustomSelect
+                      value={modalForm.source}
+                      onChange={(val) => setModalForm({ ...modalForm, source: val })}
+                      options={[
+                        { label: "🌐 Website Contact Form", value: "Website Contact Form" },
+                        { label: "🔍 Google Search / Ads", value: "Google Search / Ads" },
+                        { label: "📱 Meta / Instagram Ads", value: "Meta / Instagram Ads" },
+                        { label: "🤝 Referral / Word of Mouth", value: "Referral / Word of Mouth" },
+                        { label: "🏢 Real Estate Broker / Agent", value: "Real Estate Broker / Agent" },
+                        { label: "🏡 Model Home Walk-in", value: "Model Home Walk-in" },
+                        { label: "✉️ Direct Inbound Email", value: "Direct Inbound Email" },
+                        { label: "📋 Custom Campaign / Event", value: "Custom Campaign / Event" }
+                      ]}
+                    />
+                  </div>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs text-muted-foreground mb-1">Phone Number</label>
-                  <input
-                    value={modalForm.phone}
-                    onChange={(e) => setModalForm({ ...modalForm, phone: e.target.value })}
-                    placeholder="e.g. (512) 555-0199"
-                    className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:border-white/60"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-muted-foreground mb-1">Email Address</label>
-                  <input
-                    type="email"
-                    value={modalForm.email}
-                    onChange={(e) => setModalForm({ ...modalForm, email: e.target.value })}
-                    placeholder="e.g. john@example.com"
-                    className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:border-white/60"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs text-muted-foreground mb-1">County Location</label>
-                  <input
-                    value={modalForm.county}
-                    onChange={(e) => setModalForm({ ...modalForm, county: e.target.value })}
-                    placeholder="e.g. Travis CAD"
-                    className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:border-white/60"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-muted-foreground mb-1">State</label>
-                  <input
-                    value={modalForm.state}
-                    onChange={(e) => setModalForm({ ...modalForm, state: e.target.value })}
-                    placeholder="e.g. TX"
-                    className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:border-white/60"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs text-muted-foreground mb-1">Score Tier</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Score Tier</label>
                   <div className="mt-1">
                     <CustomSelect
                       value={modalForm.scoreTier}
                       onChange={(val) => setModalForm({ ...modalForm, scoreTier: val })}
-                      options={[{label: "Hot", value: "Hot"}, {label: "Warm", value: "Warm"}, {label: "Cold", value: "Cold"}]}
+                      options={[{label: "🔥 Hot", value: "Hot"}, {label: "⚡ Warm", value: "Warm"}, {label: "❄️ Cold", value: "Cold"}]}
                     />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs text-muted-foreground mb-1">Stage Status</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Stage Status</label>
                   <div className="mt-1">
                     <CustomSelect
                       value={modalForm.status}
@@ -1124,14 +1128,14 @@ function LeadsPage() {
               </div>
 
               <div>
-                <label className="block text-xs text-muted-foreground mb-1">Lead Source</label>
-                <div className="mt-1">
-                  <CustomSelect
-                    value={modalForm.source}
-                    onChange={(val) => setModalForm({ ...modalForm, source: val })}
-                    options={[{label: "Austin Building Permits", value: "Austin Building Permits"}, {label: "Travis County Public Records", value: "Travis County Public Records"}]}
-                  />
-                </div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Initial Inquiry / Scope Notes (Optional)</label>
+                <textarea
+                  rows={2}
+                  value={modalForm.notes}
+                  onChange={(e) => setModalForm({ ...modalForm, notes: e.target.value })}
+                  placeholder="e.g. Interested in building a 4,500 sq ft modern home starting this fall..."
+                  className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary/60 resize-none font-sans leading-relaxed"
+                />
               </div>
 
               {/* Action buttons */}

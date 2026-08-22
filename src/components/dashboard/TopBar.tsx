@@ -511,13 +511,23 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
                             ? "/leads"
                             : "/messages";
                       }}
-                      className={`p-2.5 rounded-md text-left transition-colors cursor-pointer ${
-                        n.unread ? "bg-white/[0.05] hover:bg-white/[0.09]" : "hover:bg-white/[0.05]"
+                      className={`p-2.5 rounded-md text-left transition-colors cursor-pointer border ${
+                        n.title.includes("🚨") || n.title.includes("🔥")
+                          ? "bg-red-500/10 border-red-500/30 hover:bg-red-500/15"
+                          : n.unread
+                            ? "bg-white/[0.05] border-white/10 hover:bg-white/[0.09]"
+                            : "border-transparent hover:bg-white/[0.05]"
                       }`}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <span
-                          className={`text-xs font-medium ${n.unread ? "text-white font-semibold" : "text-foreground/80"}`}
+                          className={`text-xs font-medium ${
+                            n.title.includes("🚨") || n.title.includes("🔥")
+                              ? "text-red-400 font-bold"
+                              : n.unread
+                                ? "text-white font-semibold"
+                                : "text-foreground/80"
+                          }`}
                         >
                           {n.title}
                         </span>
