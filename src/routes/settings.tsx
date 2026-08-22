@@ -20,8 +20,10 @@ import {
   saveWebhookUrl,
   getBillingProfile,
   updateBillingProfile,
+  createStripeCheckoutSession,
+  createStripeCustomerPortalSession,
 } from "@/lib/dashboard";
-import { Loader2, Check, X, AlertCircle, Download, Mail, Sparkles, RefreshCw, Lock, ShieldCheck, CheckCircle2, Zap, Server, Globe } from "lucide-react";
+import { Loader2, Check, X, AlertCircle, Download, Mail, Sparkles, RefreshCw, Lock, ShieldCheck, CheckCircle2, Zap, Server, Globe, CreditCard, ExternalLink } from "lucide-react";
 
 export const Route = createFileRoute("/settings")({
   beforeLoad: async ({ context }) => {
@@ -214,6 +216,50 @@ function SettingsPage() {
     doc.text("billing@buildersedge.com. Built by Google DeepMind team.", 20, 215);
 
     doc.save(`BE_Invoice_${date.replace(/\s+/g, '_').replace(/,/g, '')}.pdf`);
+  };
+
+  // ── Stripe Subscription Checkout Handlers ─────────────────────────────────────
+  const [isUpgradingPlan, setIsUpgradingPlan] = useState<string | null>(null);
+  const [isOpeningPortal, setIsOpeningPortal] = useState(false);
+
+  const handleUpgradePlan = async (planId: 'starter' | 'growth') => {
+    setIsUpgradingPlan(planId);
+    try {
+      const res = await createStripeCheckoutSession({
+        data: {
+          planId,
+          returnUrl: typeof window !== 'undefined' ? window.location.origin : 'https://weaverframe.in'
+        }
+      });
+      if (res?.url) {
+        window.location.href = res.url;
+      } else if (res?.simulated) {
+        alert("Stripe Infrastructure Ready (Sandbox Mode):\n\n" + (res.message || "Ready for live payment when STRIPE_SECRET_KEY is configured."));
+      }
+    } catch (err: any) {
+      console.error("Failed to start Stripe checkout session:", err);
+      alert(err.message || "Failed to initiate Stripe checkout.");
+    } finally {
+      setIsUpgradingPlan(null);
+    }
+  };
+
+  const handleOpenPortal = async () => {
+    setIsOpeningPortal(true);
+    try {
+      const res = await createStripeCustomerPortalSession({
+        data: { returnUrl: typeof window !== 'undefined' ? window.location.origin : 'https://weaverframe.in' }
+      });
+      if (res?.url) {
+        window.location.href = res.url;
+      } else if (res?.simulated) {
+        alert("Stripe Customer Portal:\n\n" + (res.message || "No active Stripe customer found."));
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to open Stripe portal.");
+    } finally {
+      setIsOpeningPortal(false);
+    }
   };
 
   // ── Builder Profile State ───────────────────────────────────────────────────
@@ -1161,83 +1207,218 @@ function SettingsPage() {
                 <div>
                   <h2 className="text-lg font-semibold text-foreground">Subscription & Billing</h2>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Your organization's active subscription tier and billing cycle.
+                    Manage your organization's subscription tier, billing cycle, and Stripe payments.
                   </p>
                 </div>
                 <div className="flex items-center gap-2 self-start sm:self-auto">
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-mono font-bold">
+                  <button
+                    type="button"
+                    onClick={handleOpenPortal}
+                    disabled={isOpeningPortal}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-secondary/80 hover:bg-secondary border border-border text-foreground text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50 shadow-sm"
+                    title="Manage credit cards and receipts in Stripe"
+                  >
+                    {isOpeningPortal ? (
+                      <>
+                        <Loader2 className="size-3.5 animate-spin" />
+                        <span>Opening Portal...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CreditCard className="size-3.5 text-[#c9a84c] dark:text-[#e5d9c5]" />
+                        <span>Stripe Customer Portal</span>
+                        <ExternalLink className="size-3 text-muted-foreground" />
+                      </>
+                    )}
+                  </button>
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-mono font-bold">
                     <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-                    ACTIVE SUBSCRIPTION
+                    ACTIVE
                   </span>
                 </div>
               </div>
 
-              {/* Plan Presentation Cards (Read-Only) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Card className="p-5 border border-primary/40 bg-card shadow-sm flex flex-col justify-between">
+              {/* Interactive Subscription Plan Cards */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* 1. Starter Tier */}
+                <Card className={`p-5 rounded-2xl flex flex-col justify-between transition-all duration-200 ${
+                  currentPlanKey === 'starter' || currentPlanKey === 'professional'
+                    ? 'border-2 border-[#e5d9c5]/80 bg-card shadow-md shadow-[#e5d9c5]/5'
+                    : 'border border-border/80 bg-card/60 hover:border-border'
+                }`}>
                   <div>
                     <div className="flex items-center justify-between gap-2 mb-2">
                       <span className="text-[10.5px] uppercase tracking-wider text-muted-foreground font-mono font-semibold">
-                        Assigned Plan
+                        Entry-Level Plan
                       </span>
-                      <span className="px-2 py-0.5 rounded-full text-[9.5px] font-mono font-bold bg-[#c9a84c]/20 text-[#c9a84c] dark:text-[#e5d9c5] border border-[#c9a84c]/40">
-                        {currentPlan.badge}
+                      <span className="px-2.5 py-0.5 rounded-full text-[9.5px] font-mono font-bold bg-[#c9a84c]/15 text-[#c9a84c] dark:text-[#e5d9c5] border border-[#c9a84c]/30">
+                        STARTER TIER
                       </span>
                     </div>
 
-                    <div className="text-lg font-bold text-foreground font-mono">
-                      {currentPlan.name}
+                    <div className="text-xl font-bold text-foreground font-mono">
+                      Starter
                     </div>
 
                     <div className="flex items-baseline gap-1 my-2">
-                      <span className="font-nevera text-3xl font-normal text-foreground">
-                        {currentPlan.price}
+                      <span className="font-nevera text-3xl sm:text-4xl font-normal text-foreground">
+                        $149
                       </span>
                       <span className="text-xs font-mono text-muted-foreground">
-                        {currentPlan.period}
+                        / month (up to 50 leads)
                       </span>
                     </div>
 
-                    <p className="text-xs text-muted-foreground font-light mb-3">
-                      {currentPlan.description}
+                    <p className="text-xs text-muted-foreground font-light mb-4 leading-relaxed">
+                      Designed for boutique builders. Autonomous AI email qualification, lead memory, and instant hot lead dispatches.
                     </p>
 
-                    <div className="space-y-1.5 pt-3 border-t border-border/50 text-xs font-mono text-muted-foreground">
-                      {currentPlan.features.map((feat, idx) => (
-                        <div key={idx} className="flex items-center gap-1.5 text-[11px]">
-                          <CheckCircle2 className="size-3 text-primary shrink-0" />
+                    <div className="space-y-2 pt-3 border-t border-border/50 text-xs font-mono text-muted-foreground">
+                      {[
+                        "Up to 50 active leads / month",
+                        "Autonomous AI email outreach & reply engine",
+                        "Smart Hot/Warm/Cold score qualification",
+                        "Instant SMS/Email builder notifications",
+                        "Standard email support"
+                      ].map((feat, idx) => (
+                        <div key={idx} className="flex items-center gap-2 text-[11px]">
+                          <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0" />
                           <span>{feat}</span>
                         </div>
                       ))}
                     </div>
                   </div>
+
+                  <div className="mt-6 pt-4 border-t border-border/50">
+                    {currentPlanKey === 'starter' || currentPlanKey === 'professional' ? (
+                      <div className="w-full py-2 rounded-xl bg-secondary/80 border border-border text-center text-xs font-mono font-semibold text-foreground flex items-center justify-center gap-1.5">
+                        <Check className="size-3.5 text-emerald-400" />
+                        <span>Current Active Plan</span>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleUpgradePlan('starter')}
+                        disabled={isUpgradingPlan !== null}
+                        className="w-full py-2.5 rounded-xl bg-secondary hover:bg-secondary/80 border border-border text-foreground text-xs font-mono font-semibold transition-all cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
+                      >
+                        {isUpgradingPlan === 'starter' ? (
+                          <>
+                            <Loader2 className="size-3.5 animate-spin" />
+                            <span>Connecting to Stripe...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Zap className="size-3.5 text-[#e5d9c5]" />
+                            <span>Switch to Starter ($149/mo)</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
                 </Card>
 
-                <div className="space-y-4 flex flex-col justify-between">
-                  <Card className="p-5 border border-border bg-card shadow-sm">
-                    <div className="text-[10.5px] uppercase tracking-wider text-muted-foreground font-mono font-semibold mb-1">
-                      Next Billing Cycle
+                {/* 2. Growth Tier */}
+                <Card className={`p-5 rounded-2xl flex flex-col justify-between transition-all duration-200 ${
+                  currentPlanKey === 'growth' || currentPlanKey === 'enterprise'
+                    ? 'border-2 border-[#e5d9c5]/80 bg-card shadow-md shadow-[#e5d9c5]/5'
+                    : 'border border-[#e5d9c5]/30 bg-card/80 hover:border-[#e5d9c5]/60'
+                }`}>
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <span className="text-[10.5px] uppercase tracking-wider text-[#e5d9c5] font-mono font-semibold">
+                        Most Popular
+                      </span>
+                      <span className="px-2.5 py-0.5 rounded-full text-[9.5px] font-mono font-bold bg-[#e5d9c5] text-black font-semibold shadow-sm">
+                        GROWTH TIER
+                      </span>
                     </div>
-                    <div className="text-lg font-bold text-foreground font-mono mt-1">
-                      Jun 1, 2026
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground mt-2">
-                      <span className="size-1.5 rounded-full bg-emerald-500" />
-                      <span>Auto-renew enabled</span>
-                    </div>
-                  </Card>
 
-                  {/* Super-Admin Managed Notice */}
-                  <div className="p-4 rounded-xl border border-border bg-secondary/30 text-xs text-muted-foreground space-y-1.5">
-                    <div className="flex items-center gap-1.5 text-foreground font-semibold">
-                      <ShieldCheck className="size-4 text-[#c9a84c] dark:text-[#e5d9c5]" />
-                      <span>Managed by Platform Super-Admin</span>
+                    <div className="text-xl font-bold text-foreground font-mono">
+                      Growth
                     </div>
-                    <p className="text-[11px] leading-relaxed">
-                      Plan tier changes, license limits, and seats are managed centrally by the Super-Admin. For upgrades, reach out to <strong className="text-foreground">support@buildersedge.com</strong>.
+
+                    <div className="flex items-baseline gap-1 my-2">
+                      <span className="font-nevera text-3xl sm:text-4xl font-normal text-gold-gradient">
+                        $349
+                      </span>
+                      <span className="text-xs font-mono text-muted-foreground">
+                        / month (up to 200 leads)
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-muted-foreground font-light mb-4 leading-relaxed">
+                      For high-volume residential custom builders. Advanced conversational nuance, multi-turn objection handling & site visit booking.
                     </p>
+
+                    <div className="space-y-2 pt-3 border-t border-border/50 text-xs font-mono text-muted-foreground">
+                      {[
+                        "Up to 200 active leads / month",
+                        "Live site walkthrough & calendar booking",
+                        "Deep architectural memory & floor plan context",
+                        "Multi-seat builder team collaboration",
+                        "Priority concierge onboarding & support"
+                      ].map((feat, idx) => (
+                        <div key={idx} className="flex items-center gap-2 text-[11px]">
+                          <CheckCircle2 className="size-3.5 text-[#e5d9c5] shrink-0" />
+                          <span>{feat}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
+
+                  <div className="mt-6 pt-4 border-t border-border/50">
+                    {currentPlanKey === 'growth' || currentPlanKey === 'enterprise' ? (
+                      <div className="w-full py-2 rounded-xl bg-secondary/80 border border-border text-center text-xs font-mono font-semibold text-foreground flex items-center justify-center gap-1.5">
+                        <Check className="size-3.5 text-emerald-400" />
+                        <span>Current Active Plan</span>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleUpgradePlan('growth')}
+                        disabled={isUpgradingPlan !== null}
+                        className="w-full py-2.5 rounded-xl bg-[#e5d9c5] hover:bg-white text-black text-xs font-mono font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md shadow-[#e5d9c5]/20 disabled:opacity-50"
+                      >
+                        {isUpgradingPlan === 'growth' ? (
+                          <>
+                            <Loader2 className="size-3.5 animate-spin text-black" />
+                            <span>Connecting to Stripe...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="size-3.5 text-black" />
+                            <span>Upgrade to Growth ($349/mo)</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                </Card>
+              </div>
+
+              {/* Infrastructure Readiness & Billing History */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <Card className="p-4 border border-border bg-card">
+                  <div className="text-[10px] uppercase tracking-widest font-mono text-muted-foreground">Billing Currency</div>
+                  <div className="text-xl font-nevera text-foreground mt-1">USD ($)</div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5">Global credit card & ACH settlement</div>
+                </Card>
+
+                <Card className="p-4 border border-border bg-card">
+                  <div className="text-[10px] uppercase tracking-widest font-mono text-muted-foreground">Payment Processor</div>
+                  <div className="text-xl font-nevera text-foreground mt-1 flex items-center gap-1.5">
+                    <span>Stripe</span>
+                    <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">READY</span>
+                  </div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5">Automated webhook sync enabled</div>
+                </Card>
+
+                <Card className="p-4 border border-border bg-card">
+                  <div className="text-[10px] uppercase tracking-widest font-mono text-muted-foreground">Auto-Renewal</div>
+                  <div className="text-xl font-nevera text-foreground mt-1">Active</div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5">Billed monthly on subscription date</div>
+                </Card>
               </div>
 
               {/* Invoice History */}

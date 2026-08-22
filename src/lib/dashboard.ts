@@ -3181,4 +3181,71 @@ export const createStripeCheckoutSession = createServerFn({ method: 'POST' })
     }
   });
 
+export const createStripeCustomerPortalSession = createServerFn({ method: 'POST' })
+  .inputValidator((data: { returnUrl?: string }) => data)
+  .handler(async ({ data }) => {
+    const { requireAuth, getTenantDb } = await import('./server-utils.server');
+    const session = await requireAuth();
+    const stripeKey = process.env.STRIPE_SECRET_KEY;
+
+    if (!stripeKey) {
+      return {
+        url: null,
+        simulated: true,
+        message: "Stripe key not configured. Set STRIPE_SECRET_KEY in Vercel environment variables to enable live customer portal."
+      };
+    }
+
+    try {
+      const db = await getTenantDb();
+      const builder = await db.builder.findUnique({
+        where: { id: session.builderId || '' }
+      });
+
+      if (!builder?.email) {
+        throw new Error("Builder email not found for Stripe customer lookup.");
+      }
+
+      // 1. Search for customer by email in Stripe
+      const searchRes = await fetch(`https://api.stripe.com/v1/customers?email=${encodeURIComponent(builder.email)}&limit=1`, {
+        headers: { 'Authorization': `Bearer ${stripeKey}` }
+      });
+      const searchData = await searchRes.json();
+      const customer = searchData.data?.[0];
+
+      if (!customer?.id) {
+        return {
+          url: null,
+          simulated: true,
+          message: "No active Stripe customer record found for this organization yet. Complete a checkout first."
+        };
+      }
+
+      // 2. Create Billing Portal Session
+      const params = new URLSearchParams();
+      params.append('customer', customer.id);
+      params.append('return_url', `${data.returnUrl || 'https://weaverframe.in'}/settings`);
+
+      const portalRes = await fetch('https://api.stripe.com/v1/billing_portal/sessions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${stripeKey}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: params.toString()
+      });
+
+      if (!portalRes.ok) {
+        const err = await portalRes.text();
+        throw new Error(`Stripe Portal API error: ${err}`);
+      }
+
+      const portalSession = await portalRes.json();
+      return { url: portalSession.url, simulated: false };
+    } catch (error: any) {
+      console.error("Error creating Stripe portal session:", error);
+      throw error;
+    }
+  });
+
 
