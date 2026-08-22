@@ -17,8 +17,8 @@ const handleBillingWebhook = createServerFn({ method: 'POST' })
         const amountTotal = sessionObj?.amount_total;
 
         if (builderId) {
-          // Determine tier based on amount
-          const plan = amountTotal >= 70000 ? 'enterprise' : 'professional';
+          // Determine tier based on amount (34900 cents = $349 growth, 14900 cents = $149 starter)
+          const plan = amountTotal >= 30000 ? 'growth' : 'starter';
           await db.builder.update({
             where: { id: builderId },
             data: {

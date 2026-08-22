@@ -1322,21 +1322,21 @@ function WelcomePage() {
           {/* Plan 1: Starter */}
           <div className="p-8 sm:p-10 rounded-2xl border border-white/[0.08] bg-[#0c0d12]/80 backdrop-blur-sm flex flex-col justify-between hover:border-white/30 transition-all hover:bg-[#0e0f15]">
             <div>
-              <span className="text-xs font-mono tracking-widest uppercase text-white/40 block mb-2 font-semibold">Boutique</span>
+              <span className="text-xs font-mono tracking-widest uppercase text-white/40 block mb-2 font-semibold">Entry Tier</span>
               <h3 className="font-nevera text-2xl text-white mb-2">Starter</h3>
-              <p className="text-xs text-white/50 mb-6">Designed for boutique custom home builders handling up to 25 leads/month.</p>
+              <p className="text-xs text-white/50 mb-6">Designed for boutique custom home builders handling up to 50 leads/month.</p>
               <div className="font-nevera text-4xl font-bold text-white mb-8">
-                $1,500 <span className="text-xs font-mono text-white/40 font-normal">/ month</span>
+                $149 <span className="text-xs font-mono text-white/40 font-normal">/ month</span>
               </div>
 
               <div className="space-y-3 pt-6 border-t border-white/[0.06] text-xs text-white/70">
                 <div className="flex items-center gap-2.5">
                   <CheckCircle2 className="size-4 text-[#e5d9c5]" />
-                  <span>Up to 25 active leads / month</span>
+                  <span className="font-medium text-white">Up to 50 active leads / month</span>
                 </div>
                 <div className="flex items-center gap-2.5">
                   <CheckCircle2 className="size-4 text-[#e5d9c5]" />
-                  <span>24/7 AI Email & Web Portal Concierge</span>
+                  <span>Autonomous 2-Way Email AI Concierge</span>
                 </div>
                 <div className="flex items-center gap-2.5">
                   <CheckCircle2 className="size-4 text-[#e5d9c5]" />
@@ -1345,6 +1345,10 @@ function WelcomePage() {
                 <div className="flex items-center gap-2.5">
                   <CheckCircle2 className="size-4 text-[#e5d9c5]" />
                   <span>Live Consultation Calendar Sync</span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <CheckCircle2 className="size-4 text-[#e5d9c5]" />
+                  <span>Instant High-Alert Notifications</span>
                 </div>
               </div>
             </div>
@@ -1357,7 +1361,7 @@ function WelcomePage() {
             </button>
           </div>
 
-          {/* Plan 2: Professional (Dominant Featured Hero Card) */}
+          {/* Plan 2: Growth (Dominant Featured Hero Card) */}
           <div className="p-8 sm:p-10 rounded-2xl border-2 border-[#e5d9c5] flex flex-col justify-between relative shadow-[0_25px_60px_rgba(201,168,76,0.18)] bg-[#121319] backdrop-blur-md group lg:-translate-y-4 lg:scale-[1.03] transition-all">
             {/* Ambient Gold Halo */}
             <div className="absolute -inset-1 bg-gradient-to-b from-[#e5d9c5]/30 via-[#c9a84c]/15 to-transparent rounded-3xl blur-xl opacity-90 pointer-events-none" />
@@ -1368,17 +1372,17 @@ function WelcomePage() {
             </div>
 
             <div className="relative z-10">
-              <span className="text-xs font-mono tracking-widest uppercase text-[#e5d9c5] block mb-2 font-semibold">Complete OS</span>
-              <h3 className="font-nevera text-3xl text-white mb-2">Professional</h3>
-              <p className="text-xs text-white/60 mb-6">Complete autonomous conversion OS for high-volume luxury custom builders.</p>
+              <span className="text-xs font-mono tracking-widest uppercase text-[#e5d9c5] block mb-2 font-semibold">Scaling Builders</span>
+              <h3 className="font-nevera text-3xl text-white mb-2">Growth</h3>
+              <p className="text-xs text-white/60 mb-6">Complete autonomous conversion OS for scaling custom home and spec builders.</p>
               <div className="font-nevera text-4xl font-bold text-[#e5d9c5] mb-8">
-                $3,000 <span className="text-xs font-mono text-white/50 font-normal">/ month</span>
+                $349 <span className="text-xs font-mono text-white/50 font-normal">/ month</span>
               </div>
 
               <div className="space-y-3.5 pt-6 border-t border-white/[0.08] text-xs text-white/80">
                 <div className="flex items-center gap-2.5">
                   <CheckCircle2 className="size-4 text-[#e5d9c5]" />
-                  <span className="font-medium text-white">Unlimited Inbound Leads</span>
+                  <span className="font-medium text-white">Up to 200 active leads / month</span>
                 </div>
                 <div className="flex items-center gap-2.5">
                   <CheckCircle2 className="size-4 text-[#e5d9c5]" />
@@ -1386,15 +1390,15 @@ function WelcomePage() {
                 </div>
                 <div className="flex items-center gap-2.5">
                   <CheckCircle2 className="size-4 text-[#e5d9c5]" />
-                  <span>Custom Floor Plan & Finish AI Knowledge Base</span>
+                  <span>Custom Floor Plan & Finish Knowledge Base</span>
                 </div>
                 <div className="flex items-center gap-2.5">
                   <CheckCircle2 className="size-4 text-[#e5d9c5]" />
-                  <span>HubSpot & GoHighLevel Two-Way Sync</span>
+                  <span>Multi-Turn AI Memory & Qualification</span>
                 </div>
                 <div className="flex items-center gap-2.5">
                   <CheckCircle2 className="size-4 text-[#e5d9c5]" />
-                  <span>Executive ROI Command Dashboard</span>
+                  <span>Team Collaboration & Unlimited Seats</span>
                 </div>
               </div>
             </div>
@@ -1403,21 +1407,25 @@ function WelcomePage() {
               onClick={() => setIsDemoModalOpen(true)}
               className="w-full mt-8 py-4 bg-[#e5d9c5] text-black hover:bg-white transition-all text-xs font-bold uppercase tracking-widest shadow-xl shadow-[#e5d9c5]/25 cursor-pointer relative z-10"
             >
-              Start 14-Day Pilot
+              Start 14-Day Trial
             </button>
           </div>
 
           {/* Plan 3: Enterprise */}
           <div className="p-8 sm:p-10 rounded-2xl border border-white/[0.08] bg-[#0c0d12]/80 backdrop-blur-sm flex flex-col justify-between hover:border-white/30 transition-all hover:bg-[#0e0f15]">
             <div>
-              <span className="text-xs font-mono tracking-widest uppercase text-white/40 block mb-2 font-semibold">Multi-Location</span>
+              <span className="text-xs font-mono tracking-widest uppercase text-white/40 block mb-2 font-semibold">High Volume</span>
               <h3 className="font-nevera text-2xl text-white mb-2">Enterprise</h3>
               <p className="text-xs text-white/50 mb-6">For multi-market architectural firms and luxury development groups.</p>
               <div className="font-nevera text-4xl font-bold text-white mb-8">
-                $5,000 <span className="text-xs font-mono text-white/40 font-normal">/ month</span>
+                Custom <span className="text-xs font-mono text-white/40 font-normal">/ 200+ leads</span>
               </div>
 
               <div className="space-y-3 pt-6 border-t border-white/[0.06] text-xs text-white/70">
+                <div className="flex items-center gap-2.5">
+                  <CheckCircle2 className="size-4 text-[#e5d9c5]" />
+                  <span>200+ Monthly Inbound Leads</span>
+                </div>
                 <div className="flex items-center gap-2.5">
                   <CheckCircle2 className="size-4 text-[#e5d9c5]" />
                   <span>Multiple Builder Brands & Locations</span>
@@ -1428,11 +1436,7 @@ function WelcomePage() {
                 </div>
                 <div className="flex items-center gap-2.5">
                   <CheckCircle2 className="size-4 text-[#e5d9c5]" />
-                  <span>Dedicated AI Model Fine-Tuning</span>
-                </div>
-                <div className="flex items-center gap-2.5">
-                  <CheckCircle2 className="size-4 text-[#e5d9c5]" />
-                  <span>White-Glove Onboarding & Account Lead</span>
+                  <span>White-Glove Setup & Dedicated Account Engineer</span>
                 </div>
               </div>
             </div>

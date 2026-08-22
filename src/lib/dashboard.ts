@@ -3089,8 +3089,11 @@ export const createStripeCheckoutSession = createServerFn({ method: 'POST' })
 
     const planPrices: Record<string, { name: string; amountCents: number }> = {
       trial: { name: "Evaluation Trial", amountCents: 0 },
-      professional: { name: "Professional Tier", amountCents: 39900 },
-      enterprise: { name: "Enterprise Scale", amountCents: 79900 },
+      starter: { name: "Starter Tier (Up to 50 leads/mo)", amountCents: 14900 },
+      growth: { name: "Growth Tier (Up to 200 leads/mo)", amountCents: 34900 },
+      // Aliases
+      professional: { name: "Starter Tier (Up to 50 leads/mo)", amountCents: 14900 },
+      enterprise: { name: "Growth Tier (Up to 200 leads/mo)", amountCents: 34900 },
     };
 
     const selectedPlan = planPrices[data.planId];

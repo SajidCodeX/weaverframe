@@ -53,22 +53,22 @@ const planTiers = [
     features: ["Standard Lead Ingestion", "Automated AI Email Outreach"]
   },
   {
-    id: "professional",
-    name: "Professional",
-    price: "$399",
+    id: "starter",
+    name: "Starter",
+    price: "$149",
     period: "/ month",
-    badge: "POPULAR",
-    description: "Full AI Concierge, autonomous lead memory & live calendar scheduling.",
-    features: ["1,500 AI Msgs/Day", "Live Calendar Booking"]
+    badge: "STARTER",
+    description: "Up to 50 leads/month. Autonomous email follow-ups & AI qualification.",
+    features: ["Up to 50 Leads / Month", "Smart Lead Memory & Scoring", "High-Alert Notifications"]
   },
   {
-    id: "enterprise",
-    name: "Enterprise Scale",
-    price: "$799",
+    id: "growth",
+    name: "Growth",
+    price: "$349",
     period: "/ month",
-    badge: "UNLIMITED",
-    description: "Unlimited team seats, multi-county permit sync & priority AI pipeline.",
-    features: ["Unlimited Team Seats", "County Permit Data Ingestion"]
+    badge: "RECOMMENDED",
+    description: "Up to 200 leads/month. Full AI sales concierge & live walkthrough booking.",
+    features: ["Up to 200 Leads / Month", "Live Calendar Booking", "Multi-Turn AI Sales Brain"]
   }
 ];
 
@@ -144,8 +144,8 @@ function AdminBillingRoute() {
   const liveTotalMRR = useMemo(() => {
     return builders.reduce((acc, b) => {
       const plan = (b.plan || 'trial').toLowerCase();
-      if (plan === 'enterprise') return acc + 799;
-      if (plan === 'professional') return acc + 399;
+      if (plan === 'growth' || plan === 'enterprise') return acc + 349;
+      if (plan === 'starter' || plan === 'professional') return acc + 149;
       return acc;
     }, 0);
   }, [builders]);
@@ -238,7 +238,7 @@ function AdminBillingRoute() {
       <div className="space-y-3">
         {filteredBuilders.map(builder => {
           const expanded = isGroupExpanded(builder.id);
-          const planValue = builder.plan === 'enterprise' ? 799 : builder.plan === 'trial' ? 0 : 399;
+          const planValue = (builder.plan === 'growth' || builder.plan === 'enterprise') ? 349 : builder.plan === 'trial' ? 0 : 149;
           const annualValue = planValue * 12;
           const initials = builder.companyName
             .split(' ')

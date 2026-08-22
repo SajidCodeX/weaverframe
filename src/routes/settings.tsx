@@ -92,21 +92,38 @@ const clientPlanDetails: Record<string, { name: string; price: string; period: s
     description: "Sandbox evaluation with standard lead capture & simulation.",
     features: ["Standard Lead Ingestion", "Automated AI Email Outreach"]
   },
-  professional: {
-    name: "Professional Tier",
-    price: "$399",
+  starter: {
+    name: "Starter Tier",
+    price: "$149",
     period: "/ month",
-    badge: "ACTIVE TIER",
-    description: "Full AI Concierge, autonomous lead memory & live calendar scheduling.",
-    features: ["1,500 AI Msgs/Day", "Live Calendar Booking", "Full Lead Memory Graph"]
+    badge: "STARTER",
+    description: "Up to 50 leads/month. Autonomous email follow-ups & AI qualification.",
+    features: ["Up to 50 Leads / Month", "Autonomous AI Email Outreach", "Smart Qualification & Lead Memory", "Instant High-Alert Notifications"]
+  },
+  growth: {
+    name: "Growth Tier",
+    price: "$349",
+    period: "/ month",
+    badge: "GROWTH",
+    description: "Up to 200 leads/month. Advanced AI sales concierge & live walkthrough booking.",
+    features: ["Up to 200 Leads / Month", "Live Calendar & Walkthrough Booking", "Full Multi-Turn AI Conversation", "Team Collaboration & Priority Support"]
+  },
+  // Aliases for backwards compatibility
+  professional: {
+    name: "Starter Tier",
+    price: "$149",
+    period: "/ month",
+    badge: "STARTER",
+    description: "Up to 50 leads/month. Autonomous email follow-ups & AI qualification.",
+    features: ["Up to 50 Leads / Month", "Autonomous AI Email Outreach", "Smart Qualification & Lead Memory"]
   },
   enterprise: {
-    name: "Enterprise Scale",
-    price: "$799",
+    name: "Growth Tier",
+    price: "$349",
     period: "/ month",
-    badge: "ENTERPRISE",
-    description: "Unlimited team seats, multi-county permit sync & priority AI pipeline.",
-    features: ["Unlimited Team Seats", "County Permit Data Ingestion", "Priority AI Dispatch Pipeline"]
+    badge: "GROWTH",
+    description: "Up to 200 leads/month. Advanced AI sales concierge & live walkthrough booking.",
+    features: ["Up to 200 Leads / Month", "Live Calendar & Walkthrough Booking", "Full Multi-Turn AI Conversation"]
   }
 };
 
