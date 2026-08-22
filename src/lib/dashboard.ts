@@ -868,14 +868,14 @@ export async function callAiEngine(
 ): Promise<string> {
   const geminiKey = process.env.GEMINI_API_KEY;
   const groqKey = process.env.GROQ_API_KEY;
-  const geminiModel = process.env.GEMINI_MODEL || "gemini-1.5-flash";
-  const groqModel = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+  const geminiModel = process.env.GEMINI_MODEL || "gemini-3.5-flash";
+  const groqModel = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
   const maxTokens = options?.maxTokens || 800;
   const temperature = options?.temperature ?? 0.1;
 
   // 1. Prioritize Google Gemini Flash if GEMINI_API_KEY is configured
   if (geminiKey && geminiKey.trim() !== "") {
-    const modelsToTry = [geminiModel, "gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"].filter((v, i, a) => a.indexOf(v) === i);
+    const modelsToTry = [geminiModel, "gemini-3.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"].filter((v, i, a) => a.indexOf(v) === i);
     for (const m of modelsToTry) {
       try {
         const res = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
