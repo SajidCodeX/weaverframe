@@ -21,9 +21,21 @@ export const getDashboardData = createServerFn({ method: 'POST' })
   const startOfLast30Days = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
   const startOfPrevious30Days = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000)
 
-    const [recentActivitiesRaw, appointmentsActivities] = await Promise.all([
-      db.activity.findMany({ take: 50, orderBy: { createdAt: 'desc' }, include: { lead: true } }),
+    const [recentActivitiesRaw, appointmentsActivities, allLeadsRaw] = await Promise.all([
+      db.activity.findMany({ take: 60, orderBy: { createdAt: 'desc' }, include: { lead: true } }),
       db.activity.findMany({ where: { action: { contains: 'scheduled' }, createdAt: { gte: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) } }, include: { lead: true } }),
+      db.lead.findMany({
+        select: {
+          id: true,
+          name: true,
+          county: true,
+          status: true,
+          scoreTier: true,
+          estimatedBudget: true,
+          createdAt: true
+        },
+        orderBy: { createdAt: 'desc' }
+      })
     ])
 
     // 2. Perform native SQL aggregations via Prisma
@@ -199,6 +211,24 @@ export const getDashboardData = createServerFn({ method: 'POST' })
       funnel,
       scoreData,
       activityFeed,
+      allLeads: allLeadsRaw.map((l: any) => ({
+        id: l.id,
+        name: l.name,
+        county: l.county,
+        status: l.status,
+        scoreTier: l.scoreTier,
+        estimatedBudget: l.estimatedBudget || 0,
+        createdAt: l.createdAt.toISOString()
+      })),
+      rawActivities: recentActivitiesRaw.map((a: any) => ({
+        id: a.id,
+        leadId: a.leadId,
+        name: a.lead?.name || 'Lead',
+        action: a.action,
+        createdAt: a.createdAt.toISOString(),
+        score: (a.lead?.scoreTier === 'Hot' ? 'hot' : a.lead?.scoreTier === 'Warm' ? 'warm' : 'cold') as 'hot' | 'warm' | 'cold',
+        city: a.lead?.county || ''
+      })),
       leadsThisMonth: leadsLast30, // keeping variable names compatible with frontend
       leadsMonthSub,
       leadsMonthTrend,

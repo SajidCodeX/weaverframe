@@ -201,7 +201,19 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
 
   // Sync default range with active section on title changes
   useEffect(() => {
-    const initialLabel = title === "Reports" ? "This Month" : "Today";
+    if (typeof window !== "undefined") {
+      const saved = sessionStorage.getItem("globalDateRange");
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed.label) {
+            setSelectedRange(parsed.label);
+            return;
+          }
+        } catch (_) {}
+      }
+    }
+    const initialLabel = title === "Reports" ? "This Month" : title === "Overview" ? "All Time" : "Today";
     changeDateRange(initialLabel);
   }, [title]);
 
@@ -387,8 +399,8 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
             })}
           </div>
 
-          {/* Date range - Visible on Leads & Reports pages */}
-          {(title === "Leads" || title === "Reports") && (
+          {/* Date range - Visible on Overview, Leads & Reports pages */}
+          {(title === "Overview" || title === "Leads" || title === "Reports") && (
             <div className="relative" ref={dateRef}>
               <button
                 id="topbar-daterange"
