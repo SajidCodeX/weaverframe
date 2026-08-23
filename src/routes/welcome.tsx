@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import React, { useRef, useState, useEffect, useMemo, Suspense } from "react";
-import {  motion, useScroll, useTransform, useSpring, useMotionValue, AnimatePresence, useInView , m, LazyMotion, domAnimation } from "framer-motion";
+import { AnimatePresence, useInView, m, LazyMotion, domAnimation } from "framer-motion";
 import Lenis from "lenis";
 import useEmblaCarousel from "embla-carousel-react";
 import {
@@ -74,13 +74,13 @@ const KineticText = ({ text, className = "" }: { text: string; delay?: number; c
   );
 };
 
-// ── SCROLL-TRIGGERED NUMBER COUNTER ───────────────────────────────────────────
+// ── SCROLL-TRIGGERED NUMBER COUNTER (ZERO RE-RENDER DOM UPDATE) ─────────────
 function AnimatedCounter({
   target,
   prefix = "",
   suffix = "",
   decimals = 0,
-  duration = 1.6,
+  duration = 1.4,
 }: {
   target: number;
   prefix?: string;
@@ -88,33 +88,35 @@ function AnimatedCounter({
   decimals?: number;
   duration?: number;
 }) {
-  const [val, setVal] = useState(0);
   const ref = useRef<HTMLSpanElement>(null);
   const inView = useInView(ref, { once: true, margin: "-30px" });
 
   useEffect(() => {
     if (!inView) return;
     let startTimestamp: number | null = null;
+    let reqId: number | null = null;
     const step = (timestamp: number) => {
       if (!startTimestamp) startTimestamp = timestamp;
       const progress = Math.min((timestamp - startTimestamp) / (duration * 1000), 1);
-      // Exponential ease-out for ultra smooth luxury deceleration
       const ease = progress === 1 ? 1 : 1 - Math.pow(2, -10 * progress);
-      setVal(ease * target);
+      const val = ease * target;
+      const formatted = decimals > 0 ? val.toFixed(decimals) : Math.round(val).toLocaleString();
+      if (ref.current) {
+        ref.current.textContent = `${prefix}${formatted}${suffix}`;
+      }
       if (progress < 1) {
-        requestAnimationFrame(step);
-      } else {
-        setVal(target);
+        reqId = requestAnimationFrame(step);
       }
     };
-    requestAnimationFrame(step);
-  }, [inView, target, duration]);
+    reqId = requestAnimationFrame(step);
+    return () => {
+      if (reqId) cancelAnimationFrame(reqId);
+    };
+  }, [inView, target, duration, prefix, suffix, decimals]);
 
   return (
     <span ref={ref} className="tabular-nums">
-      {prefix}
-      {decimals > 0 ? val.toFixed(decimals) : Math.round(val).toLocaleString()}
-      {suffix}
+      {prefix}0{suffix}
     </span>
   );
 }
@@ -151,6 +153,9 @@ export const Route = createFileRoute("/welcome")({
       { title: "WeaverFrame | Quiet Luxury AI Lead Conversion OS" },
       { name: "description", content: "The definitive 24/7 AI Lead Concierge and Pipeline OS engineered exclusively for elite custom home builders." },
     ],
+    links: [
+      { rel: "preload", as: "image", href: "/images/exploded-villa.webp", type: "image/webp", fetchpriority: "high" },
+    ],
   }),
   component: WelcomePage,
 });
@@ -165,22 +170,26 @@ function WelcomePage() {
 
   const lenisRef = useRef<Lenis | null>(null);
 
-  // Lenis Smooth Scroll Engine (120 FPS High Performance) - Deferred to prioritize instant interactivity
+  // Lenis Smooth Scroll Engine (Desktop Only) - Completely bypassed on Mobile for 100% Native 120Hz Compositor Touch Scroll
   useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    // Mobile / Touch devices: DO NOT run Lenis. Use 100% native hardware compositor momentum scroll.
+    const isTouchDevice = window.matchMedia("(pointer: coarse)").matches || "ontouchstart" in window;
+    if (isTouchDevice) return;
+
     let lenis: Lenis | null = null;
     let reqId: number | null = null;
     let idleHandle: any = null;
 
     const initLenis = () => {
       lenis = new Lenis({
-        duration: 0.4,
-        easing: (t) => 1 - Math.pow(1 - t, 4), // Material-like easeOutQuart
+        duration: 0.4, // Reverted to smooth 0.4s per user preference
+        easing: (t) => 1 - Math.pow(1 - t, 4), // Smooth cubic/quart deceleration
         orientation: "vertical",
         gestureOrientation: "vertical",
         smoothWheel: true,
         wheelMultiplier: 1.0,
-        touchMultiplier: 1.5,
-        smoothTouch: false, // Native mobile scroll
       });
       lenisRef.current = lenis;
 
@@ -191,12 +200,10 @@ function WelcomePage() {
       reqId = requestAnimationFrame(raf);
     };
 
-    if (typeof window !== "undefined") {
-      if ("requestIdleCallback" in window) {
-        idleHandle = (window as any).requestIdleCallback(initLenis, { timeout: 350 });
-      } else {
-        idleHandle = setTimeout(initLenis, 100);
-      }
+    if ("requestIdleCallback" in window) {
+      idleHandle = (window as any).requestIdleCallback(initLenis, { timeout: 350 });
+    } else {
+      idleHandle = setTimeout(initLenis, 100);
     }
 
     return () => {
@@ -233,10 +240,6 @@ function WelcomePage() {
 
   // Mouse coordinate tracker for Hero WebGL Particle Parallax
   const heroMouseRef = useRef({ x: 0, y: 0 });
-
-  // Scroll Progress & Direct Hardware-Accelerated Parallax
-  const { scrollY, scrollYProgress } = useScroll();
-  const heroParallaxY = useTransform(scrollY, [0, 700], [0, -30]);
 
   // Embla Carousel Hook for Case Studies
   const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true, align: "start", dragFree: true });
@@ -294,7 +297,7 @@ function WelcomePage() {
       land: "Ready Plot",
       timeline: "Q1 Next Year",
       buyer: "Tariq Al-Mansoor",
-      inboundChannel: "WhatsApp Business Direct",
+      inboundChannel: "VIP Direct Inbound Email",
       responseTime: "28 seconds",
       qualificationScore: 100,
       status: "VIP Showroom Visit Set",
@@ -309,42 +312,42 @@ function WelcomePage() {
 
   const currentScenario = scenarios[activeScenario];
 
-  // Verified Market Case Studies Data
+  // Industry Architecture & Solution Blueprints
   const caseStudies = [
     {
-      id: "austin",
-      location: "Austin, TX 🇺🇸",
-      title: "Lake Travis Waterfront Estate",
-      budget: "$2.2M per Build",
-      outcome: "+$4.1M pipeline in 90 days",
-      stat: "32s",
-      statLabel: "Avg Lead Response",
-      quote: "WeaverFrame booked 11 pre-screened site visits while our team was off-site. Our closing velocity doubled within one quarter.",
-      author: "Marcus Reed — Principal, Reed Architecture Group",
+      id: "waterfront",
+      location: "Waterfront & Coastal Estates",
+      title: "Lakefront & Cantilever Engineering",
+      budget: "$2M – $10M+ Builds",
+      outcome: "Autonomous Qualification",
+      stat: "< 45s",
+      statLabel: "Inquiry Response SLA",
+      quote: "Screens high-ticket inquiries on riparian rights, lot title readiness, and construction liquidity before routing VIP clients to your principal architect.",
+      author: "Workflow: Inquiry ➔ Land Readiness ➔ Architect Consult",
       accent: "from-amber-950/30",
     },
     {
-      id: "aspen",
-      location: "Aspen, CO 🇺🇸",
-      title: "Red Mountain Alpine Chalets",
-      budget: "$4.5M per Build",
-      outcome: "100% weekend inquiry capture",
+      id: "alpine",
+      location: "Mountain & Alpine Chalets",
+      title: "Heavy Timber & Foundation Specs",
+      budget: "$3.5M – $12M+ Builds",
+      outcome: "24/7 Weekend Lot Capture",
       stat: "100%",
-      statLabel: "Coverage Rate",
-      quote: "High-net-worth buyers browse lots late on Sundays. The AI engages immediately with technical precision on timber loads and foundations.",
-      author: "Sophia Hartwell — Founder, Hartwell Luxury Builds",
+      statLabel: "Inbound Coverage",
+      quote: "Answers technical structural queries on glulam timbers, snow load ratings, and off-grid utilities instantly when high-net-worth buyers browse lots on weekends.",
+      author: "Workflow: Inbound ➔ Timber Spec Review ➔ Lead Qualified",
       accent: "from-sky-950/25",
     },
     {
-      id: "dubai",
-      location: "Dubai, UAE 🇦🇪",
-      title: "Palm Jumeirah Signature Villas",
-      budget: "$6.8M per Villa",
-      outcome: "$17.6M pipeline qualified in 4 months",
-      stat: "$17.6M",
-      statLabel: "Pipeline Qualified",
-      quote: "The multi-lingual tone and instant WhatsApp concierge matches the highest tier of ultra-luxury hospitality.",
-      author: "Tariq Al-Mansoor — Managing Director, Gulf Prestige",
+      id: "mansions",
+      location: "Urban Luxury Spec Mansions",
+      title: "Bespoke Contemporary Residences",
+      budget: "$1.5M – $8M+ Builds",
+      outcome: "Zero Human Lag",
+      stat: "100%",
+      statLabel: "Autonomous AI Email Concierge",
+      quote: "Dispatches digital floor-plan lookbooks and pre-qualifies project timelines within minutes of inquiry, locking in showroom and site meetings.",
+      author: "Workflow: Lead Captured ➔ Lookbook Sent ➔ Meeting Booked",
       accent: "from-amber-950/20",
     },
   ];
@@ -433,12 +436,6 @@ function WelcomePage() {
     <div className="min-h-screen overflow-x-hidden relative bg-[#060608] text-[#f8f8f8] font-sans selection:bg-[#e5d9c5] selection:text-black">
       <CustomCursor />
 
-      {/* ── CINEMATIC READING PROGRESS BAR ── */}
-      <m.div
-        className="fixed top-0 left-0 right-0 h-[2.5px] bg-gradient-to-r from-[#c9a84c] via-[#fce6b8] to-[#c9a84c] z-[100] origin-left pointer-events-none shadow-[0_0_12px_rgba(201,168,76,0.6)]"
-        style={{ scaleX: scrollYProgress }}
-      />
-
       {/* Ambient Lighting Orbs */}
       <div className="absolute top-0 left-1/3 w-[600px] h-[600px] bg-radial from-[#c9a84c]/[0.08] to-transparent rounded-full blur-3xl pointer-events-none z-0" />
       <div className="absolute bottom-0 right-1/4 w-[700px] h-[700px] bg-radial from-[#e5d9c5]/[0.05] to-transparent rounded-full blur-3xl pointer-events-none z-0" />
@@ -448,15 +445,15 @@ function WelcomePage() {
         <header className="w-full max-w-[1260px] bg-[#060608]/80 backdrop-blur-md border border-white/[0.12] hover:border-[#e5d9c5]/35 rounded-full px-5 sm:px-7 py-2.5 flex items-center justify-between pointer-events-auto shadow-[0_20px_50px_rgba(0,0,0,0.9),0_0_25px_rgba(201,168,76,0.06)] transition-all duration-300">
           {/* Brand Logo */}
           <Link to="/welcome" className="flex items-center gap-3 group shrink-0">
-            <div className="size-8 rounded-full border border-white/20 bg-white/[0.06] flex items-center justify-center font-nevera text-sm font-bold text-[#e5d9c5] group-hover:border-[#e5d9c5] group-hover:scale-105 transition-all">
-              W
+            <div className="size-9 rounded-xl border border-white/20 bg-black/60 flex items-center justify-center p-1.5 shadow-lg shadow-[#e5d9c5]/10 group-hover:border-[#e5d9c5] group-hover:scale-105 transition-all">
+              <img src="/weaverframe-mark-transparent.png" alt="WeaverFrame" className="size-full object-contain" />
             </div>
             <div>
               <span className="font-nevera text-base sm:text-lg tracking-[0.18em] uppercase text-white font-semibold block leading-none">
                 WeaverFrame
               </span>
               <span className="text-[8px] font-mono tracking-widest text-[#e5d9c5]/70 uppercase block mt-0.5">
-                AI Operating System
+                AI Sales Concierge
               </span>
             </div>
           </Link>
@@ -466,7 +463,7 @@ function WelcomePage() {
             <a href="#radar" onClick={(e) => scrollToSection(e, "#radar")} className="hover:text-[#e5d9c5] transition-colors whitespace-nowrap">Live Radar</a>
             <a href="#pillars" onClick={(e) => scrollToSection(e, "#pillars")} className="hover:text-[#e5d9c5] transition-colors whitespace-nowrap">Platform</a>
             <a href="#calculator" onClick={(e) => scrollToSection(e, "#calculator")} className="hover:text-[#e5d9c5] transition-colors whitespace-nowrap">ROI Modeler</a>
-            <a href="#cases" onClick={(e) => scrollToSection(e, "#cases")} className="hover:text-[#e5d9c5] transition-colors whitespace-nowrap">Case Studies</a>
+            <a href="#solutions" onClick={(e) => scrollToSection(e, "#solutions")} className="hover:text-[#e5d9c5] transition-colors whitespace-nowrap">Solutions</a>
             <a href="#pricing" onClick={(e) => scrollToSection(e, "#pricing")} className="hover:text-[#e5d9c5] transition-colors whitespace-nowrap">Pricing</a>
           </nav>
 
@@ -541,14 +538,14 @@ function WelcomePage() {
                 ROI Modeler
               </a>
               <a
-                href="#cases"
+                href="#solutions"
                 onClick={(e) => {
                   setIsMobileMenuOpen(false);
-                  scrollToSection(e, "#cases");
+                  scrollToSection(e, "#solutions");
                 }}
                 className="py-2 border-b border-white/5 hover:text-[#e5d9c5]"
               >
-                Case Studies
+                Solutions
               </a>
               <a
                 href="#pricing"
@@ -602,8 +599,8 @@ function WelcomePage() {
 
         <div className="w-full max-w-[1680px] mx-auto px-6 md:px-12 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center z-10">
           
-          {/* LEFT COLUMN: Editorial Typography with Scroll Parallax */}
-          <m.div style={{ y: heroParallaxY }} className="lg:col-span-5 space-y-7 pt-2 z-20">
+          {/* LEFT COLUMN: Editorial Typography */}
+          <m.div className="lg:col-span-5 space-y-7 pt-2 z-20">
             
             {/* Status Pill */}
             <m.div
@@ -634,7 +631,7 @@ function WelcomePage() {
               transition={{ duration: 0.4, delay: 0.15, ease: [0.4, 0, 0.2, 1] }}
               className="text-sm sm:text-base font-light text-white/75 leading-relaxed max-w-lg"
             >
-              WeaverFrame engages high-ticket luxury home buyers in <strong className="text-white font-medium">&lt; 45 seconds</strong> across WhatsApp, SMS, and Email. It screens seven-figure budgets, verifies land ownership, and schedules qualified site consultations directly to your team.
+              WeaverFrame engages high-ticket luxury home buyers in <strong className="text-white font-medium">&lt; 45 seconds</strong> via autonomous 2-way Email conversations. It screens seven-figure budgets, qualifies lot readiness, and schedules qualified site consultations directly to your team.
             </m.p>
 
             {/* Magnetic Action Buttons */}
@@ -674,13 +671,13 @@ function WelcomePage() {
                 <div className="font-nevera text-2xl sm:text-3xl text-[#e5d9c5] font-bold group-hover:scale-105 transition-transform origin-left">
                   <AnimatedCounter target={100} suffix="%" duration={1.5} />
                 </div>
-                <div className="text-[9px] uppercase font-mono tracking-widest text-white/50 mt-1">Coverage</div>
+                <div className="text-[9px] uppercase font-mono tracking-widest text-white/50 mt-1">24/7 Coverage</div>
               </div>
               <div className="group cursor-default">
                 <div className="font-nevera text-2xl sm:text-3xl text-white font-bold group-hover:text-[#e5d9c5] transition-colors">
-                  <AnimatedCounter target={180} prefix="$" suffix="M+" duration={1.8} />
+                  2-Way
                 </div>
-                <div className="text-[9px] uppercase font-mono tracking-widest text-white/50 mt-1">Pipeline Qualified</div>
+                <div className="text-[9px] uppercase font-mono tracking-widest text-white/50 mt-1">Email AI Concierge</div>
               </div>
             </div>
           </m.div>
@@ -704,6 +701,8 @@ function WelcomePage() {
                 <img
                   src="/images/exploded-villa.png"
                   alt="WeaverFrame Exploded Luxury Architecture"
+                  width="1200"
+                  height="800"
                   fetchPriority="high"
                   decoding="async"
                   className="w-full h-auto object-contain select-none pointer-events-none transition-transform duration-700 group-hover:scale-[1.03]"
@@ -885,15 +884,15 @@ function WelcomePage() {
             {
               num: "02",
               icon: MessageSquare,
-              title: "Omnichannel Live Inbox",
-              desc: "Unified WhatsApp, SMS, Email, and Web Portal conduit. One-click human takeover whenever you want to step into the dialogue.",
-              badge: "Multi-Channel"
+              title: "Autonomous 2-Way Email AI",
+              desc: "Context-aware email thread engine with custom domain SPF/DKIM alignment. Retains memory across multi-turn exchanges with one-click human takeover.",
+              badge: "Email Intelligence"
             },
             {
               num: "03",
               icon: Users,
               title: "Autonomous Lead Scoring",
-              desc: "Screens budget, verified land title status, construction timeline, and pre-approval financing to instantly separate tire-kickers from buyers.",
+              desc: "Screens budget, lot readiness status, construction timeline, and project scope to instantly separate tire-kickers from serious buyers.",
               badge: "Lead Screening"
             },
             {
@@ -1211,21 +1210,21 @@ function WelcomePage() {
         </div>
       </section>
 
-      {/* ── CASE STUDIES & LIVE MARKET OUTCOMES (EMBLA CAROUSEL) ── */}
-      <section id="cases" className="py-32 px-6 md:px-12 max-w-7xl mx-auto border-b border-white/[0.08] overflow-hidden relative">
+      {/* ── SECTOR BLUEPRINTS & ARCHITECTURAL SOLUTIONS (EMBLA CAROUSEL) ── */}
+      <section id="solutions" className="py-32 px-6 md:px-12 max-w-7xl mx-auto border-b border-white/[0.08] overflow-hidden relative">
         {/* Ambient Glow */}
         <div className="absolute top-1/2 -left-48 w-96 h-96 bg-radial from-[#c9a84c]/[0.05] to-transparent rounded-full blur-3xl pointer-events-none" />
 
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-16">
           <div className="max-w-3xl">
             <span className="text-[11px] uppercase font-mono tracking-[0.3em] font-bold text-[#e5d9c5] block mb-4">
-              05 / Live Market Outcomes
+              05 / Sector Blueprints
             </span>
             <h2 className="font-nevera text-3xl sm:text-5xl lg:text-6xl text-white leading-tight font-normal">
-              <KineticText text="Real custom builders. Seven-figure outcomes." />
+              <KineticText text="Engineered for seven-figure construction deals." />
             </h2>
             <p className="text-white/60 font-light text-base mt-4">
-              Explore how bespoke architecture firms and luxury builders protect and accelerate their high-ticket contract pipelines.
+              See how WeaverFrame automates high-ticket qualification across specialized custom home sectors.
             </p>
           </div>
 
@@ -1233,14 +1232,14 @@ function WelcomePage() {
           <div className="flex items-center gap-3 shrink-0">
             <button
               onClick={() => emblaApi?.scrollPrev()}
-              aria-label="Previous case study"
+              aria-label="Previous blueprint"
               className="size-12 rounded-full border border-white/20 bg-white/[0.03] flex items-center justify-center text-white/70 hover:border-[#e5d9c5] hover:text-[#e5d9c5] hover:bg-white/[0.08] transition-all cursor-pointer"
             >
               <ChevronLeft className="size-5" />
             </button>
             <button
               onClick={() => emblaApi?.scrollNext()}
-              aria-label="Next case study"
+              aria-label="Next blueprint"
               className="size-12 rounded-full border border-white/20 bg-white/[0.03] flex items-center justify-center text-white/70 hover:border-[#e5d9c5] hover:text-[#e5d9c5] hover:bg-white/[0.08] transition-all cursor-pointer"
             >
               <ChevronRight className="size-5" />
@@ -1271,15 +1270,14 @@ function WelcomePage() {
                   </h3>
 
                   <div className="relative mb-6">
-                    <Quote className="size-6 text-[#e5d9c5]/20 absolute -top-3 -left-2 rotate-180 pointer-events-none" />
-                    <p className="text-sm font-light text-white/70 italic leading-relaxed pl-4">
-                      "{cs.quote}"
+                    <p className="text-sm font-light text-white/75 leading-relaxed">
+                      {cs.quote}
                     </p>
                   </div>
 
-                  <p className="text-[11px] font-mono text-white/40 pl-4 border-l border-[#e5d9c5]/30">
+                  <div className="text-[10px] font-mono text-[#e5d9c5]/80 py-1.5 px-3 bg-white/[0.03] border border-white/[0.08] rounded-md inline-block">
                     {cs.author}
-                  </p>
+                  </div>
                 </div>
 
                 <div className="mt-8 pt-6 border-t border-white/[0.08] flex items-end justify-between">
@@ -1324,21 +1322,21 @@ function WelcomePage() {
           {/* Plan 1: Starter */}
           <div className="p-8 sm:p-10 rounded-2xl border border-white/[0.08] bg-[#0c0d12]/80 backdrop-blur-sm flex flex-col justify-between hover:border-white/30 transition-all hover:bg-[#0e0f15]">
             <div>
-              <span className="text-xs font-mono tracking-widest uppercase text-white/40 block mb-2 font-semibold">Boutique</span>
+              <span className="text-xs font-mono tracking-widest uppercase text-white/40 block mb-2 font-semibold">Entry Tier</span>
               <h3 className="font-nevera text-2xl text-white mb-2">Starter</h3>
-              <p className="text-xs text-white/50 mb-6">Designed for boutique custom home builders handling up to 25 leads/month.</p>
+              <p className="text-xs text-white/50 mb-6">Designed for boutique custom home builders handling up to 50 leads/month.</p>
               <div className="font-nevera text-4xl font-bold text-white mb-8">
-                $1,500 <span className="text-xs font-mono text-white/40 font-normal">/ month</span>
+                $149 <span className="text-xs font-mono text-white/40 font-normal">/ month</span>
               </div>
 
               <div className="space-y-3 pt-6 border-t border-white/[0.06] text-xs text-white/70">
                 <div className="flex items-center gap-2.5">
                   <CheckCircle2 className="size-4 text-[#e5d9c5]" />
-                  <span>Up to 25 active leads / month</span>
+                  <span className="font-medium text-white">Up to 50 active leads / month</span>
                 </div>
                 <div className="flex items-center gap-2.5">
                   <CheckCircle2 className="size-4 text-[#e5d9c5]" />
-                  <span>24/7 AI Email & Web Portal Concierge</span>
+                  <span>Autonomous 2-Way Email AI Concierge</span>
                 </div>
                 <div className="flex items-center gap-2.5">
                   <CheckCircle2 className="size-4 text-[#e5d9c5]" />
@@ -1347,6 +1345,10 @@ function WelcomePage() {
                 <div className="flex items-center gap-2.5">
                   <CheckCircle2 className="size-4 text-[#e5d9c5]" />
                   <span>Live Consultation Calendar Sync</span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <CheckCircle2 className="size-4 text-[#e5d9c5]" />
+                  <span>Instant High-Alert Notifications</span>
                 </div>
               </div>
             </div>
@@ -1359,7 +1361,7 @@ function WelcomePage() {
             </button>
           </div>
 
-          {/* Plan 2: Professional (Dominant Featured Hero Card) */}
+          {/* Plan 2: Growth (Dominant Featured Hero Card) */}
           <div className="p-8 sm:p-10 rounded-2xl border-2 border-[#e5d9c5] flex flex-col justify-between relative shadow-[0_25px_60px_rgba(201,168,76,0.18)] bg-[#121319] backdrop-blur-md group lg:-translate-y-4 lg:scale-[1.03] transition-all">
             {/* Ambient Gold Halo */}
             <div className="absolute -inset-1 bg-gradient-to-b from-[#e5d9c5]/30 via-[#c9a84c]/15 to-transparent rounded-3xl blur-xl opacity-90 pointer-events-none" />
@@ -1370,33 +1372,33 @@ function WelcomePage() {
             </div>
 
             <div className="relative z-10">
-              <span className="text-xs font-mono tracking-widest uppercase text-[#e5d9c5] block mb-2 font-semibold">Complete OS</span>
-              <h3 className="font-nevera text-3xl text-white mb-2">Professional</h3>
-              <p className="text-xs text-white/60 mb-6">Complete autonomous conversion OS for high-volume luxury custom builders.</p>
+              <span className="text-xs font-mono tracking-widest uppercase text-[#e5d9c5] block mb-2 font-semibold">Scaling Builders</span>
+              <h3 className="font-nevera text-3xl text-white mb-2">Growth</h3>
+              <p className="text-xs text-white/60 mb-6">Complete autonomous conversion OS for scaling custom home and spec builders.</p>
               <div className="font-nevera text-4xl font-bold text-[#e5d9c5] mb-8">
-                $3,000 <span className="text-xs font-mono text-white/50 font-normal">/ month</span>
+                $349 <span className="text-xs font-mono text-white/50 font-normal">/ month</span>
               </div>
 
               <div className="space-y-3.5 pt-6 border-t border-white/[0.08] text-xs text-white/80">
                 <div className="flex items-center gap-2.5">
                   <CheckCircle2 className="size-4 text-[#e5d9c5]" />
-                  <span className="font-medium text-white">Unlimited Inbound Leads</span>
+                  <span className="font-medium text-white">Up to 200 active leads / month</span>
                 </div>
                 <div className="flex items-center gap-2.5">
                   <CheckCircle2 className="size-4 text-[#e5d9c5]" />
-                  <span>Multi-Channel SMS, WhatsApp & Email</span>
+                  <span>Autonomous 2-Way Email AI Concierge</span>
                 </div>
                 <div className="flex items-center gap-2.5">
                   <CheckCircle2 className="size-4 text-[#e5d9c5]" />
-                  <span>Custom Floor Plan & Finish AI Knowledge Base</span>
+                  <span>Custom Floor Plan & Finish Knowledge Base</span>
                 </div>
                 <div className="flex items-center gap-2.5">
                   <CheckCircle2 className="size-4 text-[#e5d9c5]" />
-                  <span>HubSpot & GoHighLevel Two-Way Sync</span>
+                  <span>Multi-Turn AI Memory & Qualification</span>
                 </div>
                 <div className="flex items-center gap-2.5">
                   <CheckCircle2 className="size-4 text-[#e5d9c5]" />
-                  <span>Executive ROI Command Dashboard</span>
+                  <span>Team Collaboration & Unlimited Seats</span>
                 </div>
               </div>
             </div>
@@ -1405,21 +1407,25 @@ function WelcomePage() {
               onClick={() => setIsDemoModalOpen(true)}
               className="w-full mt-8 py-4 bg-[#e5d9c5] text-black hover:bg-white transition-all text-xs font-bold uppercase tracking-widest shadow-xl shadow-[#e5d9c5]/25 cursor-pointer relative z-10"
             >
-              Start 14-Day Pilot
+              Start 14-Day Trial
             </button>
           </div>
 
           {/* Plan 3: Enterprise */}
           <div className="p-8 sm:p-10 rounded-2xl border border-white/[0.08] bg-[#0c0d12]/80 backdrop-blur-sm flex flex-col justify-between hover:border-white/30 transition-all hover:bg-[#0e0f15]">
             <div>
-              <span className="text-xs font-mono tracking-widest uppercase text-white/40 block mb-2 font-semibold">Multi-Location</span>
+              <span className="text-xs font-mono tracking-widest uppercase text-white/40 block mb-2 font-semibold">High Volume</span>
               <h3 className="font-nevera text-2xl text-white mb-2">Enterprise</h3>
               <p className="text-xs text-white/50 mb-6">For multi-market architectural firms and luxury development groups.</p>
               <div className="font-nevera text-4xl font-bold text-white mb-8">
-                $5,000 <span className="text-xs font-mono text-white/40 font-normal">/ month</span>
+                Custom <span className="text-xs font-mono text-white/40 font-normal">/ 200+ leads</span>
               </div>
 
               <div className="space-y-3 pt-6 border-t border-white/[0.06] text-xs text-white/70">
+                <div className="flex items-center gap-2.5">
+                  <CheckCircle2 className="size-4 text-[#e5d9c5]" />
+                  <span>200+ Monthly Inbound Leads</span>
+                </div>
                 <div className="flex items-center gap-2.5">
                   <CheckCircle2 className="size-4 text-[#e5d9c5]" />
                   <span>Multiple Builder Brands & Locations</span>
@@ -1430,11 +1436,7 @@ function WelcomePage() {
                 </div>
                 <div className="flex items-center gap-2.5">
                   <CheckCircle2 className="size-4 text-[#e5d9c5]" />
-                  <span>Dedicated AI Model Fine-Tuning</span>
-                </div>
-                <div className="flex items-center gap-2.5">
-                  <CheckCircle2 className="size-4 text-[#e5d9c5]" />
-                  <span>White-Glove Onboarding & Account Lead</span>
+                  <span>White-Glove Setup & Dedicated Account Engineer</span>
                 </div>
               </div>
             </div>
@@ -1483,15 +1485,15 @@ function WelcomePage() {
             {/* Col 1: Brand & Tagline */}
             <div className="lg:col-span-2 space-y-5">
               <Link to="/welcome" className="flex items-center gap-3 group">
-                <div className="size-8 rounded-full border border-white/20 bg-white/[0.06] flex items-center justify-center font-nevera text-sm font-bold text-[#e5d9c5] group-hover:border-[#e5d9c5] transition-all">
-                  W
+                <div className="size-9 rounded-xl border border-white/20 bg-black/60 flex items-center justify-center p-1.5 shadow-lg shadow-[#e5d9c5]/10 group-hover:border-[#e5d9c5] transition-all">
+                  <img src="/weaverframe-mark-transparent.png" alt="WeaverFrame" className="size-full object-contain" />
                 </div>
                 <div>
                   <span className="font-nevera text-lg tracking-[0.18em] uppercase text-white font-semibold block leading-none">
                     WeaverFrame
                   </span>
                   <span className="text-[8px] font-mono tracking-widest text-[#e5d9c5]/70 uppercase block mt-0.5">
-                    Architecture & AI Operating System
+                    AI Sales Concierge
                   </span>
                 </div>
               </Link>
@@ -1513,7 +1515,7 @@ function WelcomePage() {
                 <li><a href="#radar" className="hover:text-white transition-colors">Live Radar Simulator</a></li>
                 <li><a href="#pillars" className="hover:text-white transition-colors">The 6 Core Pillars</a></li>
                 <li><a href="#calculator" className="hover:text-white transition-colors">ROI Modeler</a></li>
-                <li><a href="#cases" className="hover:text-white transition-colors">Verified Case Studies</a></li>
+                <li><a href="#solutions" className="hover:text-white transition-colors">Sector Blueprints</a></li>
                 <li><a href="#pricing" className="hover:text-white transition-colors">Predictable Pricing</a></li>
               </ul>
             </div>
@@ -1524,11 +1526,11 @@ function WelcomePage() {
                 Integrations
               </h4>
               <ul className="space-y-2.5 text-xs text-white/60">
-                <li><span className="text-white/80">WhatsApp Business API</span></li>
-                <li><span className="text-white/80">Twilio SMS (BYOK)</span></li>
-                <li><span className="text-white/80">HubSpot & GoHighLevel</span></li>
-                <li><span className="text-white/80">Google & Outlook Calendar</span></li>
-                <li><span className="text-white/80">Custom ERP Webhooks</span></li>
+                <li><span className="text-white/80">Cloudflare Email Routing (Inbound)</span></li>
+                <li><span className="text-white/80">Resend & SMTP Delivery (Outbound)</span></li>
+                <li><span className="text-white/80">Custom Domain SPF / DKIM</span></li>
+                <li><span className="text-white/80">Google & Outlook Calendar Sync</span></li>
+                <li><span className="text-white/80">CRM Webhooks & Lead Alerts</span></li>
               </ul>
             </div>
 

@@ -92,6 +92,12 @@ model Lead {
   smsQuota        Int       @default(20)  // Max SMS allowed (default: 20)
   lastSmsAt       DateTime?              // When last SMS was sent (for drip scheduling)
   
+  // ─── AI Sales Intelligence & Lead Memory ──────────────────────────────────
+  leadMemory        String?   // JSON structured memory graph: extracted preferences, timeline, family needs, objections
+  dealScore         Int       @default(50)  // 0 - 100 Real-Time Buyer Readiness Score
+  qualificationData String?   // JSON structured qualification checklist & next best action
+  lastAiSummary     String?   // Executive 1-line AI status summary
+
   activities      Activity[]
   reviewRequests  ReviewRequest[]
   appointments    Appointment[]
@@ -105,6 +111,7 @@ model Lead {
   @@index([portalToken])
   @@index([status])
   @@index([scoreTier])
+  @@index([dealScore])
   @@index([status, createdAt])
   @@index([assignedToId])
   @@index([builderId, status])

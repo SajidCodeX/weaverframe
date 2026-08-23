@@ -35,7 +35,16 @@ import {
   ChevronDown,
   ExternalLink,
   BrainCircuit,
-  MoreVertical
+  MoreVertical,
+  Paperclip,
+  Link2,
+  RefreshCw,
+  Globe,
+  Download,
+  Eye,
+  BookOpen,
+  Image as ImageIcon,
+  Upload
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -181,6 +190,16 @@ function MessagesPage() {
   const [isLookbookOpen, setIsLookbookOpen] = useState(false);
   const [lookbookPage, setLookbookPage] = useState(0);
 
+  // File & Link Attachment State
+  const [attachedFile, setAttachedFile] = useState<{ name: string; size: string; type: string; dataUrl?: string } | null>(null);
+  const [attachedLink, setAttachedLink] = useState<{ title: string; url: string; category: string } | null>(null);
+  const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
+  const [linkInputUrl, setLinkInputUrl] = useState("");
+  const [linkInputTitle, setLinkInputTitle] = useState("");
+  const [linkInputCategory, setLinkInputCategory] = useState("3D Virtual Tour");
+  const [activeImageModalUrl, setActiveImageModalUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   // Portfolio Management
   const [editingPortfolioId, setEditingPortfolioId] = useState<string | null>(null);
   const [editPortfolioName, setEditPortfolioName] = useState("");
@@ -255,9 +274,13 @@ function MessagesPage() {
   const loadedLeadIdRef = useRef<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [newMessageText, setNewMessageText] = useState("");
+  const [emailSubject, setEmailSubject] = useState("");
+  const [showCcDrawer, setShowCcDrawer] = useState(false);
+  const [ccEmail, setCcEmail] = useState("");
 
   // Input focus ref
   const inputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Quick schedule modal states
   const [isSchedulingOpen, setIsSchedulingOpen] = useState(false);
@@ -270,6 +293,7 @@ function MessagesPage() {
   const [aiToggleMap, setAiToggleMap] = useState<Record<string, boolean>>(initialAiToggleMap || {});
   const isAiActive = selectedLeadId ? (aiToggleMap[selectedLeadId] ?? true) : true;
 
+  const [isManualSyncing, setIsManualSyncing] = useState(false);
   // Summarize feature
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [chatSummary, setChatSummary] = useState<string | null>(null);
@@ -309,28 +333,6 @@ function MessagesPage() {
     isUserScrolledUpRef.current = isFarFromBottom;
     if (!isFarFromBottom) {
       setNewMessagesCount(0);
-    }
-  };
-
-  const handleCopyPortalLink = async () => {
-    if (!activeChat) return;
-    try {
-      let token = selectedThread?.portalToken || activeChat.lead.portalToken;
-      if (!token) {
-        const activeRole = sessionStorage.getItem('active_role') ?? undefined;
-        // activeChat.lead has id from DB but might just be the mapped thread which has leadId
-        const targetLeadId = selectedThread?.leadId || activeChat.lead.id || activeChat.lead.leadId;
-        token = await generatePortalToken({ data: { leadId: targetLeadId, activeRole } });
-        if (selectedThread) selectedThread.portalToken = token;
-      }
-      const link = `${window.location.origin}/portal/${token}`;
-      await navigator.clipboard.writeText(link);
-      toast.success("Client portal link copied!", {
-        description: "Anyone with this link can chat with you as this lead."
-      });
-    } catch (e) {
-      toast.error("Failed to copy link");
-      console.error(e);
     }
   };
 
@@ -568,13 +570,84 @@ function MessagesPage() {
     return threads;
   }, [activeThreadsList, searchQuery, activeTab, selectedLeadId]);
 
-  // Handle sending text message
+  // Handle File Selection (PDF, Blueprint, Images, CAD, Docs)
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    let sizeStr = `${(file.size / 1024).toFixed(0)} KB`;
+    if (file.size > 1024 * 1024) {
+      sizeStr = `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
+    }
+
+    const isImg = file.type.startsWith("image/");
+    const reader = new FileReader();
+    reader.onload = () => {
+      setAttachedFile({
+        name: file.name,
+        size: sizeStr,
+        type: file.type || (isImg ? "image/jpeg" : "application/pdf"),
+        dataUrl: typeof reader.result === "string" ? reader.result : undefined
+      });
+      toast.success(`Attached ${file.name} (${sizeStr})`);
+    };
+    reader.readAsDataURL(file);
+
+    e.target.value = "";
+  };
+
+  // Handle Link Inserter
+  const handleAddLink = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!linkInputUrl.trim()) return;
+
+    let formattedUrl = linkInputUrl.trim();
+    if (!formattedUrl.startsWith("http://") && !formattedUrl.startsWith("https://")) {
+      formattedUrl = `https://${formattedUrl}`;
+    }
+
+    const domain = formattedUrl.replace(/^https?:\/\//, '').split('/')[0];
+    const finalTitle = linkInputTitle.trim() || domain;
+
+    setAttachedLink({
+      url: formattedUrl,
+      title: finalTitle,
+      category: linkInputCategory || "Virtual Tour / Link"
+    });
+
+    setIsLinkModalOpen(false);
+    setLinkInputUrl("");
+    setLinkInputTitle("");
+    setLinkInputCategory("3D Virtual Tour");
+    toast.success(`Attached link: ${finalTitle}`);
+  };
+
+  // Handle sending text message or attachments
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!selectedLeadId || !newMessageText.trim() || isSending) return;
+    if (!selectedLeadId || (!newMessageText.trim() && !attachedFile && !attachedLink) || isSending) return;
 
-    const originalText = newMessageText.trim();
+    let payloadContent = newMessageText.trim();
+    if (attachedFile) {
+      if (attachedFile.type.startsWith("image/")) {
+        const header = `🖼️ Image Shared: ${attachedFile.name}|size=${attachedFile.size}|data=${attachedFile.dataUrl || ""}`;
+        payloadContent = payloadContent ? `${header}\n\n${payloadContent}` : header;
+      } else {
+        const header = `📎 File Attachment: ${attachedFile.name}|size=${attachedFile.size}|type=${attachedFile.type}|data=${attachedFile.dataUrl || ""}`;
+        payloadContent = payloadContent ? `${header}\n\n${payloadContent}` : header;
+      }
+    } else if (attachedLink) {
+      const header = `🔗 Link Shared: ${attachedLink.title}|url=${attachedLink.url}|category=${attachedLink.category}`;
+      payloadContent = payloadContent ? `${header}\n\n${payloadContent}` : header;
+    }
+
+    const originalText = payloadContent;
     setNewMessageText("");
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+    }
+    setAttachedFile(null);
+    setAttachedLink(null);
     setIsSending(true);
 
     const tempId = `opt-${Date.now()}`;
@@ -775,15 +848,33 @@ function MessagesPage() {
     e.preventDefault();
     if (!selectedLeadId || !simulateMessageText.trim()) return;
 
+    const msgToSend = simulateMessageText.trim();
     setIsSimulating(true);
     try {
-      await simulateLeadMessage({
+      const res = await simulateLeadMessage({
         data: {
           leadId: selectedLeadId,
-          content: simulateMessageText,
+          content: msgToSend,
           enableAiReply: isAiActive
         }
       });
+
+      // Instantly inject new messages into local active chat view
+      if (res && res.leadMessage) {
+        setActiveChat(prev => {
+          if (!prev) return null;
+          const newMessages = [...prev.messages, res.leadMessage];
+          if (res.systemMessage) {
+            newMessages.push(res.systemMessage);
+          }
+          if ((window as any)._messagesCache) {
+            (window as any)._messagesCache.set(selectedLeadId, newMessages);
+          }
+          return { ...prev, messages: newMessages };
+        });
+        setTimeout(() => scrollToBottom(true, "smooth"), 60);
+      }
+
       setIsSimulateOpen(false);
       setSimulateMessageText("");
       await router.invalidate();
@@ -818,7 +909,7 @@ function MessagesPage() {
   }, [conversationsList, selectedLeadId]);
 
   return (
-    <Shell title="Direct Lead Messages" noPadding>
+    <Shell title="Messages" noPadding>
       <div ref={containerRef} className="flex h-full w-full bg-card/40 backdrop-blur-xl relative">
 
         {/* LEFT COLUMN: Search & Thread List */}
@@ -826,32 +917,67 @@ function MessagesPage() {
           style={{ width: `${leftWidth}px` }}
           className="border-r border-border flex flex-col h-full min-h-0 bg-[#080808]/90 shrink-0 relative"
         >
-
           {/* Thread Search Box */}
-          <div className="p-4 border-b border-border space-y-3">
+          <div className="p-3.5 border-b border-border space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-xs text-foreground tracking-tight flex items-center gap-1.5">
+                <Mail className="size-3.5 text-primary" />
+                <span>Inbox</span>
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (isManualSyncing) return;
+                    setIsManualSyncing(true);
+                    try {
+                      await router.invalidate();
+                    } finally {
+                      setTimeout(() => setIsManualSyncing(false), 800);
+                    }
+                  }}
+                  disabled={isManualSyncing}
+                  className="size-7 rounded-md bg-secondary/80 hover:bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer disabled:opacity-80 border border-border/50"
+                  title="Sync Inbox Threads"
+                >
+                  <RefreshCw className={`size-3 transition-transform duration-300 ${isManualSyncing ? 'animate-spin text-[#c9a84c] dark:text-[#e5d9c5]' : ''}`} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewChatSearchQuery("");
+                    setIsNewChatModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-[10.5px] font-semibold transition-colors cursor-pointer"
+                >
+                  <Plus className="size-3" /> New Message
+                </button>
+              </div>
+            </div>
+
             <div className="relative">
-              <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
+              <Search className="absolute left-3 top-2.5 size-3.5 text-muted-foreground" />
               <input
                 type="text"
                 placeholder="Search conversations..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-secondary border border-border rounded-md pl-9 pr-4 py-2 text-xs text-foreground focus:outline-none focus:border-primary/60 placeholder:text-muted-foreground transition-colors"
+                className="w-full bg-secondary border border-border rounded-lg pl-8 pr-3 py-1.5 text-xs text-foreground focus:outline-none focus:border-primary/60 placeholder:text-muted-foreground transition-colors"
               />
             </div>
 
             {/* Filter Tabs */}
-            <div className="flex gap-1.5 p-0.5 bg-secondary/60 rounded-lg">
+            <div className="flex gap-1 p-0.5 bg-secondary/60 rounded-lg">
               {(["all", "unread", "hot"] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`flex-1 py-1 text-[11px] font-medium capitalize rounded-md transition-all ${activeTab === tab
-                    ? "bg-card text-foreground shadow-sm"
+                  className={`flex-1 py-1 text-[10.5px] font-medium capitalize rounded-md transition-all ${activeTab === tab
+                    ? "bg-card text-foreground shadow-sm font-semibold"
                     : "text-muted-foreground hover:text-foreground"
                     }`}
                 >
-                  {tab}
+                  {tab === "all" ? "All" : tab === "unread" ? "Unread" : "Hot"}
                 </button>
               ))}
             </div>
@@ -878,7 +1004,7 @@ function MessagesPage() {
                       setActiveChat(null);
                       setIsLoadingChat(true);
                     }}
-                    className={`w-full text-left p-4 flex gap-3 transition-colors hover:bg-secondary/40 select-none outline-none focus:bg-secondary/40 relative ${isActive ? "bg-secondary text-foreground" : "text-muted-foreground"
+                    className={`w-full text-left p-3.5 flex gap-3 transition-colors hover:bg-secondary/40 select-none outline-none focus:bg-secondary/40 relative ${isActive ? "bg-secondary text-foreground" : "text-muted-foreground"
                       }`}
                   >
                     {/* Left border active bar */}
@@ -888,16 +1014,16 @@ function MessagesPage() {
 
                     {/* Avatar Container */}
                     <div className="relative shrink-0">
-                      <div className={`size-10 rounded-full flex items-center justify-center text-xs font-semibold tracking-tighter border transition-all ${isActive
+                      <div className={`size-9 rounded-full flex items-center justify-center text-xs font-semibold border transition-all ${isActive
                         ? "bg-primary/10 border-primary/20 text-white"
-                        : "bg-white/[0.02] border-white/[0.05] text-muted-foreground"
+                        : "bg-secondary border-border text-muted-foreground"
                         }`}>
                         {initials}
                       </div>
 
                       {/* Online Status Dot */}
                       {thread.isOnline && (
-                        <div className="absolute bottom-0 right-0 size-2.5 rounded-full bg-success ring-2 ring-[#080808]" />
+                        <div className="absolute bottom-0 right-0 size-2 rounded-full bg-emerald-500 ring-2 ring-[#080808]" />
                       )}
                     </div>
 
@@ -912,35 +1038,35 @@ function MessagesPage() {
                         </span>
                       </div>
 
-                      {/* Score Badge (Vivid styling, no emojis per rules) */}
+                      {/* Clean Score & Status */}
                       <div className="flex items-center gap-1.5">
                         {thread.scoreTier === "Hot" && (
-                          <span className="px-1.5 py-0.5 rounded text-[8px] font-bold tracking-wider uppercase bg-red-500/10 text-red-400 border border-red-500/20">
-                            Hot Tier
+                          <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-red-500/10 text-red-400 border border-red-500/20">
+                            Hot
                           </span>
                         )}
                         {thread.scoreTier === "Warm" && (
-                          <span className="px-1.5 py-0.5 rounded text-[8px] font-bold tracking-wider uppercase bg-warning/10 text-warning border border-warning/20">
-                            Warm Tier
+                          <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-warning/10 text-warning border border-warning/20">
+                            Warm
                           </span>
                         )}
                         {thread.scoreTier === "Cold" && (
-                          <span className="px-1.5 py-0.5 rounded text-[8px] font-bold tracking-wider uppercase bg-cold/10 text-cold border border-cold/20">
-                            Cold Tier
+                          <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-muted text-muted-foreground border border-border">
+                            Cold
                           </span>
                         )}
-                        <span className="text-[9px] uppercase font-mono tracking-widest text-muted-foreground/60 select-none">
+                        <span className="text-[9px] font-mono text-muted-foreground/60 select-none">
                           · {thread.status}
                         </span>
                       </div>
 
-                      {/* Last Message Preview & WhatsApp-style Unread Badge Container */}
+                      {/* Last Message Preview & Unread Badge */}
                       <div className="flex items-center justify-between gap-2 mt-0.5">
                         <p className="text-[11px] text-muted-foreground truncate leading-relaxed flex-1">
                           {thread.lastMessage}
                         </p>
                         {!isActive && thread.unreadCount > 0 && (
-                          <span className="shrink-0 size-5 bg-[#30D158] text-black text-[10px] font-black flex items-center justify-center rounded-full shadow-md select-none animate-in scale-in duration-150">
+                          <span className="shrink-0 size-4.5 bg-primary text-primary-foreground text-[9.5px] font-bold flex items-center justify-center rounded-full select-none">
                             {thread.unreadCount}
                           </span>
                         )}
@@ -955,19 +1081,6 @@ function MessagesPage() {
               </div>
             )}
           </div>
-
-          {/* WhatsApp-Style Floating New Chat FAB Button */}
-          <button
-            type="button"
-            onClick={() => {
-              setNewChatSearchQuery("");
-              setIsNewChatModalOpen(true);
-            }}
-            className="absolute bottom-5 right-5 z-30 size-12 rounded-full bg-[#25D366] hover:bg-[#20bd5a] text-black font-bold shadow-[0_4px_20px_rgba(37,211,102,0.4)] flex items-center justify-center transition-all hover:scale-110 active:scale-95 group cursor-pointer"
-            title="Start new chat"
-          >
-            <MessageSquarePlus className="size-6 text-black group-hover:scale-110 transition-transform" />
-          </button>
         </div>
 
         {/* Draggable Divider splitter */}
@@ -986,12 +1099,11 @@ function MessagesPage() {
 
           {selectedThread && activeChat ? (
             <>
-              {/* CHAT PANEL HEADER */}
-              <div className="px-6 py-4 border-b border-border bg-[#0B0B0C]/80 flex items-center justify-between gap-4">
-
-                {/* User Info Card */}
-                <div className="flex items-center gap-3">
-                  <div className="size-9 rounded-full bg-primary/5 border border-white/[0.06] flex items-center justify-center font-bold text-xs text-white">
+              {/* CLEAN THREAD HEADER */}
+              <div className="px-6 py-3.5 border-b border-border bg-[#090a0e] flex items-center justify-between gap-4 shrink-0">
+                {/* Left: Lead Identity & Metadata */}
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="size-9 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center font-bold text-xs text-primary shrink-0">
                     {(selectedThread.leadName || "Lead")
                       .split(" ")
                       .filter(Boolean)
@@ -1000,234 +1112,148 @@ function MessagesPage() {
                       .slice(0, 2)
                       .toUpperCase() || "L"}
                   </div>
-                  <div>
-                    <h3 className="font-semibold text-xs text-foreground tracking-tight flex items-center gap-2">
-                      {selectedThread.leadName}
-                      {selectedThread.isOnline && (
-                        <span className="inline-block size-2 rounded-full bg-green-500 animate-pulse" title="Lead is actively viewing the portal" />
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold text-xs sm:text-sm text-foreground truncate">
+                        {selectedThread.leadName}
+                      </h3>
+                      {selectedThread.scoreTier === "Hot" && (
+                        <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-red-500/10 text-red-400 border border-red-500/20 shrink-0">
+                          Hot
+                        </span>
                       )}
-                    </h3>
-                    <div className="flex items-center gap-1.5 text-xs mt-0.5 h-4">
-                      {selectedThread.isOnline ? (
-                        <span className="text-green-500 font-medium">Online (Portal)</span>
-                      ) : (
-                        <span className="text-muted-foreground">Offline</span>
+                      {selectedThread.scoreTier === "Warm" && (
+                        <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-warning/10 text-warning border border-warning/20 shrink-0">
+                          Warm
+                        </span>
                       )}
+                    </div>
+                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground font-mono mt-0.5 truncate">
+                      <span>{selectedThread.email || `${selectedThread.leadName?.toLowerCase().replace(/\s+/g, '')}@client.com`}</span>
                     </div>
                   </div>
                 </div>
 
-                {/* Lead contacts and fast action links */}
-                <div className="flex items-center gap-4 shrink-0">
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
-                    {selectedThread.email && (
-                      <a href={`mailto:${selectedThread.email}`} className="p-2 bg-secondary border border-border rounded-md hover:bg-secondary/80 hover:text-white transition-colors" title={selectedThread.email}>
-                        <Mail className="size-3.5" />
-                      </a>
-                    )}
-                    <button
-                      onClick={handleCopyPortalLink}
-                      className="p-2 bg-secondary border border-border rounded-md hover:bg-secondary/80 hover:text-white transition-colors"
-                      title="Copy Portal Link"
-                    >
-                      <ExternalLink className="size-3.5" />
-                    </button>
-                  </div>
+                {/* Right: Quick Action Controls */}
+                <div className="flex items-center gap-2 shrink-0">
+                  {/* AI Toggle Button */}
+                  <button
+                    onClick={async () => {
+                      if (!selectedLeadId) return;
+                      const nextVal = !isAiActive;
+                      setAiToggleMap(prev => ({ ...prev, [selectedLeadId]: nextVal }));
+                      try {
+                        await setLeadAiToggle({ data: { leadId: selectedLeadId, active: nextVal } });
+                      } catch (err) {
+                        console.error("Failed to toggle AI:", err);
+                        setAiToggleMap(prev => ({ ...prev, [selectedLeadId]: isAiActive }));
+                      }
+                    }}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
+                      isAiActive
+                        ? "bg-primary/10 border-primary/30 text-primary"
+                        : "bg-secondary border-border text-muted-foreground hover:text-foreground"
+                    }`}
+                    title={isAiActive ? "AI Auto-reply enabled" : "AI Auto-reply paused"}
+                  >
+                    <Sparkles className="size-3.5" />
+                    <span className="hidden sm:inline">{isAiActive ? "AI Active" : "AI Off"}</span>
+                  </button>
 
-                  <div className="w-px h-6 bg-border" />
+                  {/* AI Summary */}
+                  <button
+                    onClick={handleSummarizeChat}
+                    disabled={isSummarizing || !activeChat || activeChat.messages.length === 0}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-secondary border border-border hover:bg-secondary/80 text-foreground text-xs font-medium transition-colors cursor-pointer disabled:opacity-50"
+                    title="Generate conversation summary"
+                  >
+                    {isSummarizing ? <Loader2 className="size-3.5 animate-spin text-primary" /> : <BrainCircuit className="size-3.5 text-primary" />}
+                    <span className="hidden md:inline">Summarize</span>
+                  </button>
 
-                  {/* Header action shortcuts */}
-                  {/* Header action shortcuts */}
+                  {/* Schedule Meeting Button */}
+                  <button
+                    onClick={() => setIsSchedulingOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-primary hover:bg-primary/20 text-xs font-medium transition-colors cursor-pointer"
+                    title="Schedule Meeting"
+                  >
+                    <Calendar className="size-3.5" />
+                    <span className="hidden md:inline">Schedule</span>
+                  </button>
+
+                  {/* More Dropdown */}
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <button className="p-1.5 rounded-md hover:bg-white/5 transition-colors text-muted-foreground hover:text-white">
-                        <MoreVertical className="size-4.5" />
+                      <button className="p-2 rounded-lg hover:bg-secondary border border-transparent hover:border-border transition-colors text-muted-foreground hover:text-foreground cursor-pointer">
+                        <MoreVertical className="size-4" />
                       </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-56 bg-[#0a0a0c] border border-border">
-                      <DropdownMenuItem
-                        onClick={async (e) => {
-                          e.preventDefault();
-                          if (!selectedLeadId) return;
-                          const nextVal = !isAiActive;
-                          setAiToggleMap(prev => ({ ...prev, [selectedLeadId]: nextVal }));
-                          try {
-                            await setLeadAiToggle({ data: { leadId: selectedLeadId, active: nextVal } });
-                          } catch (err) {
-                            console.error("Failed to persist AI toggle state:", err);
-                            setAiToggleMap(prev => ({ ...prev, [selectedLeadId]: isAiActive }));
-                          }
-                        }}
-                        className="flex items-center gap-2 cursor-pointer hover:bg-white/5 focus:bg-white/5"
-                      >
-                        <Sparkles className={`size-4 ${isAiActive ? "text-success animate-pulse" : "text-muted-foreground"}`} />
-                        <span>{isAiActive ? "Pause AI Concierge" : "Activate AI Concierge"}</span>
+                      <DropdownMenuItem onClick={() => setIsPortfolioModalOpen(true)} className="flex items-center gap-2 cursor-pointer">
+                        <BookOpen className="size-4 text-muted-foreground" />
+                        <span>Manage Documents</span>
                       </DropdownMenuItem>
-
-                      <DropdownMenuItem
-                        onClick={() => setIsPortfolioModalOpen(true)}
-                        disabled={isSending}
-                        className="flex items-center gap-2 cursor-pointer hover:bg-white/5 focus:bg-white/5"
-                      >
-                        <FileText className="size-4 text-muted-foreground" />
-                        <span>Portfolios</span>
-                      </DropdownMenuItem>
-
-                      <DropdownMenuItem
-                        onClick={handleSummarizeChat}
-                        disabled={isSummarizing || !activeChat || activeChat.messages.length === 0}
-                        className="flex items-center gap-2 cursor-pointer hover:bg-white/5 focus:bg-white/5"
-                      >
-                        {isSummarizing ? <Loader2 className="size-4 animate-spin text-muted-foreground" /> : <BrainCircuit className="size-4 text-muted-foreground" />}
-                        <span>Summarize Chat</span>
-                      </DropdownMenuItem>
-
                       {canSimulate && (
-                        <DropdownMenuItem
-                          onClick={() => setIsSimulateOpen(true)}
-                          className="flex items-center gap-2 cursor-pointer hover:bg-white/5 focus:bg-white/5"
-                        >
+                        <DropdownMenuItem onClick={() => setIsSimulateOpen(true)} className="flex items-center gap-2 cursor-pointer">
                           <MessageSquare className="size-4 text-muted-foreground" />
-                          <span>Simulate Reply</span>
+                          <span>Simulate Lead Reply</span>
                         </DropdownMenuItem>
                       )}
-
-                      <DropdownMenuSeparator className="bg-border" />
-
-                      <DropdownMenuItem
-                        onClick={() => setIsSchedulingOpen(true)}
-                        className="flex items-center gap-2 cursor-pointer text-primary focus:bg-primary/10 focus:text-primary hover:bg-primary/10 hover:text-primary"
-                      >
-                        <Calendar className="size-4" />
-                        <span>Schedule Site Visit</span>
-                      </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
               </div>
 
-              {/* CONTEXT BAR */}
-              <div className="px-6 py-2.5 bg-[#080808]/90 border-b border-border flex items-center justify-between shadow-sm relative z-20">
-                <div className="flex items-center gap-5 text-xs font-medium">
-                  <div className="flex flex-col">
-                    <span className="text-[9px] text-muted-foreground uppercase tracking-widest font-mono">Score</span>
-                    <span className={`mt-1 px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider uppercase ${selectedThread.scoreTier === 'Hot' ? 'bg-red-500/10 text-red-400 border border-red-500/20' : selectedThread.scoreTier === 'Warm' ? 'bg-warning/10 text-warning border border-warning/20' : 'bg-cold/10 text-cold border border-cold/20'}`}>{selectedThread.scoreTier}</span>
-                  </div>
-                  <div className="w-px h-6 bg-border/50" />
-                  <div className="flex flex-col">
-                    <span className="text-[9px] text-muted-foreground uppercase tracking-widest font-mono">Status</span>
-                    <span className="text-foreground mt-1 text-[11px]">{selectedThread.status}</span>
-                  </div>
-                  <div className="w-px h-6 bg-border/50" />
-                  <div className="flex flex-col">
-                    <span className="text-[9px] text-muted-foreground uppercase tracking-widest font-mono">Est. Budget</span>
-                    <span className="text-foreground mt-1 text-[11px]">${Math.round(selectedThread.estimatedBudget / 1000)}K</span>
-                  </div>
+              {/* SUBJECT LINE BAR */}
+              <div className="px-6 py-2.5 bg-[#06070a] border-b border-border/30 flex items-center justify-between text-xs text-muted-foreground shrink-0">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground/70 font-semibold shrink-0">Subject:</span>
+                  <span className="font-medium text-foreground text-xs truncate">
+                    {emailSubject || `Re: Inquiry · ${selectedThread.leadName}`}
+                  </span>
                 </div>
+                <span className="text-[10.5px] font-mono text-muted-foreground/60 shrink-0 hidden sm:flex items-center gap-1">
+                  <Check className="size-3 text-emerald-400" /> Synced with Mailbox
+                </span>
               </div>
 
-              {/* AI CHAT EXECUTIVE PRE-MEETING BRIEFING SHEET */}
+              {/* AI BRIEFING SHEET */}
               {chatSummary && (
-                <div className="mx-6 mt-4 p-5 rounded-xl bg-[#0f0f14] border border-primary/40 shadow-2xl animate-in fade-in slide-in-from-top-4 relative z-30 shrink-0 max-h-[300px] overflow-y-auto">
-                  <div className="flex items-center justify-between pb-3 mb-3 border-b border-white/10 sticky top-0 bg-[#0f0f14] z-10">
+                <div className="mx-6 mt-4 p-4 rounded-xl bg-[#0f0f14] border border-primary/40 shadow-2xl animate-in fade-in slide-in-from-top-4 relative z-30 shrink-0 max-h-[260px] overflow-y-auto">
+                  <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-white/10 sticky top-0 bg-[#0f0f14] z-10">
                     <div className="flex items-center gap-2">
-                      <div className="size-7 rounded-lg bg-primary/20 border border-primary/40 flex items-center justify-center">
-                        <BrainCircuit className="size-4 text-primary" />
+                      <div className="size-6 rounded-lg bg-primary/20 border border-primary/40 flex items-center justify-center">
+                        <BrainCircuit className="size-3.5 text-primary" />
                       </div>
                       <div>
-                        <h4 className="text-xs font-bold text-white tracking-wider uppercase font-display">Builder Pre-Meeting Intelligence Briefing</h4>
-                        <p className="text-[10px] text-muted-foreground">AI-synthesized deal overview & action checklist</p>
+                        <h4 className="text-xs font-semibold text-white">Conversation Summary</h4>
                       </div>
                     </div>
                     <button
                       onClick={() => setChatSummary(null)}
-                      className="size-7 rounded-md bg-white/5 hover:bg-white/15 text-muted-foreground hover:text-white flex items-center justify-center transition-colors"
+                      className="size-6 rounded-md bg-white/5 hover:bg-white/15 text-muted-foreground hover:text-white flex items-center justify-center transition-colors"
                       title="Close Summary"
                     >
-                      <X className="size-4" />
+                      <X className="size-3.5" />
                     </button>
                   </div>
                   <FormattedSummary text={chatSummary} />
                 </div>
               )}
 
-              {/* Fixed Viewport Background Layer for WhatsApp Wallpaper */}
-              <div className="flex-1 flex flex-col min-h-0 relative bg-[#050608] overflow-hidden">
-                {/* Native React SVG WhatsApp Doodle Overlay */}
-                <div className="absolute inset-0 pointer-events-none overflow-hidden z-0 select-none opacity-40">
-                  <svg className="w-full h-full text-white" xmlns="http://www.w3.org/2000/svg">
-                    <defs>
-                      {/* LAYER A — base density layer */}
-                      <pattern id="doodle-layer-a" width="190" height="190" patternUnits="userSpaceOnUse">
-                        <g stroke="currentColor" strokeWidth="1.1" fill="none" strokeLinecap="round" strokeLinejoin="round" opacity="0.9">
-                          <g transform="translate(14,22) rotate(-31) scale(0.58)"><path d="M3 10 L9 4 L15 10 V16 H12 V11 H6 V16 H3 Z" /></g>
-                          <g transform="translate(71,9) rotate(63) scale(0.71)"><path d="M5 2 H13 V16 H5 Z M7 5 H9 M11 5 H11.1 M7 8 H9 M11 8 H11.1" /></g>
-                          <g transform="translate(133,31) rotate(-12) scale(0.49)"><path d="M3 16 V2 H14 M6 2 V16 M3 6 H11 M3 10 H11 M14 2 V9 L11 12" /></g>
-                          <g transform="translate(196,18) rotate(84) scale(0.66)"><circle cx="5" cy="5" r="3" /><path d="M8 5 H15 V9 H13 V7 H11 V9 H8 Z" /></g>
-                          <g transform="translate(29,68) rotate(-58) scale(0.73)"><path d="M3 12 C3 7 6 4 9 4 C12 4 15 7 15 12 H1 V14 H17 V12 Z" /></g>
-                          <g transform="translate(88,79) rotate(19) scale(0.55)"><path d="M4 2 H14 V16 H4 Z M4 6 H8 M4 10 H8 M4 14 H8" /></g>
-                          <g transform="translate(151,61) rotate(-73) scale(0.62)"><path d="M4 3 H14 V6 H11 V15 H7 V6 H4 Z M4 4 L14 14 M14 4 L4 14" /></g>
-                          <g transform="translate(210,88) rotate(41) scale(0.68)"><path d="M9 2 L10.5 7 L16 8.5 L10.5 10 L9 15 L7.5 10 L2 8.5 L7.5 7 Z" /></g>
-                          <g transform="translate(9,122) rotate(27) scale(0.6)"><path d="M3 3 H15 C16 3 17 4 17 5 V11 C17 12 16 13 15 13 H10 L5 16 V13 H3 Z" /></g>
-                          <g transform="translate(66,135) rotate(-46) scale(0.77)"><path d="M2 13 H12 V9 H8 L5 5 H2 V9 Z M3 15 H15" /></g>
-                          <g transform="translate(126,118) rotate(69) scale(0.53)"><path d="M3 4 H15 V16 H3 Z M3 8 H15 M6 2 V5 M12 2 V5" /></g>
-                          <g transform="translate(184,140) rotate(-24) scale(0.64)"><path d="M2 10 H10 V5 H14 L17 10 V14 H2 Z" /></g>
-                          <g transform="translate(38,178) rotate(52) scale(0.7)"><path d="M9 2 L11 6.5 L16 7 L12 11 L13.5 16 L9 13.5 L4.5 16 L6 11 L2 7 Z" /></g>
-                          <g transform="translate(97,191) rotate(-88) scale(0.57)"><path d="M3 10 L9 4 L15 10 V16 H12 V11 H6 V16 H3 Z" /></g>
-                          <g transform="translate(159,203) rotate(15) scale(0.61)"><path d="M5 2 H13 V16 H5 Z M7 5 H9 M11 5 H11.1 M7 8 H9 M11 8 H11.1" /></g>
-                          <g transform="translate(219,168) rotate(-39) scale(0.72)"><path d="M3 12 C3 7 6 4 9 4 C12 4 15 7 15 12 H1 V14 H17 V12 Z" /></g>
-                          <g transform="translate(55,225) rotate(76) scale(0.5)"><path d="M4 2 H14 V16 H4 Z M4 6 H8 M4 10 H8 M4 14 H8" /></g>
-                          <g transform="translate(112,215) rotate(-19) scale(0.65)"><path d="M9 2 L10.5 7 L16 8.5 L10.5 10 L9 15 L7.5 10 L2 8.5 L7.5 7 Z" /></g>
-                          <g transform="translate(178,228) rotate(33) scale(0.59)"><path d="M3 16 V2 H14 M6 2 V16 M3 6 H11 M3 10 H11 M14 2 V9 L11 12" /></g>
-                          <g transform="translate(226,120) rotate(-64) scale(0.63)"><circle cx="5" cy="5" r="3" /><path d="M8 5 H15 V9 H13 V7 H11 V9 H8 Z" /></g>
-                        </g>
-                      </pattern>
-
-                      {/* LAYER B — different period, breaks alignment with A */}
-                      <pattern id="doodle-layer-b" width="137" height="167" patternUnits="userSpaceOnUse" x="61" y="94">
-                        <g stroke="currentColor" strokeWidth="1.1" fill="none" strokeLinecap="round" strokeLinejoin="round" opacity="0.55">
-                          <g transform="translate(20,30) rotate(44) scale(0.52)"><path d="M2 13 H12 V9 H8 L5 5 H2 V9 Z M3 15 H15" /></g>
-                          <g transform="translate(90,18) rotate(-71) scale(0.6)"><path d="M3 4 H15 V16 H3 Z M3 8 H15 M6 2 V5 M12 2 V5" /></g>
-                          <g transform="translate(148,45) rotate(22) scale(0.68)"><path d="M2 10 H10 V5 H14 L17 10 V14 H2 Z" /></g>
-                          <g transform="translate(35,95) rotate(-33) scale(0.57)"><path d="M3 2 H13 V16 H3 Z M6 5 H10 M6 8 H10" /></g>
-                          <g transform="translate(105,110) rotate(88) scale(0.63)"><path d="M9 2 L11 6.5 L16 7 L12 11 L13.5 16 L9 13.5 L4.5 16 L6 11 L2 7 Z" /></g>
-                          <g transform="translate(155,135) rotate(-9) scale(0.5)"><path d="M3 10 L9 4 L15 10 V16 H12 V11 H6 V16 H3 Z" /></g>
-                          <g transform="translate(18,165) rotate(57) scale(0.66)"><path d="M4 3 H14 V6 H11 V15 H7 V6 H4 Z M4 4 L14 14 M14 4 L4 14" /></g>
-                          <g transform="translate(80,180) rotate(-48) scale(0.54)"><circle cx="5" cy="5" r="3" /><path d="M8 5 H15 V9 H13 V7 H11 V9 H8 Z" /></g>
-                          <g transform="translate(135,190) rotate(30) scale(0.6)"><path d="M3 3 H15 C16 3 17 4 17 5 V11 C17 12 16 13 15 13 H10 L5 16 V13 H3 Z" /></g>
-                        </g>
-                      </pattern>
-
-                      {/* LAYER C — third, slower period for max irregularity */}
-                      <pattern id="doodle-layer-c" width="155" height="124" patternUnits="userSpaceOnUse" x="29" y="118">
-                        <g stroke="currentColor" strokeWidth="1.1" fill="none" strokeLinecap="round" strokeLinejoin="round" opacity="0.4">
-                          <g transform="translate(25,20) rotate(-55) scale(0.55)"><path d="M5 2 H13 V16 H5 Z M7 5 H9 M11 5 H11.1 M7 8 H9 M11 8 H11.1" /></g>
-                          <g transform="translate(100,12) rotate(38) scale(0.62)"><path d="M3 16 V2 H14 M6 2 V16 M3 6 H11 M3 10 H11 M14 2 V9 L11 12" /></g>
-                          <g transform="translate(160,40) rotate(-18) scale(0.58)"><path d="M4 2 H14 V16 H4 Z M4 6 H8 M4 10 H8 M4 14 H8" /></g>
-                          <g transform="translate(40,80) rotate(70) scale(0.64)"><path d="M9 2 L10.5 7 L16 8.5 L10.5 10 L9 15 L7.5 10 L2 8.5 L7.5 7 Z" /></g>
-                          <g transform="translate(120,95) rotate(-27) scale(0.5)"><path d="M3 12 C3 7 6 4 9 4 C12 4 15 7 15 12 H1 V14 H17 V12 Z" /></g>
-                          <g transform="translate(170,120) rotate(46) scale(0.6)"><path d="M2 13 H12 V9 H8 L5 5 H2 V9 Z M3 15 H15" /></g>
-                        </g>
-                      </pattern>
-                    </defs>
-
-                    {/* Composite fill — all three layers stacked on same rect */}
-                    <rect width="100%" height="100%" fill="url(#doodle-layer-a)" />
-                    <rect width="100%" height="100%" fill="url(#doodle-layer-b)" />
-                    <rect width="100%" height="100%" fill="url(#doodle-layer-c)" />
-                  </svg>
-                </div>
-
-                {/* Messages Scroll Container - z-10 over fixed wallpaper */}
+              {/* MESSAGE THREAD STREAM CANVAS */}
+              <div className="flex-1 flex flex-col min-h-0 relative bg-[#07080b] overflow-hidden">
+                {/* Messages Scroll Container */}
                 <div
                   ref={chatContainerRef}
                   onScroll={handleChatScroll}
-                  className="flex-1 overflow-y-auto p-6 space-y-4 min-h-0 relative z-10 custom-scrollbar"
+                  className="flex-1 overflow-y-auto px-6 py-4 space-y-1 min-h-0 relative z-10 custom-scrollbar"
                 >
                   {activeChat.messages.length > 0 ? (
                     activeChat.messages.map((msg, index) => {
-                      const isUser = msg.sender === "user" || msg.sender === "system";
+                      const isUser = msg.sender === "user";
                       const isAI = msg.sender === "system";
+                      const isLead = !isUser && !isAI;
 
                       const msgDate = new Date(msg.createdAt);
                       const prevMsg = index > 0 ? activeChat.messages[index - 1] : null;
@@ -1257,122 +1283,261 @@ function MessagesPage() {
                         }
                       }
 
-                      // Render high-fidelity custom cards for brochure shares
                       const isBrochureCard = msg.content.includes("📄 Document Shared");
-                      // Render high-fidelity custom cards for calendars/appointments
                       const isAppointmentCard = msg.content.includes("📆 Site Visit Booked");
+                      const isFileAttachment = msg.content.includes("📎 File Attachment:");
+                      const isImageAttachment = msg.content.includes("🖼️ Image Shared:");
+                      const isLinkShared = msg.content.includes("🔗 Link Shared:");
 
                       return (
                         <div key={msg.id} className="w-full">
                           {showDateDivider && (
-                            <div className="flex justify-center my-6">
-                              <span className="text-[10px] font-medium text-muted-foreground bg-[#111111] border border-white/10 px-3 py-1 rounded-full uppercase tracking-widest font-mono">
+                            <div className="flex justify-center my-4">
+                              <span className="text-[10px] font-medium text-muted-foreground bg-[#111115] border border-white/10 px-3 py-0.5 rounded-full uppercase tracking-widest font-mono">
                                 {dateLabel}
                               </span>
                             </div>
                           )}
-                          <div
-                            className={`flex flex-col ${isUser ? "items-end" : "items-start"} w-full group animate-in slide-in-from-bottom-2 duration-150`}
-                          >
-                            {isBrochureCard ? (
-                              /* Digital specs brochure presentation card */
-                              <div className="bg-[#111111] border border-white/[0.08] rounded-xl p-4 max-w-[400px] shadow-2xl relative overflow-hidden group/brochure">
-                                <div className="flex gap-3">
-                                  <div className="size-10 bg-primary/10 rounded-lg flex items-center justify-center border border-primary/20 shrink-0 text-primary">
-                                    <FileText className="size-5" />
-                                  </div>
-                                  <div className="min-w-0">
-                                    <h4 className="text-xs font-bold text-white truncate">{msg.content.replace("📄 Document Shared: ", "").split(".pdf|size=")[0]}</h4>
-                                    <p className="text-[10px] text-muted-foreground mt-0.5">Custom Specifications & Lookbook · {msg.content.includes("|size=") ? msg.content.split("|size=")[1] : "4.8 MB"}</p>
-                                  </div>
+
+                          {/* Flowing Message Entry */}
+                          <div className="py-3 border-b border-border/30 last:border-0 group animate-in fade-in duration-150">
+                            {/* Sender Header Row */}
+                            <div className="flex items-start justify-between gap-3 mb-1.5">
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <div
+                                  className={`size-7 rounded-full flex items-center justify-center text-[11px] font-semibold shrink-0 ${
+                                    isAI
+                                      ? "bg-primary/20 text-primary border border-primary/30"
+                                      : isUser
+                                        ? "bg-primary/20 text-primary border border-primary/40"
+                                        : "bg-secondary text-foreground border border-border"
+                                  }`}
+                                >
+                                  {isAI ? <Sparkles className="size-3.5" /> : isUser ? "You" : (activeChat.lead?.name?.[0] || "C")}
                                 </div>
-                                <div className="border-t border-border/50 mt-4 pt-3 flex items-center justify-between">
-                                  <span className="text-[9px] text-muted-foreground font-mono">Sent to Lead SMS & Email</span>
-                                  <a
-                                    href="#"
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      setIsLookbookOpen(true);
-                                      setLookbookPage(0);
-                                    }}
-                                    className="inline-flex items-center gap-1 text-[10px] font-bold text-white hover:underline"
-                                  >
-                                    Preview lookbook <ExternalLink className="size-3" />
-                                  </a>
-                                </div>
-                              </div>
-                            ) : isAppointmentCard ? (
-                              /* Premium Calendar Booking Confirmation Card */
-                              <div className="bg-success/5 border border-success/30 rounded-xl p-4 max-w-[400px] shadow-2xl relative overflow-hidden">
-                                <div className="flex gap-3">
-                                  <div className="size-10 bg-success/15 rounded-lg flex items-center justify-center border border-success/30 shrink-0 text-success">
-                                    <Calendar className="size-5" />
-                                  </div>
-                                  <div className="min-w-0">
-                                    <h4 className="text-xs font-bold text-white">Site Walkthrough Booked</h4>
-                                    <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">
-                                      {msg.content.replace("📆 Site Visit Booked: ", "")}
-                                    </p>
-                                  </div>
-                                </div>
-                                <div className="border-t border-success/10 mt-4 pt-3 flex items-center justify-between">
-                                  <span className="inline-flex items-center gap-1 text-[9px] text-success font-semibold tracking-wider uppercase font-mono">
-                                    <Check className="size-3" /> Confirmed Calendar Lock
+
+                                <div className="flex items-center gap-2 flex-wrap min-w-0">
+                                  <span className="font-semibold text-xs text-foreground">
+                                    {isAI ? "AI Assistant" : isUser ? "You" : (activeChat.lead?.name || "Client")}
                                   </span>
-                                  {isGCalConnected ? (
-                                    <span className="inline-flex items-center gap-1 text-[9px] text-success font-bold font-mono">
-                                      <Check className="size-2.5" /> Synced to GCal
+                                  <span className="text-[11px] text-muted-foreground font-mono">
+                                    &lt;{isAI ? "ai@buildersedge.ai" : isUser ? "sales@yourcompany.com" : (activeChat.lead?.email || `${activeChat.lead?.name?.toLowerCase().replace(/\s+/g, '') || 'client'}@email.com`)}&gt;
+                                  </span>
+                                  {isAI && (
+                                    <span className="px-1.5 py-0.5 rounded text-[8.5px] font-mono font-medium bg-primary/10 text-primary border border-primary/20">
+                                      AI Auto-Reply
                                     </span>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1 text-[9px] text-amber-500/80 font-bold font-mono" title="Connect Google Business Reviews integration in Settings to sync calendar">
-                                      <AlertCircle className="size-2.5" /> Local Lock (GCal Disconnected)
+                                  )}
+                                  {isUser && (
+                                    <span className="px-1.5 py-0.5 rounded text-[8.5px] font-mono font-medium bg-secondary text-muted-foreground border border-border">
+                                      Sent
                                     </span>
                                   )}
                                 </div>
                               </div>
-                            ) : (
-                              /* Standard Message Bubble */
-                              <div
-                                className={`relative p-3 rounded-2xl text-xs leading-relaxed max-w-[70%] font-sans select-text shadow-xl ${isUser
-                                  ? "bg-primary text-black rounded-tr-none font-medium opacity-100"
-                                  : "bg-[#151720] border border-white/10 text-white rounded-tl-none opacity-100"
-                                  }`}
-                              >
-                                {isAI && (
-                                  <div className="absolute -top-2 -left-2 bg-[#0B0B0C] rounded-full p-1 border border-primary/30 text-primary shadow-sm" title="Generated by AI Concierge">
-                                    <Sparkles className="size-3" />
-                                  </div>
-                                )}
-                                <p className="whitespace-pre-line">{msg.content}</p>
-                              </div>
-                            )}
 
-                            {/* Hover Timestamp metadata display */}
-                            <span className="text-[9px] text-muted-foreground/60 mt-1 select-none font-mono px-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                              {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </span>
+                              <span className="text-[10.5px] text-muted-foreground font-mono shrink-0 select-none">
+                                {msgDate.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                            </div>
+
+                            {/* Message Content Body */}
+                            <div className="pl-9 text-xs sm:text-[13px] text-foreground/90 leading-relaxed font-sans select-text space-y-2.5">
+                              {isBrochureCard ? (
+                                /* Shared document card */
+                                <div className="bg-[#12131a] border border-border rounded-xl p-3.5 max-w-[420px] shadow-sm relative overflow-hidden">
+                                  <div className="flex gap-3 items-center">
+                                    <div className="size-9 bg-primary/10 rounded-lg flex items-center justify-center border border-primary/20 shrink-0 text-primary">
+                                      <FileText className="size-4.5" />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <h4 className="text-xs font-semibold text-white truncate">{msg.content.replace("📄 Document Shared: ", "").split(".pdf|size=")[0]}</h4>
+                                      <p className="text-[10px] text-muted-foreground mt-0.5">PDF Document · {msg.content.includes("|size=") ? msg.content.split("|size=")[1] : "4.8 MB"}</p>
+                                    </div>
+                                  </div>
+                                  <div className="border-t border-border/40 mt-3 pt-2.5 flex items-center justify-between">
+                                    <span className="text-[9px] text-muted-foreground font-mono">Attachment</span>
+                                    <a
+                                      href="#"
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        setIsLookbookOpen(true);
+                                        setLookbookPage(0);
+                                      }}
+                                      className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-primary hover:underline"
+                                    >
+                                      View PDF <ExternalLink className="size-3" />
+                                    </a>
+                                  </div>
+                                </div>
+                              ) : isAppointmentCard ? (
+                                /* Meeting Scheduled Card */
+                                <div className="bg-success/5 border border-success/30 rounded-xl p-3.5 max-w-[420px] shadow-sm relative overflow-hidden">
+                                  <div className="flex gap-3 items-center">
+                                    <div className="size-9 bg-success/15 rounded-lg flex items-center justify-center border border-success/30 shrink-0 text-success">
+                                      <Calendar className="size-4.5" />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <h4 className="text-xs font-semibold text-white">Meeting Scheduled</h4>
+                                      <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">
+                                        {msg.content.replace("📆 Site Visit Booked: ", "")}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="border-t border-success/10 mt-3 pt-2 flex items-center justify-between">
+                                    <span className="inline-flex items-center gap-1 text-[9px] text-success font-medium font-mono">
+                                      <Check className="size-2.5" /> Confirmed
+                                    </span>
+                                  </div>
+                                </div>
+                              ) : isFileAttachment ? (
+                                /* Document / File Attachment */
+                                (() => {
+                                  const parts = msg.content.replace("📎 File Attachment: ", "").split("\n\n");
+                                  const metaStr = parts[0] || "";
+                                  const caption = parts.slice(1).join("\n\n");
+                                  const [fileName, sizeParam, typeParam, dataParam] = metaStr.split("|");
+                                  const fileSize = sizeParam ? sizeParam.replace("size=", "") : "File";
+                                  const fileType = typeParam ? typeParam.replace("type=", "") : "document";
+                                  const dataUrl = dataParam ? dataParam.replace("data=", "") : undefined;
+
+                                  return (
+                                    <div className="bg-[#12131a] border border-border rounded-xl p-3 max-w-[420px] shadow-sm space-y-2">
+                                      <div className="flex gap-2.5 items-center">
+                                        <div className="size-9 bg-primary/10 rounded-lg flex items-center justify-center border border-primary/20 shrink-0 text-primary">
+                                          <FileText className="size-4.5" />
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                          <h4 className="text-xs font-semibold text-white truncate">{fileName || "Attachment"}</h4>
+                                          <span className="text-[10px] text-muted-foreground font-mono">
+                                            {fileSize} · {fileType.includes("pdf") ? "PDF" : "File"}
+                                          </span>
+                                        </div>
+                                      </div>
+                                      {caption && (
+                                        <p className="text-xs text-white/90 pt-1 border-t border-white/5 leading-relaxed whitespace-pre-line">
+                                          {caption}
+                                        </p>
+                                      )}
+                                      <div className="border-t border-white/5 pt-2 flex items-center justify-between">
+                                        <span className="text-[9px] text-muted-foreground font-mono">Attachment</span>
+                                        {dataUrl ? (
+                                          <a
+                                            href={dataUrl}
+                                            download={fileName}
+                                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline cursor-pointer"
+                                          >
+                                            <Download className="size-3" /> Download
+                                          </a>
+                                        ) : (
+                                          <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
+                                            <Check className="size-2.5" /> Attached
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })()
+                              ) : isImageAttachment ? (
+                                /* Image Attachment */
+                                (() => {
+                                  const parts = msg.content.replace("🖼️ Image Shared: ", "").split("\n\n");
+                                  const metaStr = parts[0] || "";
+                                  const caption = parts.slice(1).join("\n\n");
+                                  const [fileName, sizeParam, dataParam] = metaStr.split("|");
+                                  const fileSize = sizeParam ? sizeParam.replace("size=", "") : "";
+                                  const dataUrl = dataParam ? dataParam.replace("data=", "") : undefined;
+
+                                  return (
+                                    <div className="bg-[#12131a] border border-border rounded-xl p-2.5 max-w-[420px] shadow-sm space-y-2">
+                                      {dataUrl && (
+                                        <div
+                                          onClick={() => setActiveImageModalUrl(dataUrl)}
+                                          className="relative rounded-lg overflow-hidden border border-border max-h-[240px] bg-black/40 cursor-pointer group/img"
+                                        >
+                                          <img src={dataUrl} alt={fileName} className="w-full h-auto object-cover max-h-[240px] group-hover/img:scale-105 transition-transform duration-200" />
+                                        </div>
+                                      )}
+                                      <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono px-1">
+                                        <span className="truncate max-w-[200px]">{fileName}</span>
+                                        {fileSize && <span>{fileSize}</span>}
+                                      </div>
+                                      {caption && (
+                                        <p className="text-xs text-white/90 pt-1 leading-relaxed border-t border-white/5 whitespace-pre-line">
+                                          {caption}
+                                        </p>
+                                      )}
+                                    </div>
+                                  );
+                                })()
+                              ) : isLinkShared ? (
+                                /* Shared Link */
+                                (() => {
+                                  const parts = msg.content.replace("🔗 Link Shared: ", "").split("\n\n");
+                                  const metaStr = parts[0] || "";
+                                  const caption = parts.slice(1).join("\n\n");
+                                  const [titleParam, urlParam] = metaStr.split("|");
+                                  const title = titleParam || "Shared Link";
+                                  const url = urlParam ? urlParam.replace("url=", "") : "#";
+
+                                  return (
+                                    <div className="bg-[#12131a] border border-border rounded-xl p-3 max-w-[420px] shadow-sm space-y-2">
+                                      <div className="flex gap-2.5 items-start">
+                                        <div className="size-9 bg-primary/10 rounded-lg flex items-center justify-center border border-primary/20 shrink-0 text-primary">
+                                          <Globe className="size-4.5" />
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                          <h4 className="text-xs font-semibold text-white truncate">{title}</h4>
+                                          <p className="text-[10px] text-muted-foreground truncate font-mono">{url}</p>
+                                        </div>
+                                      </div>
+                                      {caption && (
+                                        <p className="text-xs text-white/90 pt-1 border-t border-white/5 leading-relaxed whitespace-pre-line">
+                                          {caption}
+                                        </p>
+                                      )}
+                                      <div className="border-t border-white/5 pt-2 flex items-center justify-between">
+                                        <span className="text-[9px] text-muted-foreground font-mono">Link</span>
+                                        <a
+                                          href={url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-secondary hover:bg-secondary/80 text-foreground text-xs font-medium transition-colors cursor-pointer border border-border"
+                                        >
+                                          Open <ExternalLink className="size-3" />
+                                        </a>
+                                      </div>
+                                    </div>
+                                  );
+                                })()
+                              ) : (
+                                /* Standard Clean Message Text */
+                                <p className="whitespace-pre-line leading-relaxed text-[13.5px] text-foreground/90 font-sans">
+                                  {msg.content}
+                                </p>
+                              )}
+                            </div>
                           </div>
                         </div>
                       );
                     })
                   ) : (
-                    <div className="flex flex-col items-center justify-center h-full text-center">
-                      <MessageSquare className="size-8 text-muted-foreground mb-3" />
-                      <p className="text-xs text-foreground font-semibold">No direct messages yet</p>
-                      <p className="text-[11px] text-muted-foreground mt-1 max-w-xs leading-relaxed">
-                        Send a message to kick off direct communication. All follow-ups will log and track instantly.
+                    <div className="flex flex-col items-center justify-center h-full text-center py-16">
+                      <div className="size-12 rounded-2xl bg-secondary/60 border border-border flex items-center justify-center mb-3">
+                        <Mail className="size-6 text-muted-foreground" />
+                      </div>
+                      <p className="text-sm text-foreground font-semibold">No messages yet</p>
+                      <p className="text-xs text-muted-foreground mt-1 max-w-sm leading-relaxed">
+                        Send a message below to start your conversation with {selectedThread.leadName}.
                       </p>
                     </div>
                   )}
 
                   {/* Typing Indicator for simulated replies */}
                   {isSimulating && (
-                    <div className="flex flex-col items-start w-full group animate-in slide-in-from-bottom-2 duration-150 mt-2 mb-2">
-                      <div className="relative p-3 rounded-2xl text-[13px] bg-[#151720] border border-white/10 text-white rounded-tl-none opacity-100 shadow-xl flex items-center gap-1.5 h-10 w-16">
-                        <span className="w-1.5 h-1.5 rounded-full bg-white/40 animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                        <span className="w-1.5 h-1.5 rounded-full bg-white/40 animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                        <span className="w-1.5 h-1.5 rounded-full bg-white/40 animate-bounce" style={{ animationDelay: '300ms' }}></span>
-                      </div>
+                    <div className="flex items-center gap-2 p-3 text-xs text-muted-foreground font-mono animate-in fade-in duration-150">
+                      <Loader2 className="size-3.5 animate-spin text-primary" />
+                      <span>AI is generating reply...</span>
                     </div>
                   )}
 
@@ -1381,29 +1546,8 @@ function MessagesPage() {
                 </div>
               </div>
 
-              {/* QUICK INSTANT RESPONSE SHORTCUTS */}
-              <div className="px-6 py-2 bg-[#080808]/40 border-t border-border/40 flex items-center gap-2 overflow-x-auto select-none">
-                <span className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground shrink-0 select-none">
-                  Draft Quick Tag:
-                </span>
-                {[
-                  "What is your construction timeline?",
-                  "Let's meet at the Lakeway site this Saturday!",
-                  "Could you confirm your target budget range?",
-                  "Here is our standard specifications list."
-                ].map((suggestText) => (
-                  <button
-                    key={suggestText}
-                    onClick={() => handleSuggestionClick(suggestText)}
-                    className="px-2.5 py-1 text-[10px] bg-white/[0.02] border border-white/[0.05] hover:bg-white/[0.06] hover:border-white/10 text-muted-foreground hover:text-white rounded-full transition-all shrink-0 active:scale-95"
-                  >
-                    {suggestText}
-                  </button>
-                ))}
-              </div>
-
-              {/* MESSAGE COMPOSER FOOTER INPUT */}
-              <div className="p-4 border-t border-border bg-[#0B0B0C]/80 backdrop-blur-md relative z-30">
+              {/* SIMPLE COMPACT COMPOSER */}
+              <div className="p-4 border-t border-border bg-[#090a0e] relative z-30 shrink-0">
                 {isUserScrolledUp && (
                   <button
                     type="button"
@@ -1411,64 +1555,205 @@ function MessagesPage() {
                       e.preventDefault();
                       scrollToBottom(true, "smooth");
                     }}
-                    className="absolute -top-20 left-1/2 -translate-x-1/2 z-50 pointer-events-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#141418]/95 border border-primary/50 text-primary shadow-2xl hover:bg-primary hover:text-black hover:scale-105 active:scale-95 transition-all group backdrop-blur-md cursor-pointer animate-in fade-in slide-in-from-bottom-2 duration-200"
+                    className="absolute -top-12 left-1/2 -translate-x-1/2 z-50 pointer-events-auto flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#141418]/95 border border-primary/50 text-primary shadow-xl hover:bg-primary hover:text-black transition-all cursor-pointer animate-in fade-in slide-in-from-bottom-1 duration-150 text-xs"
                     title="Scroll to latest messages"
                   >
-                    <ChevronDown className="size-4 transition-transform group-hover:translate-y-0.5" />
-                    {newMessagesCount > 0 ? (
-                      <span className="flex size-4 items-center justify-center rounded-full bg-emerald-500 text-[10px] font-bold text-black shadow">
-                        {newMessagesCount}
-                      </span>
-                    ) : (
-                      <span className="text-[11px] font-medium tracking-tight">Latest</span>
-                    )}
+                    <ChevronDown className="size-3.5" />
+                    <span>Latest Messages</span>
                   </button>
                 )}
-                <form onSubmit={handleSendMessage} className="relative flex items-center">
-                  <input
-                    type="text"
-                    required
-                    disabled={isSending}
-                    ref={inputRef}
-                    value={newMessageText}
-                    onChange={(e) => setNewMessageText(e.target.value)}
-                    placeholder={`Type message to ${selectedThread.leadName}... (Press Enter to Send)`}
-                    className="w-full bg-[#141414] border border-border focus:border-primary/80 transition-all rounded-lg pl-4 pr-12 py-3 text-xs text-white placeholder-muted-foreground focus:outline-none focus:ring-0 leading-relaxed disabled:opacity-40"
-                  />
-                  <button
-                    type="submit"
-                    disabled={isSending || !newMessageText.trim()}
-                    className="absolute right-3 p-1.5 bg-primary rounded-md text-black hover:bg-primary/95 transition-all disabled:opacity-40 active:scale-95 flex items-center justify-center cursor-pointer"
-                  >
-                    {isSending ? (
-                      <Loader2 className="size-3.5 animate-spin text-black" />
-                    ) : (
-                      <Send className="size-3.5 text-black" />
-                    )}
-                  </button>
-                </form>
+
+                {/* Hidden File Input Picker */}
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileSelect}
+                  className="hidden"
+                  accept="image/*,application/pdf,.doc,.docx,.cad,.dwg,.txt,.csv"
+                />
+
+                {/* Pre-Send Attachment Banner (File) */}
+                {attachedFile && (
+                  <div className="mb-2.5 p-2 px-3 rounded-lg bg-secondary border border-border flex items-center justify-between text-xs text-foreground animate-in slide-in-from-bottom-1">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <FileText className="size-4 text-primary shrink-0" />
+                      <span className="font-medium text-xs truncate">{attachedFile.name}</span>
+                      <span className="text-[10px] text-muted-foreground font-mono">({attachedFile.size})</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setAttachedFile(null)}
+                      className="p-1 rounded hover:bg-white/10 text-muted-foreground hover:text-foreground cursor-pointer"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Pre-Send Attachment Banner (Link) */}
+                {attachedLink && (
+                  <div className="mb-2.5 p-2 px-3 rounded-lg bg-secondary border border-border flex items-center justify-between text-xs text-foreground animate-in slide-in-from-bottom-1">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <Globe className="size-4 text-primary shrink-0" />
+                      <span className="font-medium text-xs truncate">{attachedLink.title}</span>
+                      <span className="text-[10px] text-muted-foreground font-mono truncate max-w-[200px]">({attachedLink.url})</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setAttachedLink(null)}
+                      className="p-1 rounded hover:bg-white/10 text-muted-foreground hover:text-foreground cursor-pointer"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Unified Clean Composer Box */}
+                <div className="rounded-xl border border-border bg-[#0d0e14] focus-within:border-primary/60 transition-all overflow-hidden shadow-sm">
+                  {/* Optional CC/Subject expander */}
+                  {showCcDrawer && (
+                    <div className="p-2.5 border-b border-border/40 bg-secondary/20 flex flex-col gap-2 text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-mono text-muted-foreground uppercase font-semibold shrink-0">Subject:</span>
+                        <input
+                          type="text"
+                          value={emailSubject}
+                          onChange={(e) => setEmailSubject(e.target.value)}
+                          className="w-full bg-transparent text-xs text-foreground focus:outline-none"
+                          placeholder={`Re: Inquiry · ${selectedThread.leadName}`}
+                        />
+                      </div>
+                      <div className="flex items-center gap-2 pt-1 border-t border-border/30">
+                        <span className="text-[10px] font-mono text-muted-foreground uppercase font-semibold shrink-0">CC:</span>
+                        <input
+                          type="email"
+                          value={ccEmail}
+                          onChange={(e) => setCcEmail(e.target.value)}
+                          placeholder="team@yourcompany.com"
+                          className="w-full bg-transparent text-xs text-foreground focus:outline-none font-mono"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Single Line Default Auto-Expanding Textarea */}
+                  <div className="px-3 py-2 flex items-center">
+                    <textarea
+                      ref={textareaRef}
+                      rows={1}
+                      value={newMessageText}
+                      onChange={(e) => {
+                        setNewMessageText(e.target.value);
+                        e.target.style.height = "auto";
+                        e.target.style.height = `${Math.min(e.target.scrollHeight, 180)}px`;
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSendMessage();
+                        }
+                      }}
+                      placeholder={`Reply to ${selectedThread.leadName}... (Enter to send, Shift+Enter for new line)`}
+                      className="w-full bg-transparent p-0 text-xs sm:text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none resize-none min-h-[24px] max-h-[180px] font-sans leading-normal custom-scrollbar"
+                    />
+                  </div>
+
+                  {/* Action Toolbar */}
+                  <div className="px-3 py-2 border-t border-border/30 bg-secondary/10 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isSending}
+                        className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
+                        title="Attach File"
+                      >
+                        <Paperclip className="size-4" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsLinkModalOpen(true)}
+                        disabled={isSending}
+                        className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
+                        title="Add Link"
+                      >
+                        <Globe className="size-4" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsPortfolioModalOpen(true)}
+                        disabled={isSending}
+                        className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
+                        title="Attach PDF"
+                      >
+                        <BookOpen className="size-4" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsSchedulingOpen(true)}
+                        disabled={isSending}
+                        className="p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
+                        title="Schedule Meeting"
+                      >
+                        <Calendar className="size-4" />
+                      </button>
+
+                      <div className="w-px h-4 bg-border mx-1" />
+
+                      <button
+                        type="button"
+                        onClick={() => setShowCcDrawer(prev => !prev)}
+                        className={`px-2 py-1 rounded text-[10.5px] font-mono transition-colors cursor-pointer ${
+                          showCcDrawer ? "bg-primary/20 text-primary font-bold" : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                        }`}
+                      >
+                        {showCcDrawer ? "Hide CC" : "+ CC / Subject"}
+                      </button>
+                    </div>
+
+                    {/* Send Button */}
+                    <button
+                      type="button"
+                      onClick={() => handleSendMessage()}
+                      disabled={isSending || (!newMessageText.trim() && !attachedFile && !attachedLink)}
+                      className="px-4 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all flex items-center gap-1.5 shadow-sm disabled:opacity-40 cursor-pointer shrink-0"
+                    >
+                      {isSending ? (
+                        <>
+                          <Loader2 className="size-3.5 animate-spin" />
+                          <span>Sending...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Send className="size-3.5" />
+                          <span>Send</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
               </div>
             </>
           ) : (
-            /* LOADING / EMPTY VIEW: Direct Lead Channel Overview */
+            /* LOADING / EMPTY VIEW */
             <div className="flex-1 flex flex-col items-center justify-center p-12 text-center bg-[#070708]/30">
               {isLoadingChat ? (
                 <div className="flex flex-col items-center justify-center gap-2">
                   <Loader2 className="size-8 animate-spin text-muted-foreground" />
-                  <span className="text-xs text-muted-foreground font-mono">Retrieving lead conversation...</span>
+                  <span className="text-xs text-muted-foreground font-mono">Loading conversation...</span>
                 </div>
               ) : (
                 <>
-                  <div className="size-16 mx-auto rounded-full bg-white/[0.02] border border-white/[0.06] flex items-center justify-center mb-6">
-                    <MessageSquare className="size-7 text-muted-foreground" />
+                  <div className="size-14 mx-auto rounded-full bg-secondary border border-border flex items-center justify-center mb-4">
+                    <MessageSquare className="size-6 text-muted-foreground" />
                   </div>
-                  <h2 className="text-md font-bold tracking-tight text-white mb-2">Direct Messaging Channel</h2>
-                  <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto leading-relaxed mb-8">
-                    Communicate directly with your qualified prospects in real-time. Share high-fidelity custom home specifications, schedule private walkthroughs, or let the AI concierge manage threads.
+                  <h2 className="text-sm font-semibold text-foreground mb-1">No conversation selected</h2>
+                  <p className="text-xs text-muted-foreground max-w-sm mx-auto leading-relaxed mb-6">
+                    Choose a conversation from the left to view messages and reply.
                   </p>
-                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.02] border border-white/[0.05] text-[10px] text-muted-foreground font-mono uppercase tracking-widest">
-                    Select a conversation thread to begin
-                  </div>
                 </>
               )}
             </div>
@@ -1482,16 +1767,16 @@ function MessagesPage() {
                 {/* Modal Header */}
                 <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-[#101011]">
                   <div>
-                    <h3 className="font-semibold text-xs text-white uppercase tracking-wider font-mono">
-                      Quick Schedule Site Visit
+                    <h3 className="font-semibold text-xs text-white">
+                      Schedule Meeting
                     </h3>
                     <p className="text-[10px] text-muted-foreground mt-0.5">
-                      Booking for {selectedThread.leadName}
+                      With {selectedThread.leadName}
                     </p>
                   </div>
                   <button
                     onClick={() => setIsSchedulingOpen(false)}
-                    className="p-1 text-muted-foreground hover:text-white rounded-md hover:bg-white/[0.04] transition-colors"
+                    className="p-1 text-muted-foreground hover:text-white rounded-md hover:bg-white/[0.04] transition-colors cursor-pointer"
                   >
                     <X className="size-4" />
                   </button>
@@ -1504,19 +1789,19 @@ function MessagesPage() {
                       <div className="size-12 rounded-full bg-success/15 border border-success/30 flex items-center justify-center text-success animate-bounce">
                         <Check className="size-6" />
                       </div>
-                      <h4 className="text-xs font-bold text-white uppercase tracking-wider font-mono">
-                        Walkthrough Confirmed!
+                      <h4 className="text-xs font-semibold text-white">
+                        Meeting Scheduled!
                       </h4>
                       <p className="text-[10px] text-muted-foreground leading-relaxed">
-                        Site visit logged, invitation emailed, and notification message sent to {selectedThread.leadName}.
+                        Meeting has been scheduled and details sent to {selectedThread.leadName}.
                       </p>
                     </div>
                   ) : (
                     <>
                       {/* Appointment Type */}
                       <div className="space-y-1.5">
-                        <label className="block text-[9px] uppercase tracking-widest text-muted-foreground font-mono font-bold">
-                          Appointment Type
+                        <label className="block text-[10px] font-medium text-muted-foreground">
+                          Meeting Type
                         </label>
                         <div ref={dropdownRef} className="relative w-full">
                           <button
@@ -1563,8 +1848,8 @@ function MessagesPage() {
 
                       {/* Date & Time */}
                       <div className="space-y-1.5">
-                        <label className="block text-[9px] uppercase tracking-widest text-muted-foreground font-mono font-bold">
-                          Date & Time Selection *
+                        <label className="block text-[10px] font-medium text-muted-foreground">
+                          Date & Time *
                         </label>
                         <input
                           type="datetime-local"
@@ -1577,29 +1862,29 @@ function MessagesPage() {
 
                       {/* Location */}
                       <div className="space-y-1.5">
-                        <label className="block text-[9px] uppercase tracking-widest text-muted-foreground font-mono font-bold">
-                          Meeting Location
+                        <label className="block text-[10px] font-medium text-muted-foreground">
+                          Location
                         </label>
                         <input
                           type="text"
                           required
                           value={apptLocation}
                           onChange={(e) => setApptLocation(e.target.value)}
-                          placeholder="e.g. Lakeway Model Estate or Client Lot"
+                          placeholder="e.g. Office or Site Location"
                           className="w-full bg-[#141414] border border-border focus:border-primary/60 rounded-md px-3 py-2 text-xs text-white focus:outline-none"
                         />
                       </div>
 
                       {/* Notes */}
                       <div className="space-y-1.5">
-                        <label className="block text-[9px] uppercase tracking-widest text-muted-foreground font-mono font-bold">
-                          Staff Notes / Directives
+                        <label className="block text-[10px] font-medium text-muted-foreground">
+                          Notes
                         </label>
                         <textarea
                           rows={2}
                           value={apptNotes}
                           onChange={(e) => setApptNotes(e.target.value)}
-                          placeholder="Bring blueprint files, structural lot surveys, or builder contracts..."
+                          placeholder="Add any details or instructions for this meeting..."
                           className="w-full bg-[#141414] border border-border focus:border-primary/60 rounded-md p-3 text-xs text-white focus:outline-none resize-none placeholder:text-muted-foreground/60 leading-relaxed font-sans"
                         />
                       </div>
@@ -1609,7 +1894,7 @@ function MessagesPage() {
                         <button
                           type="button"
                           onClick={() => setIsSchedulingOpen(false)}
-                          className="px-4 py-2 text-xs font-semibold text-muted-foreground hover:text-white hover:bg-white/[0.02] rounded-md transition-colors"
+                          className="px-4 py-2 text-xs font-semibold text-muted-foreground hover:text-white hover:bg-white/[0.02] rounded-md transition-colors cursor-pointer"
                         >
                           Cancel
                         </button>
@@ -1617,15 +1902,15 @@ function MessagesPage() {
                         <button
                           type="submit"
                           disabled={isBooking || !apptDateTime}
-                          className="px-4 py-2 bg-white text-black text-xs font-bold rounded-md hover:bg-white/90 transition-colors disabled:opacity-40 flex items-center gap-1.5"
+                          className="px-4 py-2 bg-primary text-primary-foreground text-xs font-semibold rounded-md hover:bg-primary/90 transition-colors disabled:opacity-40 flex items-center gap-1.5 cursor-pointer"
                         >
                           {isBooking ? (
                             <>
-                              <Loader2 className="size-3.5 animate-spin text-black" /> Booking...
+                              <Loader2 className="size-3.5 animate-spin" /> Scheduling...
                             </>
                           ) : (
                             <>
-                              Lock Appointment & Notify
+                              Schedule Meeting
                             </>
                           )}
                         </button>
@@ -1638,7 +1923,7 @@ function MessagesPage() {
             </div>
           )}
 
-          {/* LOOKBOOK PREVIEW MODAL */}
+          {/* DOCUMENT PREVIEW MODAL */}
           {isLookbookOpen && (
             <div className="absolute inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-6 animate-in fade-in duration-200">
               <div className="w-full max-w-2xl bg-[#09090a]/95 border border-white/[0.08] rounded-2xl shadow-2xl flex flex-col h-[520px] overflow-hidden animate-in zoom-in-95 duration-150">
@@ -1647,18 +1932,18 @@ function MessagesPage() {
                   <div className="flex items-center gap-2">
                     <FileText className="size-4 text-primary" />
                     <div>
-                      <h3 className="font-semibold text-xs text-white uppercase tracking-wider font-mono">
-                        Lookbook Preview: Your Company Portfolio
+                      <h3 className="font-semibold text-xs text-white">
+                        Document Preview
                       </h3>
                       <p className="text-[10px] text-muted-foreground mt-0.5">
-                        High-Fidelity Architectural & Custom Specifications
+                        Project Overview & Specifications
                       </p>
                     </div>
                   </div>
                   <button
                     type="button"
                     onClick={() => setIsLookbookOpen(false)}
-                    className="p-1.5 text-muted-foreground hover:text-white rounded-md hover:bg-white/[0.04] transition-colors"
+                    className="p-1.5 text-muted-foreground hover:text-white rounded-md hover:bg-white/[0.04] transition-colors cursor-pointer"
                   >
                     <X className="size-4" />
                   </button>
@@ -2073,6 +2358,111 @@ function MessagesPage() {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* INSERT LINK DIALOG */}
+      {isLinkModalOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-[#0e0f14] border border-border w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="px-6 py-4 border-b border-border flex items-center justify-between bg-[#12131b]">
+              <div className="flex items-center gap-2.5">
+                <div className="size-8 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
+                  <Globe className="size-4" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-sm text-foreground">Add Web Link</h3>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Attach a web link or online resource to your message.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsLinkModalOpen(false)}
+                className="size-7 rounded-lg hover:bg-white/10 text-muted-foreground hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddLink} className="p-6 space-y-4">
+              {/* URL Input */}
+              <div className="space-y-1.5">
+                <label className="block text-[10px] font-medium text-muted-foreground">
+                  URL *
+                </label>
+                <input
+                  type="url"
+                  required
+                  value={linkInputUrl}
+                  onChange={(e) => setLinkInputUrl(e.target.value)}
+                  placeholder="https://example.com/..."
+                  className="w-full bg-[#181924] border border-border focus:border-primary rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none font-mono"
+                  autoFocus
+                />
+              </div>
+
+              {/* Title / Description */}
+              <div className="space-y-1.5">
+                <label className="block text-[10px] font-medium text-muted-foreground">
+                  Display Title (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={linkInputTitle}
+                  onChange={(e) => setLinkInputTitle(e.target.value)}
+                  placeholder="e.g. Project Photos / Spec Sheet"
+                  className="w-full bg-[#181924] border border-border focus:border-primary rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => setIsLinkModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs text-muted-foreground hover:text-white transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!linkInputUrl.trim()}
+                  className="px-5 py-2 rounded-xl bg-primary text-black text-xs font-bold hover:bg-primary/90 transition-all disabled:opacity-40 cursor-pointer shadow-md flex items-center gap-1.5"
+                >
+                  <Link2 className="size-3.5" /> Attach Link
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* FULLSCREEN IMAGE LIGHTBOX MODAL */}
+      {activeImageModalUrl && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-in fade-in duration-200">
+          <div className="fixed inset-0" onClick={() => setActiveImageModalUrl(null)} />
+          <div className="relative max-w-4xl max-h-[90vh] flex flex-col items-center z-10 animate-in zoom-in-95 duration-150">
+            <div className="absolute -top-12 right-0 flex items-center gap-2">
+              <a
+                href={activeImageModalUrl}
+                download="estate-photo.jpg"
+                className="size-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer shadow-lg"
+                title="Download image"
+              >
+                <Download className="size-4" />
+              </a>
+              <button
+                onClick={() => setActiveImageModalUrl(null)}
+                className="size-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer shadow-lg"
+                title="Close"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+            <img
+              src={activeImageModalUrl}
+              alt="Fullscreen attachment"
+              className="max-h-[80vh] w-auto rounded-2xl object-contain shadow-2xl border border-white/10"
+            />
           </div>
         </div>
       )}

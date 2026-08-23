@@ -129,15 +129,15 @@ function LoginRoute() {
         >
           {/* Brand Mark */}
           <div className="flex items-center gap-3.5 mb-8">
-            <div className="size-10 rounded-full border border-white/20 bg-white/[0.06] flex items-center justify-center font-nevera text-base font-bold text-[#e5d9c5] shadow-lg shadow-[#e5d9c5]/10">
-              W
+            <div className="size-11 rounded-xl border border-white/20 bg-black/60 flex items-center justify-center p-1.5 shadow-lg shadow-[#e5d9c5]/10">
+              <img src="/weaverframe-mark-transparent.png" alt="WeaverFrame" className="size-full object-contain" />
             </div>
             <div>
               <span className="font-nevera text-xl tracking-[0.2em] uppercase text-white font-semibold block leading-none">
                 WeaverFrame
               </span>
               <span className="text-[9px] font-mono tracking-widest text-[#e5d9c5]/70 uppercase block mt-1">
-                Architecture & AI OS
+                AI Sales Concierge
               </span>
             </div>
           </div>

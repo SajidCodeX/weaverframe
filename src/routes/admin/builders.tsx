@@ -1,26 +1,30 @@
 import { createFileRoute, redirect, useRouter } from '@tanstack/react-router'
 import { useState, useEffect } from 'react'
 import { Shell } from '@/components/dashboard/Shell'
-import { Card } from '@/components/dashboard/primitives'
+import { Card, Badge } from '@/components/dashboard/primitives'
 import { getBuildersData, createBuilderInvite, toggleBuilderStatus, deleteBuilder, startBuilderPreview } from '@/lib/admin'
 import { getSessionFn } from '@/lib/auth'
-import { MoreHorizontal } from 'lucide-react'
+import { RoutePending } from '@/components/dashboard/RoutePending'
+import { MoreHorizontal, Building2, Plus, Copy, Check, ExternalLink, Key, Power, Trash2, Users, ArrowUpRight, ShieldCheck } from 'lucide-react'
 
 export const Route = createFileRoute('/admin/builders')({
   head: () => ({
-    meta: [{ title: "Manage Builders — WeaverFrame Admin" }]
+    meta: [{ title: "Manage Builders — WeaverFrame HQ" }]
   }),
-  beforeLoad: async ({ context }) => {
+  beforeLoad: ({ context }) => {
     if (typeof window === 'undefined') return;
     const session = context.session
     if (!session || session.role !== 'admin') {
       throw redirect({ to: '/' })
     }
   },
-  loader: async () => {
+  loader: () => {
     if (typeof window === 'undefined') return [];
-    return await getBuildersData();
+    return getBuildersData();
   },
+  staleTime: 60_000,
+  pendingMs: 0,
+  pendingComponent: () => <RoutePending title="Platform Builders" type="team" />,
   component: BuildersRoute,
 })
 
@@ -32,6 +36,7 @@ function BuildersRoute() {
   const [inviteLink, setInviteLink] = useState('')
   const [copied, setCopied] = useState(false)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
   const router = useRouter()
 
   useEffect(() => {
@@ -95,7 +100,6 @@ function BuildersRoute() {
     try {
       const res = await createBuilderInvite({ data: { companyName, email } })
       if (res.success && res.inviteLink) {
-        // Provide the full URL
         setInviteLink(window.location.origin + res.inviteLink)
         setCompanyName('')
         setEmail('')
@@ -106,96 +110,180 @@ function BuildersRoute() {
     }
   }
 
+  const filteredBuilders = builders.filter((b: any) =>
+    b.companyName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    b.users.some((u: any) => u.email.toLowerCase().includes(searchQuery.toLowerCase()))
+  )
+
   return (
-    <Shell title="Builders">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h2 className="text-2xl font-bold font-display tracking-tight text-white">Platform Builders</h2>
-          <p className="text-sm text-muted-foreground mt-1">Manage active builder accounts and send invites.</p>
+    <Shell title="Platform Builders">
+      {/* ── Top Actions Bar ── */}
+      <div className="flex items-center justify-between gap-4 mb-6">
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-mono uppercase tracking-wider text-white/50">
+            Registered Builders (<strong className="text-white">{builders.length}</strong>)
+          </span>
         </div>
+
         <button
           onClick={() => setIsInviting(!isInviting)}
-          className="inline-flex items-center justify-center rounded-md bg-white px-4 py-2 text-sm font-medium text-black transition-colors hover:bg-neutral-200"
+          className="px-4 py-2.5 bg-[#e5d9c5] text-black text-xs font-bold uppercase tracking-wider hover:bg-white transition-all flex items-center justify-center gap-2 rounded-lg shadow-md cursor-pointer shrink-0"
         >
-          {isInviting ? 'Cancel' : 'Invite New Builder'}
+          <Plus className="size-4" />
+          {isInviting ? 'Close Form' : 'Invite New Builder'}
         </button>
       </div>
 
+      {/* ── Provisioning Card ── */}
       {isInviting && (
-        <Card className="mb-8 p-6 bg-secondary/20 border-border/50">
-          <h3 className="text-lg font-semibold text-white mb-4">Send Builder Invite</h3>
-          <form onSubmit={handleInvite} className="flex gap-4 items-end">
-            <div className="flex-1">
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Company Name</label>
+        <div className="mb-8 p-6 rounded-2xl border border-border bg-card shadow-sm">
+          <div className="flex items-center gap-2.5 mb-1.5">
+            <Building2 className="size-4 text-[#c9a84c] dark:text-[#e5d9c5]" />
+            <h3 className="font-nevera text-base text-foreground font-normal tracking-wide">
+              Invite New Builder
+            </h3>
+          </div>
+          <p className="text-xs text-muted-foreground mb-5 font-light">
+            Creates a new builder organization and generates an onboarding setup link.
+          </p>
+
+          <form onSubmit={handleInvite} className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-end">
+            <div className="sm:col-span-5">
+              <label className="block text-[11px] font-mono uppercase tracking-wider text-foreground/80 mb-1.5">
+                Builder Firm / Company Name
+              </label>
               <input
                 type="text"
                 required
                 value={companyName}
                 onChange={e => setCompanyName(e.target.value)}
-                className="w-full bg-[#0a0a0a] border border-[#333] rounded-md px-3 py-2 text-sm text-white focus:ring-1 focus:ring-white outline-none"
-                placeholder="Apex Homes"
+                className="w-full bg-input border border-border rounded-lg px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-1 focus:ring-primary/30 outline-none transition-all"
+                placeholder="e.g. Apex Luxury Estates"
               />
             </div>
-            <div className="flex-1">
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Owner Email</label>
+            <div className="sm:col-span-5">
+              <label className="block text-[11px] font-mono uppercase tracking-wider text-foreground/80 mb-1.5">
+                Principal Owner Email
+              </label>
               <input
                 type="email"
                 required
                 value={email}
                 onChange={e => setEmail(e.target.value)}
-                className="w-full bg-[#0a0a0a] border border-[#333] rounded-md px-3 py-2 text-sm text-white focus:ring-1 focus:ring-white outline-none"
-                placeholder="owner@apexhomes.com"
+                className="w-full bg-input border border-border rounded-lg px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-1 focus:ring-primary/30 outline-none transition-all"
+                placeholder="owner@apexluxury.com"
               />
             </div>
-            <button type="submit" className="bg-white text-black px-4 py-2 rounded-md text-sm font-medium hover:bg-neutral-200 transition-colors">
-              Generate Link
-            </button>
+            <div className="sm:col-span-2">
+              <button
+                type="submit"
+                className="w-full py-2.5 px-4 bg-[#e5d9c5] text-black text-xs font-bold uppercase tracking-wider rounded-lg hover:bg-white transition-all shadow-md cursor-pointer"
+              >
+                Generate Link
+              </button>
+            </div>
           </form>
 
           {inviteLink && (
-            <div className="mt-4 p-3 bg-success/10 border border-success/20 rounded-md">
-              <p className="text-sm text-success font-medium mb-2">Invite generated successfully! Send this link to the builder:</p>
+            <div className="mt-5 p-4 bg-emerald-500/10 border border-emerald-500/25 rounded-xl">
+              <p className="text-xs text-emerald-500 dark:text-emerald-400 font-mono font-medium mb-2 flex items-center gap-2">
+                <Check className="size-3.5" />
+                Tenant provisioned successfully! Share this private activation link:
+              </p>
               <div className="flex items-center gap-2">
                 <input 
                   type="text" 
                   readOnly 
                   value={inviteLink} 
-                  className="flex-1 bg-black/50 border border-success/30 rounded px-2 py-1 text-xs font-mono text-white selection:bg-success/30"
+                  className="flex-1 bg-input border border-emerald-500/30 rounded-lg px-3 py-2 text-xs font-mono text-foreground selection:bg-emerald-500/30 outline-none"
                   onClick={e => (e.target as HTMLInputElement).select()}
                 />
                 <button 
                   onClick={handleCopy}
-                  className="text-xs bg-success/20 hover:bg-success/30 text-success px-2 py-1 rounded transition-colors"
+                  className="px-4 py-2 text-xs font-mono font-bold uppercase bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-600 dark:text-emerald-300 rounded-lg border border-emerald-500/30 transition-colors flex items-center gap-1.5 cursor-pointer shrink-0"
                 >
-                  {copied ? 'Copied!' : 'Copy'}
+                  {copied ? <Check className="size-3.5 text-emerald-500" /> : <Copy className="size-3.5" />}
+                  {copied ? 'Copied' : 'Copy'}
                 </button>
               </div>
             </div>
           )}
-        </Card>
+        </div>
       )}
 
-      <Card>
-        <div className="overflow-x-auto transition-all duration-200 ease-in-out" style={{ paddingBottom: openMenuId ? '180px' : '0' }}>
+      {/* ── Table Controls & Search ── */}
+      <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
+        <div className="p-4 sm:p-5 border-b border-border flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-mono uppercase tracking-widest text-[#c9a84c] dark:text-[#e5d9c5] font-semibold">
+              Active Tenants ({filteredBuilders.length})
+            </span>
+          </div>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search by company or email..."
+            className="w-64 bg-input border border-border rounded-lg px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+          />
+        </div>
+
+        <div className="overflow-x-auto transition-all duration-200 ease-in-out" style={{ paddingBottom: openMenuId ? '200px' : '0' }}>
           <table className="w-full text-sm text-left">
-            <thead className="text-[10px] text-muted-foreground uppercase tracking-wider bg-secondary/30 border-b border-border">
+            <thead className="text-[10px] font-mono text-muted-foreground uppercase tracking-[0.16em] bg-muted/40 border-b border-border">
               <tr>
-                <th className="px-6 py-3 font-semibold">Company</th>
-                <th className="px-6 py-3 font-semibold">Owner Email</th>
-                <th className="px-6 py-3 font-semibold text-right">Total Leads</th>
-                <th className="px-6 py-3 font-semibold text-right">Joined</th>
-                <th className="px-6 py-3 font-semibold text-right">Actions</th>
+                <th className="px-6 py-4 font-semibold">Company / Brand</th>
+                <th className="px-6 py-4 font-semibold">Principal Owner</th>
+                <th className="px-6 py-4 font-semibold">Status</th>
+                <th className="px-6 py-4 font-semibold text-right">Leads Processed</th>
+                <th className="px-6 py-4 font-semibold text-right">Provisioned</th>
+                <th className="px-6 py-4 font-semibold text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {builders.map(builder => {
+              {filteredBuilders.map(builder => {
                 const owner = builder.users.find((u: any) => u.builderRole === 'owner') || builder.users[0]
+                const initials = builder.companyName
+                  .split(' ')
+                  .map((n: string) => n[0])
+                  .join('')
+                  .slice(0, 2)
+                  .toUpperCase()
+
                 return (
-                  <tr key={builder.id} className="hover:bg-white/[0.02] transition-colors">
-                    <td className="px-6 py-4 font-medium text-foreground">{builder.companyName}</td>
-                    <td className="px-6 py-4 text-muted-foreground">{owner?.email || 'N/A'}</td>
-                    <td className="px-6 py-4 text-right font-mono text-muted-foreground">{builder._count.leads}</td>
-                    <td className="px-6 py-4 text-right text-muted-foreground">
+                  <tr key={builder.id} className="hover:bg-muted/30 transition-colors group">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="size-8 rounded-lg bg-secondary border border-border flex items-center justify-center font-nevera text-xs font-bold text-[#c9a84c] dark:text-[#e5d9c5] shrink-0">
+                          {initials}
+                        </div>
+                        <div>
+                          <span className="font-medium text-foreground group-hover:text-primary transition-colors block">
+                            {builder.companyName}
+                          </span>
+                          <span className="text-[10px] font-mono text-muted-foreground block">
+                            Plan: {builder.plan?.toUpperCase() || 'TRIAL'}
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-muted-foreground font-mono text-xs">
+                      {owner?.email || 'N/A'}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono font-medium ${
+                        builder.isActive 
+                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' 
+                          : 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20'
+                      }`}>
+                        <span className={`size-1.5 rounded-full ${builder.isActive ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                        {builder.isActive ? 'Active' : 'Suspended'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-right font-mono text-foreground font-medium">
+                      {builder._count.leads.toLocaleString()}
+                    </td>
+                    <td className="px-6 py-4 text-right text-xs font-mono text-muted-foreground">
                       {new Date(builder.createdAt).toLocaleDateString()}
                     </td>
                     <td className="px-6 py-4 text-right relative">
@@ -205,14 +293,15 @@ function BuildersRoute() {
                           e.nativeEvent.stopImmediatePropagation()
                           setOpenMenuId(openMenuId === builder.id ? null : builder.id) 
                         }}
-                        className="text-muted-foreground hover:text-white p-2 rounded-md hover:bg-white/5 transition-colors"
+                        className="text-muted-foreground hover:text-foreground p-2 rounded-lg hover:bg-muted transition-colors cursor-pointer"
+                        title="Actions"
                       >
                         <MoreHorizontal className="size-4" />
                       </button>
                       
                       {openMenuId === builder.id && (
                         <div 
-                          className="absolute right-8 top-10 w-40 bg-[#111] border border-[#333] rounded-md shadow-2xl z-10 py-1 overflow-hidden"
+                          className="absolute right-6 top-10 w-48 bg-popover border border-border rounded-xl shadow-2xl z-20 py-1.5 overflow-hidden"
                           onClick={(e) => {
                             e.stopPropagation()
                             e.nativeEvent.stopImmediatePropagation()
@@ -220,30 +309,34 @@ function BuildersRoute() {
                         >
                           <button 
                             onClick={() => { setOpenMenuId(null); handlePreviewBuilder(builder.id); }}
-                            className="w-full text-left px-4 py-2 text-sm text-foreground hover:bg-white/10 transition-colors"
+                            className="w-full text-left px-4 py-2 text-xs font-medium text-foreground hover:bg-accent transition-colors flex items-center gap-2 cursor-pointer"
                           >
+                            <ExternalLink className="size-3.5" />
                             Open Dashboard
                           </button>
                           {owner && (
                             <button 
                               onClick={() => { setOpenMenuId(null); handleResetPassword(owner.id); }}
-                              className="w-full text-left px-4 py-2 text-sm text-foreground hover:bg-white/10 transition-colors"
+                              className="w-full text-left px-4 py-2 text-xs font-medium text-foreground hover:bg-accent transition-colors flex items-center gap-2 cursor-pointer"
                             >
-                              Reset Password
+                              <Key className="size-3.5" />
+                              Reset Password Link
                             </button>
                           )}
                           <button 
                             onClick={() => { setOpenMenuId(null); handleToggleStatus(builder.id); }}
-                            className="w-full text-left px-4 py-2 text-sm text-foreground hover:bg-white/10 transition-colors"
+                            className="w-full text-left px-4 py-2 text-xs font-medium text-foreground hover:bg-accent transition-colors flex items-center gap-2 cursor-pointer"
                           >
+                            <Power className="size-3.5" />
                             {builder.isActive ? 'Suspend Builder' : 'Activate Builder'}
                           </button>
-                          <div className="h-px bg-[#333] my-1" />
+                          <div className="h-px bg-border my-1.5" />
                           <button 
                             onClick={() => { setOpenMenuId(null); handleDelete(builder.id, builder.companyName); }}
-                            className="w-full text-left px-4 py-2 text-sm text-danger hover:bg-danger/20 transition-colors"
+                            className="w-full text-left px-4 py-2 text-xs font-medium text-red-500 hover:bg-red-500/10 transition-colors flex items-center gap-2 cursor-pointer"
                           >
-                            Delete Builder
+                            <Trash2 className="size-3.5" />
+                            Delete Tenant
                           </button>
                         </div>
                       )}
@@ -251,15 +344,17 @@ function BuildersRoute() {
                   </tr>
                 )
               })}
-              {builders.length === 0 && (
+              {filteredBuilders.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-6 py-8 text-center text-muted-foreground">No builders active yet.</td>
+                  <td colSpan={6} className="px-6 py-12 text-center text-muted-foreground text-xs font-mono">
+                    No builders match your filter.
+                  </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
-      </Card>
+      </div>
     </Shell>
   )
 }

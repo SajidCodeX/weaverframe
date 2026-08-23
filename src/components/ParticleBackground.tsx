@@ -54,8 +54,9 @@ export default function ParticleBackground({ mouseRef }: { mouseRef: React.Mutab
     gl.linkProgram(program);
     gl.useProgram(program);
 
-    // Geometry Data
-    const count = 1500; // Increased count for denser luxury feel
+    // Adaptive particle count: 1500 for Desktop, 600 for Mobile (same visual density, 60% less mobile GPU load)
+    const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+    const count = isMobile ? 600 : 1500;
     const positions = new Float32Array(count * 3);
     const colors = new Float32Array(count * 3);
 
@@ -111,9 +112,13 @@ export default function ParticleBackground({ mouseRef }: { mouseRef: React.Mutab
     const resize = () => {
       const displayWidth = canvas.clientWidth;
       const displayHeight = canvas.clientHeight;
-      if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
-        canvas.width = displayWidth * (window.devicePixelRatio > 1 ? 1.5 : 1);
-        canvas.height = displayHeight * (window.devicePixelRatio > 1 ? 1.5 : 1);
+      // Cap DPR to 1.5 to avoid rendering massive 4K/6K surfaces on high-density mobile screens
+      const dpr = typeof window !== "undefined" ? Math.min(window.devicePixelRatio || 1, 1.5) : 1;
+      const targetW = Math.floor(displayWidth * dpr);
+      const targetH = Math.floor(displayHeight * dpr);
+      if (canvas.width !== targetW || canvas.height !== targetH) {
+        canvas.width = targetW;
+        canvas.height = targetH;
         gl.viewport(0, 0, canvas.width, canvas.height);
         projMatrix = createPerspective(60, canvas.width / canvas.height, 0.1, 100);
       }

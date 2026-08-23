@@ -1,7 +1,7 @@
+import { createFileRoute, useLoaderData, useRouteContext, useRouter, Link, useNavigate } from '@tanstack/react-router';
 import { RoutePending } from "@/components/dashboard/RoutePending";
-import { createFileRoute, useLoaderData, useRouter, useRouteContext } from "@tanstack/react-router";
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Search, Plus, Download, Phone, Calendar, Eye, MoreHorizontal, X, Mail, Check, AlertCircle, Edit, RefreshCw, LayoutGrid, List, MessageSquare, Zap, Star } from "lucide-react";
+import { Search, Plus, Download, Phone, Calendar, Eye, MoreHorizontal, X, Mail, Check, AlertCircle, Edit, RefreshCw, LayoutGrid, List, MessageSquare, Zap, Star, Sparkles, AlertTriangle, Lightbulb, Brain } from "lucide-react";
 import { Shell } from "@/components/dashboard/Shell";
 import { Card, ScoreBadge, StageBadge } from "@/components/dashboard/primitives";
 import { CustomSelect } from "@/components/dashboard/CustomSelect";
@@ -94,6 +94,7 @@ function LeadsPage() {
     }
   }, [search.stage]);
 
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedScores, setSelectedScores] = useState<string[]>([]);
   const [selectedSources, setSelectedSources] = useState<string[]>([]);
   const [selectedDateRange, setSelectedDateRange] = useState<string>(initialDate.range);
@@ -118,15 +119,14 @@ function LeadsPage() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [modalForm, setModalForm] = useState({
     name: "",
-    phone: "",
     email: "",
-    county: "Travis CAD",
-    state: "TX",
-    landPrice: "",
-    estimatedBudget: "",
-    status: "New",
+    phone: "",
+    projectType: "Custom Home Build",
+    estimatedBudget: "500000",
+    source: "Website Contact Form",
     scoreTier: "Hot",
-    source: "Austin Building Permits"
+    status: "New",
+    notes: ""
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalError, setModalError] = useState("");
@@ -331,14 +331,14 @@ function LeadsPage() {
   // Submit manual lead dialog form
   const handleAddManualLead = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!modalForm.name || !modalForm.landPrice) {
-      setModalError("Please provide name and land purchase price");
+    if (!modalForm.name.trim() || !modalForm.email.trim()) {
+      setModalError("Please provide both Full Name and Email Address.");
       return;
     }
 
-    const price = parseInt(modalForm.landPrice);
-    if (isNaN(price) || price <= 0) {
-      setModalError("Land purchase price must be a positive number");
+    const budget = modalForm.estimatedBudget ? parseInt(modalForm.estimatedBudget) : 500000;
+    if (isNaN(budget) || budget <= 0) {
+      setModalError("Estimated Project Budget must be a positive number.");
       return;
     }
 
@@ -348,37 +348,35 @@ function LeadsPage() {
     try {
       await addManualLead({
         data: {
-          name: modalForm.name,
-          phone: modalForm.phone || undefined,
-          email: modalForm.email || undefined,
-          county: modalForm.county,
-          state: modalForm.state,
-          landPrice: price,
-          estimatedBudget: modalForm.estimatedBudget ? parseInt(modalForm.estimatedBudget) : 0,
+          name: modalForm.name.trim(),
+          email: modalForm.email.trim(),
+          phone: modalForm.phone?.trim() || undefined,
+          projectType: modalForm.projectType,
+          estimatedBudget: budget,
           status: modalForm.status,
           scoreTier: modalForm.scoreTier,
-          source: modalForm.source
+          source: modalForm.source,
+          notes: modalForm.notes?.trim() || undefined
         }
       });
 
       // Clear form and reload route state
       setModalForm({
         name: "",
-        phone: "",
         email: "",
-        county: "Travis CAD",
-        state: "TX",
-        landPrice: "",
-        estimatedBudget: "",
-        status: "New",
+        phone: "",
+        projectType: "Custom Home Build",
+        estimatedBudget: "500000",
+        source: "Website Contact Form",
         scoreTier: "Hot",
-        source: "Austin Building Permits"
+        status: "New",
+        notes: ""
       });
       setIsAddModalOpen(false);
       await router.invalidate();
     } catch (err: any) {
       console.error(err);
-      setModalError(err.message || "Failed to create manual lead.");
+      setModalError(err.message || "Failed to create lead.");
     } finally {
       setIsSubmitting(false);
     }
@@ -441,7 +439,7 @@ function LeadsPage() {
       {smsResult && (
         <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 rounded-lg shadow-none border text-sm font-medium animate-in fade-in slide-in-from-bottom-4 duration-200 ${smsResult.ok ? 'bg-success/10 border-success/30 text-success' : 'bg-secondary border-border text-foreground'}`}>
           <Check className="size-4" />
-          {smsResult.ok ? 'SMS sent via Twilio!' : 'SMS outreach logged — configure Twilio in Settings to send live.'}
+          {smsResult.ok ? 'Email outreach dispatched successfully!' : 'Email outreach logged to lead timeline.'}
         </div>
       )}
       {retriggerResult !== null && (
@@ -596,17 +594,21 @@ function LeadsPage() {
             </div>
 
             <button
-              onClick={() => {
-                const icon = document.getElementById('leads-refresh-icon');
-                if (icon) icon.classList.add('animate-spin');
-                router.invalidate().finally(() => {
-                  if (icon) icon.classList.remove('animate-spin');
-                });
+              onClick={async () => {
+                if (isRefreshing) return;
+                setIsRefreshing(true);
+                try {
+                  await router.invalidate();
+                } finally {
+                  setTimeout(() => setIsRefreshing(false), 800);
+                }
               }}
-              className="inline-flex items-center gap-1 text-xs border border-border rounded-md px-2.5 py-1.5 text-foreground hover:bg-secondary transition-colors"
+              disabled={isRefreshing}
+              className="inline-flex items-center gap-1.5 text-xs border border-border rounded-lg px-2.5 py-1.5 text-foreground hover:bg-secondary transition-colors cursor-pointer disabled:opacity-80 shadow-sm"
               title="Refresh Data"
             >
-              <RefreshCw id="leads-refresh-icon" className="size-3.5" /> Refresh
+              <RefreshCw className={`size-3.5 transition-transform duration-300 ${isRefreshing ? 'animate-spin text-[#c9a84c] dark:text-[#e5d9c5]' : ''}`} />
+              <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
             </button>
             <button
               onClick={exportToCSV}
@@ -660,8 +662,8 @@ function LeadsPage() {
                 }
               }}
               onSendSms={(lead) => {
-                const defaultMsg = `Hi ${lead.firstName}, this is Your Company. We noticed your recent permit application in ${lead.county}. Have you selected a builder yet? Reply YES or NO.`;
-                const msg = prompt(`SMS message to ${lead.firstName}:`, defaultMsg);
+                const defaultMsg = `Hi ${lead.firstName}, this is Your Company. We noticed your recent permit application in ${lead.county}. Have you selected a builder yet? Reply to this email to let us know.`;
+                const msg = prompt(`Email message to ${lead.firstName}:`, defaultMsg);
                 if (!msg) return;
                 setSmsSending(lead.id);
                 setSmsResult(null);
@@ -852,8 +854,8 @@ function LeadsPage() {
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       setActiveMoreLead(null);
-                                      const defaultMsg = `Hi ${lead.firstName}, this is Your Company. We noticed your recent permit application in ${lead.county}. Have you selected a builder yet? Reply YES or NO.`;
-                                      const msg = prompt(`SMS message to ${lead.firstName}:`, defaultMsg);
+                                      const defaultMsg = `Hi ${lead.firstName}, this is Your Company. We noticed your recent permit application in ${lead.county}. Have you selected a builder yet? Reply to this email to let us know.`;
+                                      const msg = prompt(`Email message to ${lead.firstName}:`, defaultMsg);
                                       if (!msg) return;
                                       setSmsSending(lead.id);
                                       setSmsResult(null);
@@ -864,7 +866,7 @@ function LeadsPage() {
                                     }}
                                     className="w-full text-left text-xs px-2.5 py-1.5 rounded hover:bg-white/[0.04] text-foreground transition-colors"
                                   >
-                                    Send SMS
+                                    Send Email
                                   </button>
                                   <button
                                     onClick={async (e) => {
@@ -1024,95 +1026,102 @@ function LeadsPage() {
             <form onSubmit={handleAddManualLead} className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs text-muted-foreground mb-1">Full Name *</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Full Name *</label>
                   <input
                     required
                     value={modalForm.name}
                     onChange={(e) => setModalForm({ ...modalForm, name: e.target.value })}
                     placeholder="e.g. John Doe"
-                    className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:border-white/60"
+                    className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-muted-foreground mb-1">Land Purchase Price ($) *</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Email Address *</label>
                   <input
                     required
-                    type="number"
-                    value={modalForm.landPrice}
-                    onChange={(e) => setModalForm({ ...modalForm, landPrice: e.target.value })}
-                    placeholder="e.g. 150000"
-                    className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:border-white/60"
+                    type="email"
+                    value={modalForm.email}
+                    onChange={(e) => setModalForm({ ...modalForm, email: e.target.value })}
+                    placeholder="e.g. john@example.com"
+                    className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Phone Number</label>
+                  <input
+                    value={modalForm.phone}
+                    onChange={(e) => setModalForm({ ...modalForm, phone: e.target.value })}
+                    placeholder="e.g. (512) 555-0199"
+                    className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-muted-foreground mb-1">Project Budget ($) *</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Project Type</label>
+                  <div className="mt-1">
+                    <CustomSelect
+                      value={modalForm.projectType}
+                      onChange={(val) => setModalForm({ ...modalForm, projectType: val })}
+                      options={[
+                        { label: "Custom Home Build", value: "Custom Home Build" },
+                        { label: "Major Renovation / Remodel", value: "Major Renovation / Remodel" },
+                        { label: "Luxury Spec Home", value: "Luxury Spec Home" },
+                        { label: "Architectural Consultation", value: "Architectural Consultation" },
+                        { label: "Commercial / Other", value: "Commercial / Other" }
+                      ]}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Estimated Budget ($) *</label>
                   <input
                     required
                     type="number"
                     value={modalForm.estimatedBudget}
                     onChange={(e) => setModalForm({ ...modalForm, estimatedBudget: e.target.value })}
-                    placeholder="e.g. 600000"
-                    className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:border-white/60"
+                    placeholder="e.g. 750000"
+                    className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60"
                   />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Lead Source</label>
+                  <div className="mt-1">
+                    <CustomSelect
+                      value={modalForm.source}
+                      onChange={(val) => setModalForm({ ...modalForm, source: val })}
+                      options={[
+                        { label: "🌐 Website Contact Form", value: "Website Contact Form" },
+                        { label: "🔍 Google Search / Ads", value: "Google Search / Ads" },
+                        { label: "📱 Meta / Instagram Ads", value: "Meta / Instagram Ads" },
+                        { label: "🤝 Referral / Word of Mouth", value: "Referral / Word of Mouth" },
+                        { label: "🏢 Real Estate Broker / Agent", value: "Real Estate Broker / Agent" },
+                        { label: "🏡 Model Home Walk-in", value: "Model Home Walk-in" },
+                        { label: "✉️ Direct Inbound Email", value: "Direct Inbound Email" },
+                        { label: "📋 Custom Campaign / Event", value: "Custom Campaign / Event" }
+                      ]}
+                    />
+                  </div>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs text-muted-foreground mb-1">Phone Number</label>
-                  <input
-                    value={modalForm.phone}
-                    onChange={(e) => setModalForm({ ...modalForm, phone: e.target.value })}
-                    placeholder="e.g. (512) 555-0199"
-                    className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:border-white/60"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-muted-foreground mb-1">Email Address</label>
-                  <input
-                    type="email"
-                    value={modalForm.email}
-                    onChange={(e) => setModalForm({ ...modalForm, email: e.target.value })}
-                    placeholder="e.g. john@example.com"
-                    className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:border-white/60"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs text-muted-foreground mb-1">County Location</label>
-                  <input
-                    value={modalForm.county}
-                    onChange={(e) => setModalForm({ ...modalForm, county: e.target.value })}
-                    placeholder="e.g. Travis CAD"
-                    className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:border-white/60"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-muted-foreground mb-1">State</label>
-                  <input
-                    value={modalForm.state}
-                    onChange={(e) => setModalForm({ ...modalForm, state: e.target.value })}
-                    placeholder="e.g. TX"
-                    className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:border-white/60"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs text-muted-foreground mb-1">Score Tier</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Score Tier</label>
                   <div className="mt-1">
                     <CustomSelect
                       value={modalForm.scoreTier}
                       onChange={(val) => setModalForm({ ...modalForm, scoreTier: val })}
-                      options={[{label: "Hot", value: "Hot"}, {label: "Warm", value: "Warm"}, {label: "Cold", value: "Cold"}]}
+                      options={[{label: "🔥 Hot", value: "Hot"}, {label: "⚡ Warm", value: "Warm"}, {label: "❄️ Cold", value: "Cold"}]}
                     />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs text-muted-foreground mb-1">Stage Status</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Stage Status</label>
                   <div className="mt-1">
                     <CustomSelect
                       value={modalForm.status}
@@ -1124,14 +1133,14 @@ function LeadsPage() {
               </div>
 
               <div>
-                <label className="block text-xs text-muted-foreground mb-1">Lead Source</label>
-                <div className="mt-1">
-                  <CustomSelect
-                    value={modalForm.source}
-                    onChange={(val) => setModalForm({ ...modalForm, source: val })}
-                    options={[{label: "Austin Building Permits", value: "Austin Building Permits"}, {label: "Travis County Public Records", value: "Travis County Public Records"}]}
-                  />
-                </div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Initial Inquiry / Scope Notes (Optional)</label>
+                <textarea
+                  rows={2}
+                  value={modalForm.notes}
+                  onChange={(e) => setModalForm({ ...modalForm, notes: e.target.value })}
+                  placeholder="e.g. Interested in building a 4,500 sq ft modern home starting this fall..."
+                  className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary/60 resize-none font-sans leading-relaxed"
+                />
               </div>
 
               {/* Action buttons */}
@@ -1388,6 +1397,16 @@ function LeadDetailPanel({ lead, onClose }: { lead: any; onClose: () => void }) 
   const { session } = useRouteContext({ strict: false }) as any;
   const isPrivacyMode = session?.role === 'admin' && !!session?.actingAsBuilderId;
 
+  let parsedMemory: Record<string, any> = {};
+  if (lead.leadMemory) {
+    try { parsedMemory = JSON.parse(lead.leadMemory); } catch (_) {}
+  }
+
+  let parsedQual: Record<string, any> = {};
+  if (lead.qualificationData) {
+    try { parsedQual = JSON.parse(lead.qualificationData); } catch (_) {}
+  }
+
   const budgetConfirmed = lead.estimatedBudget >= 200000;
   const isEngaged = lead.stage !== "New";
   const scoreTierPts = lead.scoreTier === "Hot" ? 20 : lead.scoreTier === "Warm" ? 10 : 0;
@@ -1398,7 +1417,8 @@ function LeadDetailPanel({ lead, onClose }: { lead: any; onClose: () => void }) 
     { label: "Hot Score Tier", val: lead.scoreTier === "Hot", pts: 20 },
   ];
 
-  const totalScore = (budgetConfirmed ? 50 : 0) + (isEngaged ? 30 : 0) + scoreTierPts;
+  const calculatedScore = (budgetConfirmed ? 50 : 0) + (isEngaged ? 30 : 0) + scoreTierPts;
+  const dealScoreVal = typeof lead.dealScore === 'number' ? lead.dealScore : calculatedScore;
 
   return (
     <>
@@ -1427,6 +1447,88 @@ function LeadDetailPanel({ lead, onClose }: { lead: any; onClose: () => void }) 
         </div>
 
         <div className="p-5 space-y-6 text-left">
+          {/* ── AI SALES INTELLIGENCE & LEAD MEMORY GRAPH ── */}
+          <section className="p-4 rounded-xl border border-[#c9a84c]/30 dark:border-[#e5d9c5]/30 bg-card shadow-sm space-y-3.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="size-4 text-[#c9a84c] dark:text-[#e5d9c5]" />
+                <h3 className="text-xs uppercase tracking-wider text-foreground font-mono font-bold">
+                  AI Sales Intelligence & Memory Graph
+                </h3>
+              </div>
+              <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold border border-emerald-500/20">
+                Live Memory
+              </span>
+            </div>
+
+            {/* Deal Score Gauge */}
+            <div className="p-3 rounded-lg bg-secondary/80 border border-border space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-mono text-muted-foreground uppercase text-[10px]">Real-Time Deal Score</span>
+                <span className={`font-mono font-bold ${
+                  dealScoreVal >= 75 ? "text-emerald-500" : dealScoreVal >= 40 ? "text-amber-500" : "text-rose-500"
+                }`}>
+                  {dealScoreVal} / 100 · {dealScoreVal >= 75 ? "HOT" : dealScoreVal >= 40 ? "WARM" : "COLD"}
+                </span>
+              </div>
+              <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
+                <div 
+                  className={`h-full rounded-full transition-all duration-300 ${
+                    dealScoreVal >= 75 ? "bg-emerald-500" : dealScoreVal >= 40 ? "bg-amber-500" : "bg-rose-500"
+                  }`}
+                  style={{ width: `${Math.min(100, Math.max(5, dealScoreVal))}%` }}
+                />
+              </div>
+              {lead.lastAiSummary && (
+                <p className="text-[11px] text-muted-foreground italic font-mono pt-1">
+                  "{lead.lastAiSummary}"
+                </p>
+              )}
+            </div>
+
+            {/* VIP Takeover Alert */}
+            {parsedQual.escalationRequired && (
+              <div className="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-xs flex items-start gap-2">
+                <AlertTriangle className="size-3.5 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold uppercase tracking-wider text-[10px] block">🔥 VIP Human Escalation</span>
+                  <p className="text-[11px] mt-0.5">{parsedQual.escalationReason || "High intent custom estate lead requires principal review."}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Extracted Memory Graph Grid */}
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="p-2 rounded-lg bg-secondary/50 border border-border">
+                <span className="text-muted-foreground block text-[9px] uppercase font-mono">Target Budget</span>
+                <span className="font-semibold text-foreground font-mono">{parsedMemory.budgetRange || lead.budget || "Evaluating"}</span>
+              </div>
+              <div className="p-2 rounded-lg bg-secondary/50 border border-border">
+                <span className="text-muted-foreground block text-[9px] uppercase font-mono">Lot Readiness</span>
+                <span className="font-semibold text-foreground truncate block">{parsedMemory.lotStatus || (lead.landPrice > 0 ? `Owns land ($${(lead.landPrice / 1000).toFixed(0)}k)` : "Evaluating")}</span>
+              </div>
+              <div className="p-2 rounded-lg bg-secondary/50 border border-border">
+                <span className="text-muted-foreground block text-[9px] uppercase font-mono">Build Timeline</span>
+                <span className="font-semibold text-foreground font-mono">{parsedMemory.timeline || "< 12 Months"}</span>
+              </div>
+              <div className="p-2 rounded-lg bg-secondary/50 border border-border">
+                <span className="text-muted-foreground block text-[9px] uppercase font-mono">Style Preference</span>
+                <span className="font-semibold text-foreground truncate block">{parsedMemory.architecturalStyle || "Modern Bespoke"}</span>
+              </div>
+            </div>
+
+            {/* Next Best Action */}
+            <div className="p-2.5 rounded-lg bg-primary/5 border border-primary/20 space-y-1">
+              <div className="flex items-center gap-1.5 text-primary text-[10px] font-mono font-bold uppercase">
+                <Lightbulb className="size-3" />
+                <span>Next Best Action for Builder Team</span>
+              </div>
+              <p className="text-xs text-foreground font-medium">
+                {parsedQual.nextBestAction || "Send curated portfolio & offer discovery walkthrough."}
+              </p>
+            </div>
+          </section>
+
           <section>
             <h3 className="text-xs uppercase tracking-wider text-muted-foreground mb-3 font-mono">Lead Profile</h3>
             <dl className="grid grid-cols-2 gap-3 text-sm">
@@ -1769,7 +1871,7 @@ function LeadKanbanCard({ lead, column, isPrivacyMode, onSelectLead, onEmailLead
                   onClick={() => { setMenuOpen(false); onSendSms(lead); }}
                   className="w-full text-left text-xs px-2.5 py-1.5 rounded hover:bg-white/[0.04] text-foreground transition-colors flex items-center gap-1.5"
                 >
-                  <MessageSquare className="size-3" /> Send SMS
+                  <Mail className="size-3" /> Send Email
                 </button>
                 <button
                   onClick={() => { setMenuOpen(false); onRetrigger(lead); }}

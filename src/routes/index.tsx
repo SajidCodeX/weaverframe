@@ -1,7 +1,7 @@
 import { createFileRoute, redirect, Link, useRouteContext, useRouter } from "@tanstack/react-router";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 
-import { ArrowUp, ArrowRight } from "lucide-react";
+import { ArrowUp, ArrowRight, Calendar, RefreshCw } from "lucide-react";
 import {
   LineChart,
   Line,
@@ -146,25 +146,180 @@ function Overview() {
 function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: boolean }) {
   const router = useRouter();
 
+  const getInitialDateRange = () => {
+    if (typeof window === "undefined") {
+      return { range: "All Time", start: "", end: "" };
+    }
+    const saved = sessionStorage.getItem("globalDateRange");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.label === "Custom Range") {
+          return { range: "Custom Range", start: parsed.start || "", end: parsed.end || "" };
+        }
+        return { range: parsed.label || "All Time", start: "", end: "" };
+      } catch (_) {}
+    }
+    return { range: "All Time", start: "", end: "" };
+  };
+
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [initialDate] = useState(() => getInitialDateRange());
+  const [selectedDateRange, setSelectedDateRange] = useState<string>(initialDate.range);
+  const [customStart, setCustomStart] = useState<string>(initialDate.start);
+  const [customEnd, setCustomEnd] = useState<string>(initialDate.end);
+
+  // Sync date selection dynamically from TopBar header dispatches
+  useEffect(() => {
+    const handleGlobalDateChange = (e: any) => {
+      const { label, start, end } = e.detail || {};
+      if (label === "Custom Range") {
+        setSelectedDateRange("Custom Range");
+        setCustomStart(start || "");
+        setCustomEnd(end || "");
+      } else if (label) {
+        setSelectedDateRange(label);
+      }
+    };
+    window.addEventListener("globalDateRangeChanged", handleGlobalDateChange);
+    return () => window.removeEventListener("globalDateRangeChanged", handleGlobalDateChange);
+  }, []);
+
+  const changeDateRange = (label: string, start?: string, end?: string) => {
+    setSelectedDateRange(label);
+    if (typeof window !== "undefined") {
+      const rangeData = { label, start, end };
+      sessionStorage.setItem("globalDateRange", JSON.stringify(rangeData));
+      (window as any).__globalDateRange = rangeData;
+      window.dispatchEvent(
+        new CustomEvent("globalDateRangeChanged", {
+          detail: rangeData,
+        }),
+      );
+    }
+  };
+
+  const matchDate = (dateInput: string | Date) => {
+    if (selectedDateRange === "All Time") return true;
+    const d = new Date(dateInput);
+    const now = new Date();
+    if (selectedDateRange === "Today") {
+      return d.toDateString() === now.toDateString();
+    } else if (selectedDateRange === "Yesterday") {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      return d.toDateString() === yesterday.toDateString();
+    } else if (selectedDateRange === "Last 7 Days") {
+      const diffTime = Math.abs(now.getTime() - d.getTime());
+      return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) <= 7;
+    } else if (selectedDateRange === "Last 30 Days") {
+      const diffTime = Math.abs(now.getTime() - d.getTime());
+      return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) <= 30;
+    } else if (selectedDateRange === "This Month") {
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    } else if (selectedDateRange === "Custom Range" && customStart && customEnd) {
+      const startBound = new Date(customStart);
+      const endBound = new Date(customEnd);
+      endBound.setHours(23, 59, 59, 999);
+      return d >= startBound && d <= endBound;
+    }
+    return true;
+  };
+
+  const allLeads = data.allLeads || [];
+  const rawActivities = data.rawActivities || [];
+
+  const filteredLeads = useMemo(() => {
+    if (allLeads.length === 0) return [];
+    if (selectedDateRange === "All Time") return allLeads;
+    return allLeads.filter((l: any) => matchDate(l.createdAt));
+  }, [allLeads, selectedDateRange, customStart, customEnd]);
+
+  const filteredActivities = useMemo(() => {
+    if (rawActivities.length === 0) return data.activityFeed || [];
+    const matched = selectedDateRange === "All Time" ? rawActivities : rawActivities.filter((a: any) => matchDate(a.createdAt));
+    const uniqueLeads = new Set();
+    return matched.filter((a: any) => {
+      if (uniqueLeads.has(a.leadId)) return false;
+      uniqueLeads.add(a.leadId);
+      return true;
+    });
+  }, [rawActivities, data.activityFeed, selectedDateRange, customStart, customEnd]);
+
+  const dynamicStats = useMemo(() => {
+    // If allLeads is populated, calculate everything strictly from filteredLeads
+    if (allLeads.length > 0) {
+      const total = filteredLeads.length;
+      const qualified = filteredLeads.filter((l: any) => l.status !== "New").length;
+      const appointments = filteredLeads.filter((l: any) => l.status === "Appointment").length;
+      const builderNotified = filteredLeads.filter((l: any) => ["Builder Notified", "Appointment", "Replied"].includes(l.status)).length;
+      
+      const qualifiedLeadsList = filteredLeads.filter((l: any) => l.status !== "New");
+      const totalPipelineBudget = qualifiedLeadsList.reduce((sum: number, l: any) => sum + (l.estimatedBudget || 0), 0);
+      const avgBudget = qualified > 0 ? totalPipelineBudget / qualified : 0;
+
+      let pipelineStr = "$0";
+      if (totalPipelineBudget >= 1000000) {
+        pipelineStr = `$${(totalPipelineBudget / 1000000).toFixed(1)}M`;
+      } else {
+        pipelineStr = `$${Math.round(totalPipelineBudget / 1000)}K`;
+      }
+      const avgBudgetStr = avgBudget >= 1000000 ? `$${(avgBudget / 1000000).toFixed(1)}M` : `$${Math.round(avgBudget / 1000)}K`;
+
+      const hot = filteredLeads.filter((l: any) => l.scoreTier === "Hot");
+      const warm = filteredLeads.filter((l: any) => l.scoreTier === "Warm");
+      const cold = filteredLeads.filter((l: any) => l.scoreTier === "Cold" || !l.scoreTier);
+
+      const getAvg = (list: any[]) => list.length > 0 ? list.reduce((s: number, i: any) => s + (i.estimatedBudget || 0), 0) / list.length : 0;
+
+      const dynamicScoreData = [
+        { label: "Hot", pct: total > 0 ? Math.round((hot.length / total) * 100) : 0, count: hot.length, budget: `$${Math.round(getAvg(hot) / 1000)}K`, color: "#FF453A", trend: [1, 2, 4, 3, 5, hot.length] },
+        { label: "Warm", pct: total > 0 ? Math.round((warm.length / total) * 100) : 0, count: warm.length, budget: `$${Math.round(getAvg(warm) / 1000)}K`, color: "#FF9F0A", trend: [2, 3, 2, 4, 3, warm.length] },
+        { label: "Cold", pct: total > 0 ? Math.round((cold.length / total) * 100) : 0, count: cold.length, budget: `$${Math.round(getAvg(cold) / 1000)}K`, color: "#0A84FF", trend: [3, 2, 1, 2, 1, cold.length] },
+      ];
+
+      const dynamicFunnel = [
+        { label: "Inquiry Received", value: total, pct: total > 0 ? 100 : 0 },
+        { label: "AI Qualified", value: qualified, pct: total > 0 ? Math.round((qualified / total) * 100) : 0 },
+        { label: "Builder Notified", value: builderNotified, pct: total > 0 ? Math.round((builderNotified / total) * 100) : 0 },
+        { label: "Appointment Set", value: appointments, pct: total > 0 ? Math.round((appointments / total) * 100) : 0 },
+      ];
+
+      return {
+        totalLeads: total,
+        qualifiedLeads: qualified,
+        appointmentsSet: appointments,
+        pipelineValueStr: pipelineStr,
+        pipelineSub: `Avg ${avgBudgetStr} · ${qualified} active prospects`,
+        scoreData: dynamicScoreData,
+        funnel: dynamicFunnel,
+        qualRate: total > 0 ? Math.round((qualified / total) * 100) : 0
+      };
+    }
+
+    // Fallback to server pre-calculated stats
+    return {
+      totalLeads: data.totalLeads || 0,
+      qualifiedLeads: data.qualifiedLeads || 0,
+      appointmentsSet: data.appointmentsSet || 0,
+      pipelineValueStr: data.pipelineValueStr || "$0",
+      pipelineSub: data.pipelineSub || "Avg $0 · 0 active prospects",
+      scoreData: data.scoreData || [],
+      funnel: data.funnel || [],
+      qualRate: data.totalLeads > 0 ? Math.round(((data.qualifiedLeads || 0) / data.totalLeads) * 100) : 0
+    };
+  }, [allLeads, filteredLeads, data]);
+
   const {
-    totalLeads = 0,
-    qualifiedLeads = 0,
-    appointmentsSet = 0,
-    funnel = [],
-    scoreData = [],
-    activityFeed = [],
     leadsThisMonth = 0,
     leadsMonthSub = '0 from last month',
     leadsMonthTrend = 'up',
     leadsMonthTrendVal = '+0%',
-    pipelineValueStr = '$0',
-    pipelineSub = 'Avg $0 · 0 active prospects',
     pipelineTrend = 'up',
     pipelineTrendVal = '+0%',
     avgDaysToBook = 14,
     aiQualRate = 0,
     dailyVolume = [],
-    lastSyncAt = null
   } = data;
 
   const [selectedWeek, setSelectedWeek] = useState(1);
@@ -179,27 +334,84 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
 
   return (
     <>
+      {/* ── Overview Quick Date Range Filter Bar ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 bg-card/60 border border-border/70 backdrop-blur-sm p-2 sm:p-2.5 rounded-2xl shadow-sm">
+        <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto custom-scrollbar py-0.5">
+          <div className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground pr-2 border-r border-border/60 shrink-0">
+            <Calendar className="size-3.5 text-[#e5d9c5]" />
+            <span className="hidden md:inline uppercase text-[10px] tracking-wider font-semibold">Date Window:</span>
+          </div>
+          {[
+            "All Time",
+            "Today",
+            "Yesterday",
+            "Last 7 Days",
+            "Last 30 Days",
+            "This Month",
+          ].map((preset) => (
+            <button
+              key={preset}
+              onClick={() => changeDateRange(preset)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-xl transition-all whitespace-nowrap cursor-pointer ${
+                selectedDateRange === preset
+                  ? "bg-[#e5d9c5] text-black font-semibold shadow-sm shadow-[#e5d9c5]/20"
+                  : "bg-secondary/50 text-muted-foreground hover:text-foreground hover:bg-secondary border border-border/40"
+              }`}
+            >
+              {preset}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-2.5 justify-end shrink-0">
+          <div className="text-[11px] font-mono text-muted-foreground hidden sm:block">
+            {selectedDateRange === "All Time"
+              ? "All Historical Pipeline"
+              : selectedDateRange === "Today"
+              ? `Today (${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})`
+              : selectedDateRange}
+          </div>
+          <button
+            onClick={async () => {
+              if (isSyncing) return;
+              setIsSyncing(true);
+              try {
+                await router.invalidate();
+              } finally {
+                setTimeout(() => setIsSyncing(false), 800);
+              }
+            }}
+            disabled={isSyncing}
+            className="inline-flex items-center gap-1.5 text-xs border border-border/80 bg-secondary/60 rounded-xl px-3 py-1.5 text-foreground hover:bg-secondary transition-colors cursor-pointer shadow-sm disabled:opacity-80"
+            title="Refresh Data"
+          >
+            <RefreshCw className={`size-3 transition-transform duration-300 ${isSyncing ? 'animate-spin text-[#c9a84c] dark:text-[#e5d9c5]' : 'text-muted-foreground'}`} />
+            <span className="text-[11px] font-mono">{isSyncing ? 'Syncing...' : 'Sync'}</span>
+          </button>
+        </div>
+      </div>
+
       {/* KPI row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Kpi
           highlight
-          label="New Leads (Last 30d)"
-          value={leadsThisMonth.toString()}
-          sub={leadsMonthSub}
+          label={selectedDateRange === "All Time" ? "Total Captured Leads" : `Leads (${selectedDateRange})`}
+          value={dynamicStats.totalLeads.toString()}
+          sub={selectedDateRange === "All Time" ? leadsMonthSub : `Filtered by ${selectedDateRange}`}
           trend={leadsMonthTrend}
           trendValue={leadsMonthTrendVal}
         />
         <Kpi
           label="Qualified Leads"
-          value={qualifiedLeads.toString()}
-          sub={`${totalLeads > 0 ? Math.round((qualifiedLeads / totalLeads) * 100) : 0}% qualification rate`}
+          value={dynamicStats.qualifiedLeads.toString()}
+          sub={`${dynamicStats.totalLeads > 0 ? Math.round((dynamicStats.qualifiedLeads / dynamicStats.totalLeads) * 100) : 0}% qualification rate`}
           extra={
             <div className="h-1.5 bg-[#101014] rounded-full overflow-hidden border border-white/[0.04]">
               <div
                 className="h-full rounded-full bar-animated"
                 style={{
                   background: "linear-gradient(90deg, #34d399, #e5d9c5)",
-                  ["--bar-pct" as string]: `${totalLeads > 0 ? Math.round((qualifiedLeads / totalLeads) * 100) : 0}%`,
+                  ["--bar-pct" as string]: `${dynamicStats.totalLeads > 0 ? Math.round((dynamicStats.qualifiedLeads / dynamicStats.totalLeads) * 100) : 0}%`,
                 }}
               />
             </div>
@@ -207,11 +419,11 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
         />
         <Kpi
           label="Appointments Booked"
-          value={appointmentsSet.toString()}
-          sub={`From ${qualifiedLeads} qualified leads`}
+          value={dynamicStats.appointmentsSet.toString()}
+          sub={`From ${dynamicStats.qualifiedLeads} qualified leads`}
           extra={
             <span className="inline-flex text-[11px] font-mono px-2 py-0.5 rounded-md badge-success font-semibold">
-              {qualifiedLeads > 0 ? Math.round((appointmentsSet / qualifiedLeads) * 100) : 0}% → Appt Confirmed
+              {dynamicStats.qualifiedLeads > 0 ? Math.round((dynamicStats.appointmentsSet / dynamicStats.qualifiedLeads) * 100) : 0}% → Appt Confirmed
             </span>
           }
         />
@@ -219,8 +431,8 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
           highlight
           isGold
           label="Est. Pipeline Value"
-          value={pipelineValueStr}
-          sub={pipelineSub}
+          value={dynamicStats.pipelineValueStr}
+          sub={dynamicStats.pipelineSub}
           trend={pipelineTrend}
           trendValue={pipelineTrendVal}
         />
@@ -245,13 +457,13 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
             className="overflow-y-auto flex-1 custom-scrollbar min-h-0"
             style={{ maxHeight: "392px" }}
           >
-            {activityFeed.length === 0 ? (
+            {filteredActivities.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-48 text-muted-foreground text-sm">
-                No recent lead activity.
+                No recent lead activity in this date window.
               </div>
             ) : (
               <ul className="divide-y divide-border/30 pb-8">
-                {activityFeed.slice(0, 20).map((e: any) => (
+                {filteredActivities.slice(0, 20).map((e: any) => (
                   <li
                     key={e.id}
                     className="flex items-center justify-between px-5 py-2.5 hover:bg-secondary/20 cursor-pointer transition-colors"
@@ -294,8 +506,8 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
             subtitle="Pipeline health & momentum"
             action={
               <div className="text-right">
-                <div className="text-2xl sm:text-3xl font-nevera font-normal text-white leading-none mb-1">{totalLeads}</div>
-                <div className="text-[9px] uppercase tracking-widest font-mono text-[#e5d9c5]/80">Total Leads</div>
+                <div className="text-2xl sm:text-3xl font-nevera font-normal text-white leading-none mb-1">{dynamicStats.totalLeads}</div>
+                <div className="text-[9px] uppercase tracking-widest font-mono text-[#e5d9c5]/80">{selectedDateRange === "All Time" ? "Total Leads" : "Window Leads"}</div>
               </div>
             }
           />
@@ -311,7 +523,7 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
 
             {/* Table Body */}
             <div className="flex flex-col flex-1 justify-center py-2">
-              {scoreData.map((row: any) => {
+              {dynamicStats.scoreData.map((row: any) => {
                 // Generate sparkline SVG points
                 const max = Math.max(...row.trend);
                 const min = Math.min(...row.trend);
@@ -376,7 +588,7 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
               </div>
               <div className="p-3.5 rounded-xl border border-white/[0.08] bg-[#0f1016] flex flex-col justify-between hover:border-[#e5d9c5]/30 transition-colors">
                 <div className="text-[9.5px] font-mono text-muted-foreground uppercase tracking-widest mb-1.5">AI Qual. Rate</div>
-                <div className="text-2xl font-nevera font-normal text-white">{aiQualRate}%</div>
+                <div className="text-2xl font-nevera font-normal text-white">{dynamicStats.qualRate}%</div>
               </div>
             </div>
 
@@ -392,7 +604,7 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
         />
         <div className="px-5 pb-6 pt-2">
           <div className="flex items-stretch gap-0">
-            {funnel.map((s: any, i: any) => {
+            {dynamicStats.funnel.map((s: any, i: any) => {
               const colors = [
                 { accent: "#e5d9c5", grad: "#ffffff, #e5d9c5" },
                 { accent: "#c9a84c", grad: "#e5d9c5, #c9a84c" },
@@ -459,7 +671,7 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
                   </Link>
 
                   {/* Arrow connector */}
-                  {i < funnel.length - 1 && (
+                  {i < dynamicStats.funnel.length - 1 && (
                     <div className="flex items-center px-1 shrink-0">
                       <ArrowRight className="size-3.5" style={{ color: "#5A5A6A" }} />
                     </div>

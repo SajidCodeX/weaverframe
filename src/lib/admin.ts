@@ -49,20 +49,19 @@ export const getAdminStats = createServerFn({ method: 'GET' }).handler(async () 
     db.lead.count({ where: { createdAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo } } })
   ])
 
-  // Calculate MRR
-  const totalMRR = builders.reduce((acc, b) => {
-    if (b.plan === 'trial') return acc;
-    if (b.plan === 'enterprise') return acc + 999;
-    return acc + 299; // Default professional
-  }, 0)
+  // Calculate MRR (Starter: $149, Growth: $349)
+  const getPlanPrice = (plan?: string | null) => {
+    const p = (plan || '').toLowerCase();
+    if (p === 'growth' || p === 'enterprise') return 349;
+    if (p === 'starter' || p === 'professional') return 149;
+    return 0; // trial
+  };
+
+  const totalMRR = builders.reduce((acc, b) => acc + getPlanPrice(b.plan), 0);
 
   // Calculate previous MRR based on builders created before 30 days ago
   const previousBuilders = builders.filter(b => b.createdAt < thirtyDaysAgo);
-  const previousMRR = previousBuilders.reduce((acc, b) => {
-    if (b.plan === 'trial') return acc;
-    if (b.plan === 'enterprise') return acc + 999;
-    return acc + 299;
-  }, 0)
+  const previousMRR = previousBuilders.reduce((acc, b) => acc + getPlanPrice(b.plan), 0);
 
   const calcTrend = (current: number, previous: number) => {
     if (previous === 0) return current > 0 ? "+100%" : "0%";
@@ -141,7 +140,17 @@ export const getGlobalUsersData = createServerFn({ method: 'GET' }).handler(asyn
   const users = await db.user.findMany({
     where: { deletedAt: null },
     orderBy: { createdAt: 'desc' },
-    include: { builder: { select: { companyName: true } } }
+    include: { 
+      builder: { 
+        select: { 
+          id: true, 
+          companyName: true, 
+          plan: true, 
+          isActive: true, 
+          email: true 
+        } 
+      } 
+    }
   })
 
   return users

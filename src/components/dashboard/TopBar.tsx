@@ -134,7 +134,7 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
         { title: "Messages & Inbox", url: "/messages" },
         { title: "Leads Database", url: "/leads" },
         { title: "Appointments Calendar", url: "/appointments" },
-        { title: "AI Activity & Brain", url: "/ai-activity" },
+        { title: "AI Brain & Knowledge Engine", url: "/ai-activity" },
         // { title: "Review Booster", url: "/reviews" },
         // { title: "Reports", url: "/reports" },
         // { title: "Team Management", url: "/team" },
@@ -149,6 +149,7 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
   });
 
   // Popover states
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [isDateOpen, setIsDateOpen] = useState(false);
   const [selectedRange, setSelectedRange] = useState(() => {
@@ -201,7 +202,19 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
 
   // Sync default range with active section on title changes
   useEffect(() => {
-    const initialLabel = title === "Reports" ? "This Month" : "Today";
+    if (typeof window !== "undefined") {
+      const saved = sessionStorage.getItem("globalDateRange");
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed.label) {
+            setSelectedRange(parsed.label);
+            return;
+          }
+        } catch (_) {}
+      }
+    }
+    const initialLabel = title === "Reports" ? "This Month" : title === "Overview" ? "All Time" : "Today";
     changeDateRange(initialLabel);
   }, [title]);
 
@@ -325,18 +338,18 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
   return (
     <>
       <header
-        className={`fixed top-0 right-0 h-[64px] bg-[#060608]/85 backdrop-blur-2xl border-b border-white/[0.07] z-30 flex items-center justify-between px-6 transition-all duration-300 ${
+        className={`fixed top-0 right-0 h-[64px] bg-background/85 backdrop-blur-2xl border-b border-border z-30 flex items-center justify-between px-6 transition-all duration-300 ${
           isCollapsed ? "left-[70px]" : "left-[240px]"
         }`}
       >
         {/* Page Title & Breadcrumb */}
         <div className="flex items-center gap-3">
-          <h1 className="font-nevera text-lg font-normal tracking-[0.04em] text-white">
+          <h1 className="font-nevera text-sm sm:text-base font-normal tracking-[0.04em] text-foreground">
             {title}
           </h1>
-          <div className="hidden md:flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground uppercase tracking-widest bg-white/[0.03] px-2.5 py-1 rounded-full border border-white/[0.06]">
-            <span className="size-1 rounded-full bg-[#e5d9c5]" />
-            <span>Executive Command</span>
+          <div className="hidden md:flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground uppercase tracking-widest bg-secondary/80 px-2.5 py-1 rounded-full border border-border">
+            <span className="size-1 rounded-full bg-[#c9a84c] dark:bg-[#e5d9c5]" />
+            <span>{isAdmin ? 'WeaverFrame HQ' : 'Estate Builder OS'}</span>
           </div>
         </div>
 
@@ -344,42 +357,45 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
         <div className="flex items-center gap-2">
           {/* Refresh Button */}
           <button
-            onClick={() => {
-              const icon = document.getElementById('global-refresh-icon');
-              if (icon) icon.classList.add('animate-spin');
-              router.invalidate().finally(() => {
-                if (icon) icon.classList.remove('animate-spin');
-              });
+            onClick={async () => {
+              if (isRefreshing) return;
+              setIsRefreshing(true);
+              try {
+                await router.invalidate();
+              } finally {
+                setTimeout(() => setIsRefreshing(false), 800);
+              }
             }}
-            className="hidden sm:flex items-center justify-center size-9 text-white/70 bg-[#0a0a0d] border border-white/[0.09] rounded-xl hover:border-[#e5d9c5]/40 hover:text-white transition-all duration-150 cursor-pointer shadow-sm shrink-0"
+            disabled={isRefreshing}
+            className="hidden sm:flex items-center justify-center size-9 text-muted-foreground bg-card border border-border rounded-xl hover:border-primary/40 hover:text-foreground transition-all duration-150 cursor-pointer shadow-sm shrink-0 disabled:opacity-80"
             title="Refresh Page Data"
           >
-            <RefreshCw id="global-refresh-icon" className="size-3.5 text-white/60" />
+            <RefreshCw className={`size-3.5 transition-transform duration-300 ${isRefreshing ? 'animate-spin text-[#c9a84c] dark:text-[#e5d9c5]' : 'text-muted-foreground'}`} />
           </button>
 
           {/* Cmd+K Search trigger */}
           <button
             id="topbar-search"
             onClick={() => setIsSearchOpen(true)}
-            className="hidden sm:flex items-center gap-3 h-9 text-xs text-white/70 bg-[#0a0a0d] border border-white/[0.09] rounded-xl px-3 hover:border-[#e5d9c5]/40 hover:text-white transition-all duration-150 group cursor-pointer shadow-sm shrink-0 whitespace-nowrap"
+            className="hidden sm:flex items-center gap-3 h-9 text-xs text-muted-foreground bg-card border border-border rounded-xl px-3 hover:border-primary/40 hover:text-foreground transition-all duration-150 group cursor-pointer shadow-sm shrink-0 whitespace-nowrap"
           >
             <div className="flex items-center gap-2 shrink-0">
-              <Search className="size-3.5 text-white/40 group-hover:text-[#e5d9c5] transition-colors shrink-0" />
+              <Search className="size-3.5 text-muted-foreground group-hover:text-[#c9a84c] dark:group-hover:text-[#e5d9c5] transition-colors shrink-0" />
               <span className="text-xs font-normal whitespace-nowrap">Search OS</span>
             </div>
-            <kbd className="font-mono text-[9px] bg-[#141418] px-1.5 py-0.5 rounded border border-white/10 text-[#e5d9c5] font-semibold shrink-0">
+            <kbd className="font-mono text-[9px] bg-secondary px-1.5 py-0.5 rounded border border-border text-foreground font-semibold shrink-0">
               {shortcutText}
             </kbd>
           </button>
 
           {/* Live DB Sync */}
-          <div className="hidden sm:flex items-center justify-center h-9 text-[10.5px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-3.5 cursor-default font-mono tracking-wider shadow-sm shrink-0 whitespace-nowrap">
-            <span className="size-1.5 rounded-full bg-emerald-400 mr-2 animate-pulse shrink-0" />
+          <div className="hidden sm:flex items-center justify-center h-9 text-[10.5px] text-emerald-500 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-3.5 cursor-default font-mono tracking-wider shadow-sm shrink-0 whitespace-nowrap">
+            <span className="size-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400 mr-2 animate-pulse shrink-0" />
             <span className="whitespace-nowrap">Sync: {realSyncTime ? formatLiveSyncTime(realSyncTime) : "Just now"}</span>
           </div>
 
           {/* Today's Date */}
-          <div className="hidden lg:flex items-center justify-center h-9 px-3 text-xs text-white/60 font-mono tracking-widest bg-[#0a0a0d] border border-white/[0.09] rounded-xl cursor-default shrink-0 whitespace-nowrap">
+          <div className="hidden lg:flex items-center justify-center h-9 px-3 text-xs text-muted-foreground font-mono tracking-widest bg-card border border-border rounded-xl cursor-default shrink-0 whitespace-nowrap">
             {new Date().toLocaleDateString("en-US", {
               month: "2-digit",
               day: "2-digit",
@@ -387,17 +403,17 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
             })}
           </div>
 
-          {/* Date range - Visible on Leads & Reports pages */}
-          {(title === "Leads" || title === "Reports") && (
+          {/* Date range - Visible on Overview, Leads & Reports pages */}
+          {(title === "Overview" || title === "Leads" || title === "Reports") && (
             <div className="relative" ref={dateRef}>
               <button
                 id="topbar-daterange"
                 onClick={() => setIsDateOpen(!isDateOpen)}
-                className="flex items-center gap-1.5 text-xs text-foreground bg-[#0a0a0d] border border-white/[0.09] rounded-xl px-3 h-9 hover:border-[#e5d9c5]/40 transition-all duration-150 cursor-pointer shrink-0"
+                className="flex items-center gap-1.5 text-xs text-foreground bg-card border border-border rounded-xl px-3 h-9 hover:border-primary/40 transition-all duration-150 cursor-pointer shrink-0"
               >
-                <CalIcon className="size-3.5 text-white/60" />
+                <CalIcon className="size-3.5 text-muted-foreground" />
                 <span className="font-medium text-foreground whitespace-nowrap">{selectedRange}</span>
-                <ChevronDown className="size-3 text-white/40" />
+                <ChevronDown className="size-3 text-muted-foreground" />
               </button>
 
               {isDateOpen && (
@@ -420,10 +436,10 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
                           changeDateRange(range);
                           setIsDateOpen(false);
                         }}
-                        className="w-full text-left text-xs px-3 py-2 rounded-lg text-foreground/90 hover:text-white hover:bg-white/[0.06] flex items-center justify-between transition-colors font-medium cursor-pointer"
+                        className="w-full text-left text-xs px-3 py-2 rounded-lg text-foreground hover:bg-accent flex items-center justify-between transition-colors font-medium cursor-pointer"
                       >
                         <span>{range}</span>
-                        {selectedRange === range && <Check className="size-3.5 text-emerald-400" />}
+                        {selectedRange === range && <Check className="size-3.5 text-emerald-500" />}
                       </button>
                     ))}
                   </div>
@@ -438,14 +454,14 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
                         type="date"
                         value={customStart}
                         onChange={(e) => setCustomStart(e.target.value)}
-                        className="bg-black/50 text-xs border border-border/80 rounded-lg px-2 py-1.5 text-white focus:outline-none focus:ring-1 focus:ring-primary w-[100px] text-[10px] font-mono focus:border-primary"
+                        className="bg-input text-xs border border-border rounded-lg px-2 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-primary w-[100px] text-[10px] font-mono focus:border-primary"
                       />
                       <span className="text-[10px] text-muted-foreground font-mono">to</span>
                       <input
                         type="date"
                         value={customEnd}
                         onChange={(e) => setCustomEnd(e.target.value)}
-                        className="bg-black/50 text-xs border border-border/80 rounded-lg px-2 py-1.5 text-white focus:outline-none focus:ring-1 focus:ring-primary w-[100px] text-[10px] font-mono focus:border-primary"
+                        className="bg-input text-xs border border-border rounded-lg px-2 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-primary w-[100px] text-[10px] font-mono focus:border-primary"
                       />
                     </div>
                     <button
@@ -471,11 +487,11 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
             <button
               id="topbar-notifications"
               onClick={() => setIsNotifOpen(!isNotifOpen)}
-              className="relative size-9 rounded-xl bg-[#0a0a0d] border border-white/[0.09] hover:border-[#e5d9c5]/40 flex items-center justify-center text-white/70 hover:text-white transition-all duration-150 cursor-pointer shrink-0 shadow-sm"
+              className="relative size-9 rounded-xl bg-card border border-border hover:border-primary/40 flex items-center justify-center text-muted-foreground hover:text-foreground transition-all duration-150 cursor-pointer shrink-0 shadow-sm"
             >
               <Bell className="size-3.5" />
               {hasUnread && (
-                <span className="absolute top-2 right-2 size-2 bg-emerald-400 rounded-full ring-2 ring-[#060608] animate-pulse" />
+                <span className="absolute top-2 right-2 size-2 bg-emerald-500 rounded-full ring-2 ring-background animate-pulse" />
               )}
             </button>
 
@@ -511,13 +527,23 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
                             ? "/leads"
                             : "/messages";
                       }}
-                      className={`p-2.5 rounded-md text-left transition-colors cursor-pointer ${
-                        n.unread ? "bg-white/[0.05] hover:bg-white/[0.09]" : "hover:bg-white/[0.05]"
+                      className={`p-2.5 rounded-md text-left transition-colors cursor-pointer border ${
+                        n.title.includes("🚨") || n.title.includes("🔥")
+                          ? "bg-red-500/10 border-red-500/30 hover:bg-red-500/15"
+                          : n.unread
+                            ? "bg-white/[0.05] border-white/10 hover:bg-white/[0.09]"
+                            : "border-transparent hover:bg-white/[0.05]"
                       }`}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <span
-                          className={`text-xs font-medium ${n.unread ? "text-white font-semibold" : "text-foreground/80"}`}
+                          className={`text-xs font-medium ${
+                            n.title.includes("🚨") || n.title.includes("🔥")
+                              ? "text-red-400 font-bold"
+                              : n.unread
+                                ? "text-white font-semibold"
+                                : "text-foreground/80"
+                          }`}
                         >
                           {n.title}
                         </span>
