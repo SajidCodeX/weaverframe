@@ -316,6 +316,18 @@ function MessagesPage() {
     { value: "Follow-up", label: "☕ Design studio consultation" },
   ];
 
+  // Dynamic Builder Email Domain and Thread Subject
+  const builderDomain = useMemo(() => {
+    if (session?.companyName) {
+      return `${session.companyName.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`;
+    }
+    return "weaverframe.in";
+  }, [session?.companyName]);
+
+  const builderCompanyEmail = session?.companyEmail || `contact@${builderDomain}`;
+  const builderSalesEmail = session?.email || `sales@${builderDomain}`;
+  const builderAiEmail = `ai@${builderDomain}`;
+
   // Keep scroll container pinned to bottom
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -908,6 +920,13 @@ function MessagesPage() {
     return conversationsList.find(c => c.leadId === selectedLeadId) || null;
   }, [conversationsList, selectedLeadId]);
 
+  const currentThreadSubject = useMemo(() => {
+    if (emailSubject && emailSubject.trim().length > 0) return emailSubject;
+    const county = selectedThread?.county || "Travis County, TX";
+    const budget = selectedThread?.estimatedBudget ? `$${(selectedThread.estimatedBudget / 1000000).toFixed(1)}M` : "$1.8M";
+    return `Inquiry: Custom Estate & Lot Planning (${county} · ${budget})`;
+  }, [emailSubject, selectedThread]);
+
   return (
     <Shell title="Messages" noPadding>
       <div ref={containerRef} className="flex h-full w-full bg-card/40 backdrop-blur-xl relative">
@@ -1205,16 +1224,21 @@ function MessagesPage() {
               </div>
 
               {/* SUBJECT LINE BAR */}
-              <div className="px-6 py-2.5 bg-[#06070a] border-b border-border/30 flex items-center justify-between text-xs text-muted-foreground shrink-0">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground/70 font-semibold shrink-0">Subject:</span>
-                  <span className="font-medium text-foreground text-xs truncate">
-                    {emailSubject || `Re: Inquiry · ${selectedThread.leadName}`}
+              <div className="px-6 py-3 bg-[#08090d] border-b border-border/40 flex items-center justify-between text-xs text-muted-foreground shrink-0 shadow-sm">
+                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                  <span className="px-2 py-0.5 rounded text-[9.5px] font-mono uppercase tracking-wider bg-secondary border border-border text-primary font-bold shrink-0">
+                    Thread Subject
+                  </span>
+                  <span className="font-semibold text-foreground text-xs sm:text-sm truncate font-sans">
+                    {currentThreadSubject}
                   </span>
                 </div>
-                <span className="text-[10.5px] font-mono text-muted-foreground/60 shrink-0 hidden sm:flex items-center gap-1">
-                  <Check className="size-3 text-emerald-400" /> Synced with Mailbox
-                </span>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className="text-[10.5px] font-mono text-muted-foreground/70 hidden sm:flex items-center gap-1.5">
+                    <Check className="size-3 text-emerald-400" />
+                    <span>2-Way Email Thread Synced</span>
+                  </span>
+                </div>
               </div>
 
               {/* AI BRIEFING SHEET */}
@@ -1247,7 +1271,7 @@ function MessagesPage() {
                 <div
                   ref={chatContainerRef}
                   onScroll={handleChatScroll}
-                  className="flex-1 overflow-y-auto px-6 py-4 space-y-1 min-h-0 relative z-10 custom-scrollbar"
+                  className="flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-3 min-h-0 relative z-10 custom-scrollbar"
                 >
                   {activeChat.messages.length > 0 ? (
                     activeChat.messages.map((msg, index) => {
@@ -1289,60 +1313,94 @@ function MessagesPage() {
                       const isImageAttachment = msg.content.includes("🖼️ Image Shared:");
                       const isLinkShared = msg.content.includes("🔗 Link Shared:");
 
+                      const clientName = activeChat.lead?.name || selectedThread?.leadName || "Client";
+                      const clientEmail = activeChat.lead?.email || selectedThread?.email || `${clientName.toLowerCase().replace(/\s+/g, '')}@gmail.com`;
+
+                      const fromName = isAI 
+                        ? `${session?.displayName || 'Sajid Ali'} (AI Concierge)` 
+                        : isUser 
+                          ? `${session?.displayName || 'Sales Representative'}` 
+                          : clientName;
+
+                      const fromEmail = isAI 
+                        ? builderAiEmail 
+                        : isUser 
+                          ? builderSalesEmail 
+                          : clientEmail;
+
+                      const toName = isLead 
+                        ? (session?.companyName || "Sales Executive")
+                        : clientName;
+
+                      const toEmail = isLead 
+                        ? builderCompanyEmail 
+                        : clientEmail;
+
+                      const msgSubject = index === 0 && isLead
+                        ? currentThreadSubject
+                        : `Re: ${currentThreadSubject}`;
+
                       return (
                         <div key={msg.id} className="w-full">
                           {showDateDivider && (
-                            <div className="flex justify-center my-4">
+                            <div className="flex justify-center my-3.5">
                               <span className="text-[10px] font-medium text-muted-foreground bg-[#111115] border border-white/10 px-3 py-0.5 rounded-full uppercase tracking-widest font-mono">
                                 {dateLabel}
                               </span>
                             </div>
                           )}
 
-                          {/* Flowing Message Entry */}
-                          <div className="py-3 border-b border-border/30 last:border-0 group animate-in fade-in duration-150">
-                            {/* Sender Header Row */}
-                            <div className="flex items-start justify-between gap-3 mb-1.5">
-                              <div className="flex items-center gap-2.5 min-w-0">
-                                <div
-                                  className={`size-7 rounded-full flex items-center justify-center text-[11px] font-semibold shrink-0 ${
-                                    isAI
-                                      ? "bg-primary/20 text-primary border border-primary/30"
-                                      : isUser
-                                        ? "bg-primary/20 text-primary border border-primary/40"
-                                        : "bg-secondary text-foreground border border-border"
-                                  }`}
-                                >
-                                  {isAI ? <Sparkles className="size-3.5" /> : isUser ? "You" : (activeChat.lead?.name?.[0] || "C")}
+                          {/* Executive B2B Email Card */}
+                          <div className={`rounded-xl border p-4 sm:p-5 shadow-sm transition-all duration-150 animate-in fade-in space-y-3.5 ${
+                            isAI
+                              ? "bg-[#0d0e14]/90 border-primary/25 border-l-4 border-l-primary/70"
+                              : isUser
+                                ? "bg-[#0c0e12]/90 border-border/80 border-l-4 border-l-[#e5d9c5]"
+                                : "bg-[#08090d]/90 border-white/10 border-l-4 border-l-white/30"
+                          }`}>
+                            {/* Email Envelope Header */}
+                            <div className="border-b border-border/40 pb-3 space-y-2">
+                              {/* Subject Line & Timestamp */}
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <Mail className={`size-3.5 shrink-0 ${isAI ? 'text-primary' : isUser ? 'text-[#e5d9c5]' : 'text-muted-foreground'}`} />
+                                  <span className="text-xs font-bold text-foreground truncate font-sans">
+                                    {msgSubject}
+                                  </span>
                                 </div>
+                                <span className="text-[10px] text-muted-foreground font-mono shrink-0 select-none">
+                                  {msgDate.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                                </span>
+                              </div>
 
-                                <div className="flex items-center gap-2 flex-wrap min-w-0">
-                                  <span className="font-semibold text-xs text-foreground">
-                                    {isAI ? "AI Assistant" : isUser ? "You" : (activeChat.lead?.name || "Client")}
-                                  </span>
-                                  <span className="text-[11px] text-muted-foreground font-mono">
-                                    &lt;{isAI ? "ai@buildersedge.ai" : isUser ? "sales@yourcompany.com" : (activeChat.lead?.email || `${activeChat.lead?.name?.toLowerCase().replace(/\s+/g, '') || 'client'}@email.com`)}&gt;
-                                  </span>
+                              {/* From & To Row */}
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px] font-mono pt-0.5">
+                                <div className="flex items-center gap-1.5 min-w-0 truncate">
+                                  <span className="text-muted-foreground/70 font-semibold shrink-0">From:</span>
+                                  <span className="text-foreground font-semibold truncate">{fromName}</span>
+                                  <span className="text-muted-foreground/80 truncate">&lt;{fromEmail}&gt;</span>
                                   {isAI && (
-                                    <span className="px-1.5 py-0.5 rounded text-[8.5px] font-mono font-medium bg-primary/10 text-primary border border-primary/20">
-                                      AI Auto-Reply
+                                    <span className="px-1.5 py-0.2 rounded text-[8px] font-mono font-bold bg-primary/15 text-primary border border-primary/30 shrink-0 ml-1">
+                                      AI AUTO-REPLY
                                     </span>
                                   )}
                                   {isUser && (
-                                    <span className="px-1.5 py-0.5 rounded text-[8.5px] font-mono font-medium bg-secondary text-muted-foreground border border-border">
-                                      Sent
+                                    <span className="px-1.5 py-0.2 rounded text-[8px] font-mono font-bold bg-secondary text-muted-foreground border border-border shrink-0 ml-1">
+                                      MANUAL SENT
                                     </span>
                                   )}
                                 </div>
-                              </div>
 
-                              <span className="text-[10.5px] text-muted-foreground font-mono shrink-0 select-none">
-                                {msgDate.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                              </span>
+                                <div className="flex items-center gap-1.5 text-[10.5px] text-muted-foreground shrink-0">
+                                  <span className="text-muted-foreground/70 font-semibold">To:</span>
+                                  <span className="text-foreground/90 font-medium">{toName}</span>
+                                  <span className="text-muted-foreground/70">&lt;{toEmail}&gt;</span>
+                                </div>
+                              </div>
                             </div>
 
-                            {/* Message Content Body */}
-                            <div className="pl-9 text-xs sm:text-[13px] text-foreground/90 leading-relaxed font-sans select-text space-y-2.5">
+                            {/* Email Message Content Body */}
+                            <div className="text-xs sm:text-[13px] text-foreground/90 leading-relaxed font-sans select-text space-y-2.5">
                               {isBrochureCard ? (
                                 /* Shared document card */
                                 <div className="bg-[#12131a] border border-border rounded-xl p-3.5 max-w-[420px] shadow-sm relative overflow-hidden">
@@ -1620,7 +1678,7 @@ function MessagesPage() {
                           value={emailSubject}
                           onChange={(e) => setEmailSubject(e.target.value)}
                           className="w-full bg-transparent text-xs text-foreground focus:outline-none"
-                          placeholder={`Re: Inquiry · ${selectedThread.leadName}`}
+                          placeholder={`Re: ${currentThreadSubject}`}
                         />
                       </div>
                       <div className="flex items-center gap-2 pt-1 border-t border-border/30">
@@ -1629,7 +1687,7 @@ function MessagesPage() {
                           type="email"
                           value={ccEmail}
                           onChange={(e) => setCcEmail(e.target.value)}
-                          placeholder="team@yourcompany.com"
+                          placeholder={`team@${builderDomain}`}
                           className="w-full bg-transparent text-xs text-foreground focus:outline-none font-mono"
                         />
                       </div>
