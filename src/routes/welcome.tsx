@@ -445,15 +445,15 @@ function WelcomePage() {
         <header className="w-full max-w-[1260px] bg-[#060608]/80 backdrop-blur-md border border-white/[0.12] hover:border-[#e5d9c5]/35 rounded-full px-5 sm:px-7 py-2.5 flex items-center justify-between pointer-events-auto shadow-[0_20px_50px_rgba(0,0,0,0.9),0_0_25px_rgba(201,168,76,0.06)] transition-all duration-300">
           {/* Brand Logo */}
           <Link to="/welcome" className="flex items-center gap-3 group shrink-0">
-            <div className="size-8 rounded-full border border-white/20 bg-white/[0.06] flex items-center justify-center font-nevera text-sm font-bold text-[#e5d9c5] group-hover:border-[#e5d9c5] group-hover:scale-105 transition-all">
-              W
+            <div className="size-9 rounded-xl border border-white/20 bg-black/60 flex items-center justify-center p-1.5 shadow-lg shadow-[#e5d9c5]/10 group-hover:border-[#e5d9c5] group-hover:scale-105 transition-all">
+              <img src="/weaverframe-mark-transparent.png" alt="WeaverFrame" className="size-full object-contain" />
             </div>
             <div>
               <span className="font-nevera text-base sm:text-lg tracking-[0.18em] uppercase text-white font-semibold block leading-none">
                 WeaverFrame
               </span>
               <span className="text-[8px] font-mono tracking-widest text-[#e5d9c5]/70 uppercase block mt-0.5">
-                AI Operating System
+                AI Sales Concierge
               </span>
             </div>
           </Link>
@@ -1485,15 +1485,15 @@ function WelcomePage() {
             {/* Col 1: Brand & Tagline */}
             <div className="lg:col-span-2 space-y-5">
               <Link to="/welcome" className="flex items-center gap-3 group">
-                <div className="size-8 rounded-full border border-white/20 bg-white/[0.06] flex items-center justify-center font-nevera text-sm font-bold text-[#e5d9c5] group-hover:border-[#e5d9c5] transition-all">
-                  W
+                <div className="size-9 rounded-xl border border-white/20 bg-black/60 flex items-center justify-center p-1.5 shadow-lg shadow-[#e5d9c5]/10 group-hover:border-[#e5d9c5] transition-all">
+                  <img src="/weaverframe-mark-transparent.png" alt="WeaverFrame" className="size-full object-contain" />
                 </div>
                 <div>
                   <span className="font-nevera text-lg tracking-[0.18em] uppercase text-white font-semibold block leading-none">
                     WeaverFrame
                   </span>
                   <span className="text-[8px] font-mono tracking-widest text-[#e5d9c5]/70 uppercase block mt-0.5">
-                    Architecture & AI Operating System
+                    AI Sales Concierge
                   </span>
                 </div>
               </Link>

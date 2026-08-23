@@ -110,9 +110,9 @@ export function Sidebar({
           actuallyCollapsed ? "justify-center" : "gap-3"
         }`}
       >
-        {/* Brand Monogram */}
-        <div className="size-8 rounded-lg bg-gradient-to-br from-[#141417] to-[#08080a] border border-[#e5d9c5]/25 shadow-[0_0_15px_rgba(201,168,76,0.12)] flex items-center justify-center font-nevera text-sm font-bold text-[#e5d9c5] shrink-0">
-          W
+        {/* Brand Logo Mark */}
+        <div className="size-8 rounded-lg bg-[#0c0d12] border border-white/10 shadow-[0_0_15px_rgba(255,255,255,0.06)] flex items-center justify-center shrink-0 p-1 group-hover:border-[#e5d9c5]/40 transition-colors">
+          <img src="/weaverframe-mark-transparent.png" alt="WeaverFrame" className="size-full object-contain" />
         </div>
         <div
           className={`transition-all duration-300 origin-left ${
@@ -123,7 +123,7 @@ export function Sidebar({
             WeaverFrame
           </span>
           <span className="text-[8.5px] font-mono tracking-widest text-[#c9a84c] dark:text-[#e5d9c5]/70 uppercase block mt-1">
-            Architecture & AI OS
+            AI Sales Concierge
           </span>
         </div>
       </div>
