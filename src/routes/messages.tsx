@@ -44,7 +44,23 @@ import {
   Eye,
   BookOpen,
   Image as ImageIcon,
-  Upload
+  Upload,
+  Archive,
+  Star,
+  Trash2,
+  Printer,
+  Reply,
+  Forward,
+  ChevronsUpDown,
+  ChevronUp,
+  ShieldCheck,
+  ShieldAlert,
+  CheckCheck,
+  Bold,
+  Italic,
+  List,
+  Quote,
+  User
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -328,6 +344,13 @@ function MessagesPage() {
   const builderSalesEmail = session?.email || `sales@${builderDomain}`;
   const builderAiEmail = `ai@${builderDomain}`;
 
+  // ── Gmail Executive States ──────────────────────────────────────────────────
+  const [expandedMsgIds, setExpandedMsgIds] = useState<Set<string>>(new Set());
+  const [expandedDetailsMsgId, setExpandedDetailsMsgId] = useState<string | null>(null);
+  const [starredMsgIds, setStarredMsgIds] = useState<Set<string>>(new Set());
+  const [isComposerActive, setIsComposerActive] = useState(false);
+  const [selectedSenderIdentity, setSelectedSenderIdentity] = useState<"employee" | "company" | "ai">("employee");
+
   // Keep scroll container pinned to bottom
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -367,6 +390,70 @@ function MessagesPage() {
     setIsUserScrolledUp(false);
     isUserScrolledUpRef.current = false;
     setNewMessagesCount(0);
+  };
+
+  // Auto-expand messages on load
+  useEffect(() => {
+    if (activeChat?.messages?.length) {
+      const msgs = activeChat.messages;
+      const lastMsg = msgs[msgs.length - 1];
+      if (msgs.length <= 2) {
+        setExpandedMsgIds(new Set(msgs.map((m: any) => m.id)));
+      } else if (lastMsg) {
+        setExpandedMsgIds(new Set([lastMsg.id]));
+      }
+    }
+  }, [selectedLeadId, activeChat?.messages?.length]);
+
+  const toggleExpandAll = () => {
+    if (!activeChat?.messages) return;
+    if (expandedMsgIds.size === activeChat.messages.length) {
+      const lastMsg = activeChat.messages[activeChat.messages.length - 1];
+      setExpandedMsgIds(new Set(lastMsg ? [lastMsg.id] : []));
+    } else {
+      setExpandedMsgIds(new Set(activeChat.messages.map((m: any) => m.id)));
+    }
+  };
+
+  const toggleMessageExpand = (msgId: string) => {
+    setExpandedMsgIds(prev => {
+      const next = new Set(prev);
+      if (next.has(msgId)) {
+        next.delete(msgId);
+      } else {
+        next.add(msgId);
+      }
+      return next;
+    });
+  };
+
+  const toggleStar = (msgId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setStarredMsgIds(prev => {
+      const next = new Set(prev);
+      if (next.has(msgId)) {
+        next.delete(msgId);
+      } else {
+        next.add(msgId);
+      }
+      return next;
+    });
+  };
+
+  const getAvatarGradient = (name: string) => {
+    const palette = [
+      "from-rose-500/20 to-red-600/30 text-rose-300 border-rose-500/30",
+      "from-amber-500/20 to-orange-600/30 text-amber-300 border-amber-500/30",
+      "from-emerald-500/20 to-teal-600/30 text-emerald-300 border-emerald-500/30",
+      "from-blue-500/20 to-indigo-600/30 text-blue-300 border-blue-500/30",
+      "from-purple-500/20 to-violet-600/30 text-purple-300 border-purple-500/30",
+      "from-cyan-500/20 to-sky-600/30 text-cyan-300 border-cyan-500/30",
+    ];
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+      hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return palette[Math.abs(hash) % palette.length];
   };
 
   // Auto-select the first active conversation on initial load if none selected
@@ -1118,682 +1205,903 @@ function MessagesPage() {
 
           {selectedThread && activeChat ? (
             <>
-              {/* CLEAN THREAD HEADER */}
-              <div className="px-6 py-3.5 border-b border-border bg-[#090a0e] flex items-center justify-between gap-4 shrink-0">
-                {/* Left: Lead Identity & Metadata */}
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="size-9 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center font-bold text-xs text-primary shrink-0">
-                    {(selectedThread.leadName || "Lead")
-                      .split(" ")
-                      .filter(Boolean)
-                      .map((n: string) => n[0])
-                      .join("")
-                      .slice(0, 2)
-                      .toUpperCase() || "L"}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-semibold text-xs sm:text-sm text-foreground truncate">
-                        {selectedThread.leadName}
-                      </h3>
-                      {selectedThread.scoreTier === "Hot" && (
-                        <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-red-500/10 text-red-400 border border-red-500/20 shrink-0">
-                          Hot
-                        </span>
-                      )}
-                      {selectedThread.scoreTier === "Warm" && (
-                        <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-warning/10 text-warning border border-warning/20 shrink-0">
-                          Warm
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground font-mono mt-0.5 truncate">
-                      <span>{selectedThread.email || `${selectedThread.leadName?.toLowerCase().replace(/\s+/g, '')}@client.com`}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Right: Quick Action Controls */}
-                <div className="flex items-center gap-2 shrink-0">
-                  {/* AI Toggle Button */}
-                  <button
-                    onClick={async () => {
-                      if (!selectedLeadId) return;
-                      const nextVal = !isAiActive;
-                      setAiToggleMap(prev => ({ ...prev, [selectedLeadId]: nextVal }));
-                      try {
-                        await setLeadAiToggle({ data: { leadId: selectedLeadId, active: nextVal } });
-                      } catch (err) {
-                        console.error("Failed to toggle AI:", err);
-                        setAiToggleMap(prev => ({ ...prev, [selectedLeadId]: isAiActive }));
-                      }
-                    }}
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
-                      isAiActive
-                        ? "bg-primary/10 border-primary/30 text-primary"
-                        : "bg-secondary border-border text-muted-foreground hover:text-foreground"
-                    }`}
-                    title={isAiActive ? "AI Auto-reply enabled" : "AI Auto-reply paused"}
-                  >
-                    <Sparkles className="size-3.5" />
-                    <span className="hidden sm:inline">{isAiActive ? "AI Active" : "AI Off"}</span>
-                  </button>
-
-                  {/* AI Summary */}
-                  <button
-                    onClick={handleSummarizeChat}
-                    disabled={isSummarizing || !activeChat || activeChat.messages.length === 0}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-secondary border border-border hover:bg-secondary/80 text-foreground text-xs font-medium transition-colors cursor-pointer disabled:opacity-50"
-                    title="Generate conversation summary"
-                  >
-                    {isSummarizing ? <Loader2 className="size-3.5 animate-spin text-primary" /> : <BrainCircuit className="size-3.5 text-primary" />}
-                    <span className="hidden md:inline">Summarize</span>
-                  </button>
-
-                  {/* Schedule Meeting Button */}
-                  <button
-                    onClick={() => setIsSchedulingOpen(true)}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-primary hover:bg-primary/20 text-xs font-medium transition-colors cursor-pointer"
-                    title="Schedule Meeting"
-                  >
-                    <Calendar className="size-3.5" />
-                    <span className="hidden md:inline">Schedule</span>
-                  </button>
-
-                  {/* More Dropdown */}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button className="p-2 rounded-lg hover:bg-secondary border border-transparent hover:border-border transition-colors text-muted-foreground hover:text-foreground cursor-pointer">
-                        <MoreVertical className="size-4" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-56 bg-[#0a0a0c] border border-border">
-                      <DropdownMenuItem onClick={() => setIsPortfolioModalOpen(true)} className="flex items-center gap-2 cursor-pointer">
-                        <BookOpen className="size-4 text-muted-foreground" />
-                        <span>Manage Documents</span>
-                      </DropdownMenuItem>
-                      {canSimulate && (
-                        <DropdownMenuItem onClick={() => setIsSimulateOpen(true)} className="flex items-center gap-2 cursor-pointer">
-                          <MessageSquare className="size-4 text-muted-foreground" />
-                          <span>Simulate Lead Reply</span>
-                        </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </div>
-
-              {/* SUBJECT LINE BAR */}
-              <div className="px-6 py-3 bg-[#08090d] border-b border-border/40 flex items-center justify-between text-xs text-muted-foreground shrink-0 shadow-sm">
-                <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                  <span className="px-2 py-0.5 rounded text-[9.5px] font-mono uppercase tracking-wider bg-secondary border border-border text-primary font-bold shrink-0">
-                    Thread Subject
-                  </span>
-                  <span className="font-semibold text-foreground text-xs sm:text-sm truncate font-sans">
-                    {currentThreadSubject}
-                  </span>
-                </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <span className="text-[10.5px] font-mono text-muted-foreground/70 hidden sm:flex items-center gap-1.5">
-                    <Check className="size-3 text-emerald-400" />
-                    <span>2-Way Email Thread Synced</span>
-                  </span>
-                </div>
-              </div>
-
-              {/* AI BRIEFING SHEET */}
-              {chatSummary && (
-                <div className="mx-6 mt-4 p-4 rounded-xl bg-[#0f0f14] border border-primary/40 shadow-2xl animate-in fade-in slide-in-from-top-4 relative z-30 shrink-0 max-h-[260px] overflow-y-auto">
-                  <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-white/10 sticky top-0 bg-[#0f0f14] z-10">
-                    <div className="flex items-center gap-2">
-                      <div className="size-6 rounded-lg bg-primary/20 border border-primary/40 flex items-center justify-center">
-                        <BrainCircuit className="size-3.5 text-primary" />
-                      </div>
-                      <div>
-                        <h4 className="text-xs font-semibold text-white">Conversation Summary</h4>
-                      </div>
-                    </div>
+                 {/* ════════════════════════════════════════════════════════════════
+                    GMAIL EXECUTIVE TOP BAR
+                    ════════════════════════════════════════════════════════════════ */}
+                <div className="flex items-center justify-between px-4 py-2.5 bg-[#0a0b0f] border-b border-border/60 shrink-0">
+                  {/* Left: Gmail Action Icons */}
+                  <div className="flex items-center gap-1">
                     <button
-                      onClick={() => setChatSummary(null)}
-                      className="size-6 rounded-md bg-white/5 hover:bg-white/15 text-muted-foreground hover:text-white flex items-center justify-center transition-colors"
-                      title="Close Summary"
+                      type="button"
+                      onClick={() => toast.success("Conversation archived")}
+                      className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                      title="Archive"
                     >
-                      <X className="size-3.5" />
+                      <Archive className="size-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => toast.info("Marked as spam")}
+                      className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                      title="Report spam"
+                    >
+                      <ShieldAlert className="size-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm(`Delete conversation with ${selectedThread.leadName}?`)) {
+                          toast.success("Thread deleted");
+                        }
+                      }}
+                      className="p-1.5 rounded-md hover:bg-danger/10 text-muted-foreground hover:text-danger transition-colors cursor-pointer"
+                      title="Delete thread"
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                    <div className="h-4 w-px bg-border/60 mx-1" />
+                    <button
+                      type="button"
+                      onClick={() => toast.info("Marked as unread")}
+                      className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                      title="Mark unread"
+                    >
+                      <Mail className="size-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsSchedulingOpen(true)}
+                      className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                      title="Snooze / Schedule Follow-up"
+                    >
+                      <Clock className="size-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => toggleStar(selectedThread.leadId, e)}
+                      className="p-1.5 rounded-md hover:bg-secondary transition-colors cursor-pointer"
+                      title="Add star"
+                    >
+                      <Star className={`size-4 ${starredMsgIds.has(selectedThread.leadId) ? 'text-amber-400 fill-amber-400' : 'text-muted-foreground hover:text-foreground'}`} />
                     </button>
                   </div>
-                  <FormattedSummary text={chatSummary} />
+
+                  {/* Right: Quick Action Controls & AI Switch */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={toggleExpandAll}
+                      className="px-2.5 py-1 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-secondary border border-border/50 flex items-center gap-1.5 cursor-pointer transition-colors"
+                      title="Expand / Collapse all emails in thread"
+                    >
+                      <ChevronsUpDown className="size-3.5" />
+                      <span className="text-[11px] font-medium hidden sm:inline">
+                        {expandedMsgIds.size === activeChat.messages.length ? "Collapse All" : "Expand All"}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => window.print()}
+                      className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer hidden md:flex"
+                      title="Print thread"
+                    >
+                      <Printer className="size-4" />
+                    </button>
+
+                    {/* AI Autonomous Switch */}
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!selectedLeadId) return;
+                        const nextVal = !isAiActive;
+                        setAiToggleMap(prev => ({ ...prev, [selectedLeadId]: nextVal }));
+                        try {
+                          await setLeadAiToggle({ data: { leadId: selectedLeadId, active: nextVal } });
+                        } catch (err) {
+                          console.error("Failed to toggle AI:", err);
+                          setAiToggleMap(prev => ({ ...prev, [selectedLeadId]: isAiActive }));
+                        }
+                      }}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold transition-colors cursor-pointer ${
+                        isAiActive
+                          ? "bg-primary/15 border-primary/40 text-primary"
+                          : "bg-secondary border-border text-muted-foreground hover:text-foreground"
+                      }`}
+                      title={isAiActive ? "AI Concierge is qualifying this buyer" : "AI Concierge is paused"}
+                    >
+                      <Sparkles className="size-3.5" />
+                      <span className="hidden sm:inline">{isAiActive ? "AI Active" : "AI Off"}</span>
+                    </button>
+
+                    {/* AI Summary */}
+                    <button
+                      type="button"
+                      onClick={handleSummarizeChat}
+                      disabled={isSummarizing || !activeChat || activeChat.messages.length === 0}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-secondary border border-border hover:bg-secondary/80 text-foreground text-xs font-medium transition-colors cursor-pointer disabled:opacity-50"
+                      title="Generate AI conversation briefing"
+                    >
+                      {isSummarizing ? <Loader2 className="size-3.5 animate-spin text-primary" /> : <BrainCircuit className="size-3.5 text-primary" />}
+                      <span className="hidden lg:inline">Briefing</span>
+                    </button>
+
+                    {/* More Menu */}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button className="p-1.5 rounded-md hover:bg-secondary border border-transparent hover:border-border transition-colors text-muted-foreground hover:text-foreground cursor-pointer">
+                          <MoreVertical className="size-4" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-56 bg-[#0a0a0c] border border-border">
+                        <DropdownMenuItem onClick={() => setIsPortfolioModalOpen(true)} className="flex items-center gap-2 cursor-pointer">
+                          <BookOpen className="size-4 text-muted-foreground" />
+                          <span>Attach PDF Lookbook</span>
+                        </DropdownMenuItem>
+                        {canSimulate && (
+                          <DropdownMenuItem onClick={() => setIsSimulateOpen(true)} className="flex items-center gap-2 cursor-pointer">
+                            <MessageSquare className="size-4 text-muted-foreground" />
+                            <span>Simulate Lead Reply</span>
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </div>
-              )}
 
-              {/* MESSAGE THREAD STREAM CANVAS */}
-              <div className="flex-1 flex flex-col min-h-0 relative bg-[#07080b] overflow-hidden">
-                {/* Messages Scroll Container */}
-                <div
-                  ref={chatContainerRef}
-                  onScroll={handleChatScroll}
-                  className="flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-3 min-h-0 relative z-10 custom-scrollbar"
-                >
-                  {activeChat.messages.length > 0 ? (
-                    activeChat.messages.map((msg, index) => {
-                      const isUser = msg.sender === "user";
-                      const isAI = msg.sender === "system";
-                      const isLead = !isUser && !isAI;
+                {/* ════════════════════════════════════════════════════════════════
+                    MASTER SUBJECT LINE & CATEGORY HEADER
+                    ════════════════════════════════════════════════════════════════ */}
+                <div className="px-5 sm:px-6 py-3.5 bg-[#06070a] border-b border-border/60 flex items-center justify-between gap-3 shrink-0">
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <h2 className="text-sm sm:text-base font-semibold text-foreground truncate font-sans tracking-tight">
+                      {currentThreadSubject}
+                    </h2>
+                    <span className="px-2 py-0.5 rounded text-[9.5px] font-mono uppercase tracking-wider bg-secondary border border-border text-muted-foreground font-semibold shrink-0">
+                      Inbox
+                    </span>
+                    <span className="px-2 py-0.5 rounded text-[9.5px] font-mono bg-primary/10 border border-primary/30 text-primary font-semibold shrink-0 hidden sm:inline">
+                      {selectedThread.county || "Architectural Lead"}
+                    </span>
+                  </div>
 
-                      const msgDate = new Date(msg.createdAt);
-                      const prevMsg = index > 0 ? activeChat.messages[index - 1] : null;
-                      let showDateDivider = false;
-                      let dateLabel = "";
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-[10px] font-mono text-emerald-400 hidden sm:flex items-center gap-1">
+                      <ShieldCheck className="size-3.5" />
+                      <span>TLS 1.3 Encryption</span>
+                    </span>
+                  </div>
+                </div>
 
-                      if (!prevMsg) {
-                        showDateDivider = true;
-                      } else {
-                        const prevDate = new Date(prevMsg.createdAt);
-                        if (msgDate.toDateString() !== prevDate.toDateString()) {
+                {/* AI BRIEFING SHEET */}
+                {chatSummary && (
+                  <div className="mx-6 mt-4 p-4 rounded-xl bg-[#0f0f14] border border-primary/40 shadow-2xl animate-in fade-in slide-in-from-top-4 relative z-30 shrink-0 max-h-[260px] overflow-y-auto">
+                    <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-white/10 sticky top-0 bg-[#0f0f14] z-10">
+                      <div className="flex items-center gap-2">
+                        <div className="size-6 rounded-lg bg-primary/20 border border-primary/40 flex items-center justify-center">
+                          <BrainCircuit className="size-3.5 text-primary" />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-semibold text-white">Conversation Summary</h4>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setChatSummary(null)}
+                        className="size-6 rounded-md bg-white/5 hover:bg-white/15 text-muted-foreground hover:text-white flex items-center justify-center transition-colors"
+                        title="Close Summary"
+                      >
+                        <X className="size-3.5" />
+                      </button>
+                    </div>
+                    <FormattedSummary text={chatSummary} />
+                  </div>
+                )}
+
+                {/* ════════════════════════════════════════════════════════════════
+                    GMAIL EMAIL MESSAGE STREAM
+                    ════════════════════════════════════════════════════════════════ */}
+                <div className="flex-1 flex flex-col min-h-0 relative bg-[#040508] overflow-hidden">
+                  {/* Messages Scroll Container */}
+                  <div
+                    ref={chatContainerRef}
+                    onScroll={handleChatScroll}
+                    className="flex-1 overflow-y-auto px-3 sm:px-6 py-4 space-y-3 min-h-0 relative z-10 custom-scrollbar"
+                  >
+                    {activeChat.messages.length > 0 ? (
+                      activeChat.messages.map((msg, index) => {
+                        const isUser = msg.sender === "user";
+                        const isAI = msg.sender === "system";
+                        const isLead = !isUser && !isAI;
+                        const isExpanded = expandedMsgIds.has(msg.id);
+                        const isStarred = starredMsgIds.has(msg.id);
+                        const isDetailsOpen = expandedDetailsMsgId === msg.id;
+
+                        const msgDate = new Date(msg.createdAt);
+                        const prevMsg = index > 0 ? activeChat.messages[index - 1] : null;
+                        let showDateDivider = false;
+                        let dateLabel = "";
+
+                        if (!prevMsg) {
                           showDateDivider = true;
-                        }
-                      }
-
-                      if (showDateDivider) {
-                        const today = new Date();
-                        const yesterday = new Date();
-                        yesterday.setDate(yesterday.getDate() - 1);
-
-                        if (msgDate.toDateString() === today.toDateString()) {
-                          dateLabel = "Today";
-                        } else if (msgDate.toDateString() === yesterday.toDateString()) {
-                          dateLabel = "Yesterday";
                         } else {
-                          dateLabel = msgDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                          const prevDate = new Date(prevMsg.createdAt);
+                          if (msgDate.toDateString() !== prevDate.toDateString()) {
+                            showDateDivider = true;
+                          }
                         }
-                      }
 
-                      const isBrochureCard = msg.content.includes("📄 Document Shared");
-                      const isAppointmentCard = msg.content.includes("📆 Site Visit Booked");
-                      const isFileAttachment = msg.content.includes("📎 File Attachment:");
-                      const isImageAttachment = msg.content.includes("🖼️ Image Shared:");
-                      const isLinkShared = msg.content.includes("🔗 Link Shared:");
+                        if (showDateDivider) {
+                          const today = new Date();
+                          const yesterday = new Date();
+                          yesterday.setDate(yesterday.getDate() - 1);
 
-                      const clientName = activeChat.lead?.name || selectedThread?.leadName || "Client";
-                      const clientEmail = activeChat.lead?.email || selectedThread?.email || `${clientName.toLowerCase().replace(/\s+/g, '')}@gmail.com`;
+                          if (msgDate.toDateString() === today.toDateString()) {
+                            dateLabel = "Today";
+                          } else if (msgDate.toDateString() === yesterday.toDateString()) {
+                            dateLabel = "Yesterday";
+                          } else {
+                            dateLabel = msgDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                          }
+                        }
 
-                      const fromName = isAI 
-                        ? `${session?.displayName || 'Sajid Ali'} (AI Concierge)` 
-                        : isUser 
-                          ? `${session?.displayName || 'Sales Representative'}` 
+                        const isBrochureCard = msg.content.includes("📄 Document Shared");
+                        const isAppointmentCard = msg.content.includes("📆 Site Visit Booked");
+                        const isFileAttachment = msg.content.includes("📎 File Attachment:");
+                        const isImageAttachment = msg.content.includes("🖼️ Image Shared:");
+                        const isLinkShared = msg.content.includes("🔗 Link Shared:");
+
+                        const clientName = activeChat.lead?.name || selectedThread?.leadName || "Client";
+                        const clientEmail = activeChat.lead?.email || selectedThread?.email || `${clientName.toLowerCase().replace(/\s+/g, '')}@gmail.com`;
+
+                        // Dynamic From/To identity calculation
+                        const fromName = isAI 
+                          ? `${session?.displayName || 'Builder'} (AI Concierge)` 
+                          : isUser 
+                            ? `${session?.displayName || 'Sarah Jenkins'}` 
+                            : clientName;
+
+                        const fromEmail = isAI 
+                          ? builderAiEmail 
+                          : isUser 
+                            ? builderSalesEmail 
+                            : clientEmail;
+
+                        const toName = isLead 
+                          ? (session?.companyName || "Sales Executive")
                           : clientName;
 
-                      const fromEmail = isAI 
-                        ? builderAiEmail 
-                        : isUser 
-                          ? builderSalesEmail 
+                        const toEmail = isLead 
+                          ? builderCompanyEmail 
                           : clientEmail;
 
-                      const toName = isLead 
-                        ? (session?.companyName || "Sales Executive")
-                        : clientName;
+                        const msgSubject = index === 0 && isLead
+                          ? currentThreadSubject
+                          : `Re: ${currentThreadSubject}`;
 
-                      const toEmail = isLead 
-                        ? builderCompanyEmail 
-                        : clientEmail;
+                        const initials = (fromName || "L")
+                          .split(" ")
+                          .filter(Boolean)
+                          .map((n: string) => n[0])
+                          .join("")
+                          .slice(0, 2)
+                          .toUpperCase();
 
-                      const msgSubject = index === 0 && isLead
-                        ? currentThreadSubject
-                        : `Re: ${currentThreadSubject}`;
+                        const avatarStyle = isAI
+                          ? "bg-primary/20 text-primary border-primary/40 font-mono"
+                          : isUser
+                            ? "bg-gradient-to-br from-emerald-600/30 to-teal-700/30 text-emerald-300 border-emerald-500/40"
+                            : "bg-gradient-to-br from-blue-600/30 to-indigo-700/30 text-blue-300 border-blue-500/40";
 
-                      return (
-                        <div key={msg.id} className="w-full">
-                          {showDateDivider && (
-                            <div className="flex justify-center my-3.5">
-                              <span className="text-[10px] font-medium text-muted-foreground bg-[#111115] border border-white/10 px-3 py-0.5 rounded-full uppercase tracking-widest font-mono">
-                                {dateLabel}
-                              </span>
-                            </div>
-                          )}
-
-                          {/* Executive B2B Email Card */}
-                          <div className={`rounded-xl border p-4 sm:p-5 shadow-sm transition-all duration-150 animate-in fade-in space-y-3.5 ${
-                            isAI
-                              ? "bg-[#0d0e14]/90 border-primary/25 border-l-4 border-l-primary/70"
-                              : isUser
-                                ? "bg-[#0c0e12]/90 border-border/80 border-l-4 border-l-[#e5d9c5]"
-                                : "bg-[#08090d]/90 border-white/10 border-l-4 border-l-white/30"
-                          }`}>
-                            {/* Email Envelope Header */}
-                            <div className="border-b border-border/40 pb-3 space-y-2">
-                              {/* Subject Line & Timestamp */}
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <Mail className={`size-3.5 shrink-0 ${isAI ? 'text-primary' : isUser ? 'text-[#e5d9c5]' : 'text-muted-foreground'}`} />
-                                  <span className="text-xs font-bold text-foreground truncate font-sans">
-                                    {msgSubject}
-                                  </span>
-                                </div>
-                                <span className="text-[10px] text-muted-foreground font-mono shrink-0 select-none">
-                                  {msgDate.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                        return (
+                          <div key={msg.id} className="w-full">
+                            {showDateDivider && (
+                              <div className="flex justify-center my-3">
+                                <span className="text-[10px] font-medium text-muted-foreground bg-[#111115] border border-border/80 px-3 py-0.5 rounded-full uppercase tracking-widest font-mono">
+                                  {dateLabel}
                                 </span>
                               </div>
+                            )}
 
-                              {/* From & To Row */}
-                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px] font-mono pt-0.5">
-                                <div className="flex items-center gap-1.5 min-w-0 truncate">
-                                  <span className="text-muted-foreground/70 font-semibold shrink-0">From:</span>
-                                  <span className="text-foreground font-semibold truncate">{fromName}</span>
-                                  <span className="text-muted-foreground/80 truncate">&lt;{fromEmail}&gt;</span>
-                                  {isAI && (
-                                    <span className="px-1.5 py-0.2 rounded text-[8px] font-mono font-bold bg-primary/15 text-primary border border-primary/30 shrink-0 ml-1">
-                                      AI AUTO-REPLY
-                                    </span>
-                                  )}
-                                  {isUser && (
-                                    <span className="px-1.5 py-0.2 rounded text-[8px] font-mono font-bold bg-secondary text-muted-foreground border border-border shrink-0 ml-1">
-                                      MANUAL SENT
-                                    </span>
-                                  )}
+                            {/* ── GMAIL COLLAPSED ROW (WHEN INACTIVE) ── */}
+                            {!isExpanded ? (
+                              <div
+                                onClick={() => toggleMessageExpand(msg.id)}
+                                className="group flex items-center justify-between gap-3 p-3 rounded-xl bg-[#08090d] hover:bg-[#0e1017] border border-border/60 hover:border-border transition-all cursor-pointer select-none"
+                              >
+                                <div className="flex items-center gap-3 min-w-0 flex-1">
+                                  <div className={`size-8 rounded-full border flex items-center justify-center font-bold text-xs shrink-0 ${avatarStyle}`}>
+                                    {initials}
+                                  </div>
+                                  <span className="font-semibold text-xs text-foreground truncate w-32 sm:w-44 shrink-0 font-sans">
+                                    {fromName}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground truncate font-sans">
+                                    {msg.content.slice(0, 90)}...
+                                  </span>
                                 </div>
 
-                                <div className="flex items-center gap-1.5 text-[10.5px] text-muted-foreground shrink-0">
-                                  <span className="text-muted-foreground/70 font-semibold">To:</span>
-                                  <span className="text-foreground/90 font-medium">{toName}</span>
-                                  <span className="text-muted-foreground/70">&lt;{toEmail}&gt;</span>
+                                <div className="flex items-center gap-2.5 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => toggleStar(msg.id, e)}
+                                    className="p-1 text-muted-foreground hover:text-amber-400 transition-colors"
+                                  >
+                                    <Star className={`size-3.5 ${isStarred ? 'text-amber-400 fill-amber-400' : ''}`} />
+                                  </button>
+                                  <span className="text-[10.5px] text-muted-foreground font-mono">
+                                    {msgDate.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                                  </span>
                                 </div>
                               </div>
-                            </div>
+                            ) : (
+                              /* ── GMAIL FULL EXPANDED EMAIL ENVELOPE CARD ── */
+                              <div className={`rounded-2xl border p-4 sm:p-5 shadow-md transition-all animate-in fade-in space-y-4 ${
+                                isAI
+                                  ? "bg-[#0b0c12] border-primary/25 border-l-4 border-l-primary/70"
+                                  : isUser
+                                    ? "bg-[#0a0c10] border-border border-l-4 border-l-emerald-500/70"
+                                    : "bg-[#08090d] border-border/80 border-l-4 border-l-blue-500/70"
+                              }`}>
+                                {/* Envelope Header */}
+                                <div className="flex items-start justify-between gap-3 border-b border-border/40 pb-3.5">
+                                  <div className="flex items-start gap-3 min-w-0">
+                                    <div className={`size-10 rounded-full border flex items-center justify-center font-bold text-xs shrink-0 shadow-sm ${avatarStyle}`}>
+                                      {initials}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="font-bold text-xs sm:text-sm text-foreground font-sans">{fromName}</span>
+                                        <span className="text-[11px] text-muted-foreground font-mono">&lt;{fromEmail}&gt;</span>
+                                        {isAI && (
+                                          <span className="px-1.5 py-0.2 rounded text-[8.5px] font-mono font-bold bg-primary/15 text-primary border border-primary/30">
+                                            AI CONCIERGE
+                                          </span>
+                                        )}
+                                        {isUser && (
+                                          <span className="px-1.5 py-0.2 rounded text-[8.5px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                                            TEAM SENDER
+                                          </span>
+                                        )}
+                                      </div>
 
-                            {/* Email Message Content Body */}
-                            <div className="text-xs sm:text-[13px] text-foreground/90 leading-relaxed font-sans select-text space-y-2.5">
-                              {isBrochureCard ? (
-                                /* Shared document card */
-                                <div className="bg-[#12131a] border border-border rounded-xl p-3.5 max-w-[420px] shadow-sm relative overflow-hidden">
-                                  <div className="flex gap-3 items-center">
-                                    <div className="size-9 bg-primary/10 rounded-lg flex items-center justify-center border border-primary/20 shrink-0 text-primary">
-                                      <FileText className="size-4.5" />
-                                    </div>
-                                    <div className="min-w-0 flex-1">
-                                      <h4 className="text-xs font-semibold text-white truncate">{msg.content.replace("📄 Document Shared: ", "").split(".pdf|size=")[0]}</h4>
-                                      <p className="text-[10px] text-muted-foreground mt-0.5">PDF Document · {msg.content.includes("|size=") ? msg.content.split("|size=")[1] : "4.8 MB"}</p>
-                                    </div>
-                                  </div>
-                                  <div className="border-t border-border/40 mt-3 pt-2.5 flex items-center justify-between">
-                                    <span className="text-[9px] text-muted-foreground font-mono">Attachment</span>
-                                    <a
-                                      href="#"
-                                      onClick={(e) => {
-                                        e.preventDefault();
-                                        setIsLookbookOpen(true);
-                                        setLookbookPage(0);
-                                      }}
-                                      className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-primary hover:underline"
-                                    >
-                                      View PDF <ExternalLink className="size-3" />
-                                    </a>
-                                  </div>
-                                </div>
-                              ) : isAppointmentCard ? (
-                                /* Meeting Scheduled Card */
-                                <div className="bg-success/5 border border-success/30 rounded-xl p-3.5 max-w-[420px] shadow-sm relative overflow-hidden">
-                                  <div className="flex gap-3 items-center">
-                                    <div className="size-9 bg-success/15 rounded-lg flex items-center justify-center border border-success/30 shrink-0 text-success">
-                                      <Calendar className="size-4.5" />
-                                    </div>
-                                    <div className="min-w-0 flex-1">
-                                      <h4 className="text-xs font-semibold text-white">Meeting Scheduled</h4>
-                                      <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">
-                                        {msg.content.replace("📆 Site Visit Booked: ", "")}
-                                      </p>
+                                      {/* "to me / to Client" details toggle */}
+                                      <div className="relative mt-1">
+                                        <button
+                                          type="button"
+                                          onClick={() => setExpandedDetailsMsgId(isDetailsOpen ? null : msg.id)}
+                                          className="text-[11px] text-muted-foreground hover:text-foreground font-mono inline-flex items-center gap-1 cursor-pointer"
+                                        >
+                                          <span>to {toName}</span>
+                                          <ChevronDown className={`size-3 transition-transform ${isDetailsOpen ? 'rotate-180' : ''}`} />
+                                        </button>
+
+                                        {/* Real Gmail Security & Envelope Details Box */}
+                                        {isDetailsOpen && (
+                                          <div className="absolute left-0 top-6 w-80 p-3 rounded-xl bg-[#0f1016] border border-border shadow-2xl z-40 text-xs font-mono space-y-1.5 animate-in fade-in zoom-in-95 duration-150">
+                                            <div className="flex gap-2">
+                                              <span className="text-muted-foreground w-16 shrink-0">from:</span>
+                                              <span className="text-foreground truncate">{fromName} &lt;{fromEmail}&gt;</span>
+                                            </div>
+                                            <div className="flex gap-2">
+                                              <span className="text-muted-foreground w-16 shrink-0">to:</span>
+                                              <span className="text-foreground truncate">{toName} &lt;{toEmail}&gt;</span>
+                                            </div>
+                                            <div className="flex gap-2">
+                                              <span className="text-muted-foreground w-16 shrink-0">date:</span>
+                                              <span className="text-foreground">{msgDate.toUTCString()}</span>
+                                            </div>
+                                            <div className="flex gap-2">
+                                              <span className="text-muted-foreground w-16 shrink-0">subject:</span>
+                                              <span className="text-foreground">{msgSubject}</span>
+                                            </div>
+                                            <div className="flex gap-2 pt-1 border-t border-border/40">
+                                              <span className="text-muted-foreground w-16 shrink-0">security:</span>
+                                              <span className="text-emerald-400 flex items-center gap-1">
+                                                <ShieldCheck className="size-3" /> Standard TLS Encryption
+                                              </span>
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
                                     </div>
                                   </div>
-                                  <div className="border-t border-success/10 mt-3 pt-2 flex items-center justify-between">
-                                    <span className="inline-flex items-center gap-1 text-[9px] text-success font-medium font-mono">
-                                      <Check className="size-2.5" /> Confirmed
+
+                                  {/* Right: Timestamp & Action buttons */}
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    <span className="text-[11px] text-muted-foreground font-mono select-none mr-1">
+                                      {msgDate.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                                     </span>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => toggleStar(msg.id, e)}
+                                      className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-amber-400 transition-colors cursor-pointer"
+                                      title="Star email"
+                                    >
+                                      <Star className={`size-3.5 ${isStarred ? 'text-amber-400 fill-amber-400' : ''}`} />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setIsComposerActive(true);
+                                        setNewMessageText(`\n\nOn ${msgDate.toLocaleDateString()}, ${fromName} wrote:\n> ${msg.content.slice(0, 100)}...`);
+                                        textareaRef.current?.focus();
+                                      }}
+                                      className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                                      title="Reply to this email"
+                                    >
+                                      <Reply className="size-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleMessageExpand(msg.id)}
+                                      className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                                      title="Collapse email"
+                                    >
+                                      <ChevronUp className="size-3.5" />
+                                    </button>
                                   </div>
                                 </div>
-                              ) : isFileAttachment ? (
-                                /* Document / File Attachment */
-                                (() => {
-                                  const parts = msg.content.replace("📎 File Attachment: ", "").split("\n\n");
-                                  const metaStr = parts[0] || "";
-                                  const caption = parts.slice(1).join("\n\n");
-                                  const [fileName, sizeParam, typeParam, dataParam] = metaStr.split("|");
-                                  const fileSize = sizeParam ? sizeParam.replace("size=", "") : "File";
-                                  const fileType = typeParam ? typeParam.replace("type=", "") : "document";
-                                  const dataUrl = dataParam ? dataParam.replace("data=", "") : undefined;
 
-                                  return (
-                                    <div className="bg-[#12131a] border border-border rounded-xl p-3 max-w-[420px] shadow-sm space-y-2">
-                                      <div className="flex gap-2.5 items-center">
+                                {/* Email Body */}
+                                <div className="text-xs sm:text-[13.5px] text-foreground/90 leading-relaxed font-sans select-text space-y-3 pt-1">
+                                  {isBrochureCard ? (
+                                    /* Shared document card */
+                                    <div className="bg-[#12131a] border border-border rounded-xl p-3.5 max-w-[440px] shadow-sm relative overflow-hidden">
+                                      <div className="flex gap-3 items-center">
                                         <div className="size-9 bg-primary/10 rounded-lg flex items-center justify-center border border-primary/20 shrink-0 text-primary">
                                           <FileText className="size-4.5" />
                                         </div>
                                         <div className="min-w-0 flex-1">
-                                          <h4 className="text-xs font-semibold text-white truncate">{fileName || "Attachment"}</h4>
-                                          <span className="text-[10px] text-muted-foreground font-mono">
-                                            {fileSize} · {fileType.includes("pdf") ? "PDF" : "File"}
-                                          </span>
+                                          <h4 className="text-xs font-semibold text-white truncate">{msg.content.replace("📄 Document Shared: ", "").split(".pdf|size=")[0]}</h4>
+                                          <p className="text-[10px] text-muted-foreground mt-0.5">PDF Document · {msg.content.includes("|size=") ? msg.content.split("|size=")[1] : "4.8 MB"}</p>
                                         </div>
                                       </div>
-                                      {caption && (
-                                        <p className="text-xs text-white/90 pt-1 border-t border-white/5 leading-relaxed whitespace-pre-line">
-                                          {caption}
-                                        </p>
-                                      )}
-                                      <div className="border-t border-white/5 pt-2 flex items-center justify-between">
+                                      <div className="border-t border-border/40 mt-3 pt-2.5 flex items-center justify-between">
                                         <span className="text-[9px] text-muted-foreground font-mono">Attachment</span>
-                                        {dataUrl ? (
-                                          <a
-                                            href={dataUrl}
-                                            download={fileName}
-                                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline cursor-pointer"
-                                          >
-                                            <Download className="size-3" /> Download
-                                          </a>
-                                        ) : (
-                                          <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
-                                            <Check className="size-2.5" /> Attached
-                                          </span>
-                                        )}
-                                      </div>
-                                    </div>
-                                  );
-                                })()
-                              ) : isImageAttachment ? (
-                                /* Image Attachment */
-                                (() => {
-                                  const parts = msg.content.replace("🖼️ Image Shared: ", "").split("\n\n");
-                                  const metaStr = parts[0] || "";
-                                  const caption = parts.slice(1).join("\n\n");
-                                  const [fileName, sizeParam, dataParam] = metaStr.split("|");
-                                  const fileSize = sizeParam ? sizeParam.replace("size=", "") : "";
-                                  const dataUrl = dataParam ? dataParam.replace("data=", "") : undefined;
-
-                                  return (
-                                    <div className="bg-[#12131a] border border-border rounded-xl p-2.5 max-w-[420px] shadow-sm space-y-2">
-                                      {dataUrl && (
-                                        <div
-                                          onClick={() => setActiveImageModalUrl(dataUrl)}
-                                          className="relative rounded-lg overflow-hidden border border-border max-h-[240px] bg-black/40 cursor-pointer group/img"
-                                        >
-                                          <img src={dataUrl} alt={fileName} className="w-full h-auto object-cover max-h-[240px] group-hover/img:scale-105 transition-transform duration-200" />
-                                        </div>
-                                      )}
-                                      <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono px-1">
-                                        <span className="truncate max-w-[200px]">{fileName}</span>
-                                        {fileSize && <span>{fileSize}</span>}
-                                      </div>
-                                      {caption && (
-                                        <p className="text-xs text-white/90 pt-1 leading-relaxed border-t border-white/5 whitespace-pre-line">
-                                          {caption}
-                                        </p>
-                                      )}
-                                    </div>
-                                  );
-                                })()
-                              ) : isLinkShared ? (
-                                /* Shared Link */
-                                (() => {
-                                  const parts = msg.content.replace("🔗 Link Shared: ", "").split("\n\n");
-                                  const metaStr = parts[0] || "";
-                                  const caption = parts.slice(1).join("\n\n");
-                                  const [titleParam, urlParam] = metaStr.split("|");
-                                  const title = titleParam || "Shared Link";
-                                  const url = urlParam ? urlParam.replace("url=", "") : "#";
-
-                                  return (
-                                    <div className="bg-[#12131a] border border-border rounded-xl p-3 max-w-[420px] shadow-sm space-y-2">
-                                      <div className="flex gap-2.5 items-start">
-                                        <div className="size-9 bg-primary/10 rounded-lg flex items-center justify-center border border-primary/20 shrink-0 text-primary">
-                                          <Globe className="size-4.5" />
-                                        </div>
-                                        <div className="min-w-0 flex-1">
-                                          <h4 className="text-xs font-semibold text-white truncate">{title}</h4>
-                                          <p className="text-[10px] text-muted-foreground truncate font-mono">{url}</p>
-                                        </div>
-                                      </div>
-                                      {caption && (
-                                        <p className="text-xs text-white/90 pt-1 border-t border-white/5 leading-relaxed whitespace-pre-line">
-                                          {caption}
-                                        </p>
-                                      )}
-                                      <div className="border-t border-white/5 pt-2 flex items-center justify-between">
-                                        <span className="text-[9px] text-muted-foreground font-mono">Link</span>
                                         <a
-                                          href={url}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-secondary hover:bg-secondary/80 text-foreground text-xs font-medium transition-colors cursor-pointer border border-border"
+                                          href="#"
+                                          onClick={(e) => {
+                                            e.preventDefault();
+                                            setIsLookbookOpen(true);
+                                            setLookbookPage(0);
+                                          }}
+                                          className="text-xs text-primary hover:underline font-mono"
                                         >
-                                          Open <ExternalLink className="size-3" />
+                                          View PDF
                                         </a>
                                       </div>
                                     </div>
-                                  );
-                                })()
-                              ) : (
-                                /* Standard Clean Message Text */
-                                <p className="whitespace-pre-line leading-relaxed text-[13.5px] text-foreground/90 font-sans">
-                                  {msg.content}
-                                </p>
-                              )}
-                            </div>
+                                  ) : isAppointmentCard ? (
+                                    /* Site Visit Card */
+                                    <div className="bg-[#12131a] border border-border rounded-xl p-3.5 max-w-[440px] shadow-sm space-y-2">
+                                      <div className="flex items-center gap-2.5 text-primary">
+                                        <Calendar className="size-4" />
+                                        <span className="text-xs font-bold font-sans">Site Walkthrough & Lot Consultation</span>
+                                      </div>
+                                      <p className="text-xs text-muted-foreground leading-relaxed">
+                                        {msg.content.replace("📆 Site Visit Booked: ", "")}
+                                      </p>
+                                    </div>
+                                  ) : isImageAttachment ? (
+                                    /* Image Card */
+                                    (() => {
+                                      const parts = msg.content.replace("🖼️ Image Shared: ", "").split("\n\n");
+                                      const metaStr = parts[0] || "";
+                                      const caption = parts.slice(1).join("\n\n");
+                                      const [nameParam, sizeParam, dataUrlParam] = metaStr.split("|");
+                                      const fileName = nameParam || "Attached Image";
+                                      const fileSize = sizeParam ? sizeParam.replace("size=", "") : "";
+                                      const dataUrl = dataUrlParam ? dataUrlParam.replace("data=", "") : "";
+
+                                      return (
+                                        <div className="bg-[#12131a] border border-border rounded-xl p-3 max-w-[420px] shadow-sm space-y-2">
+                                          {dataUrl && (
+                                            <div
+                                              onClick={() => setActiveImageModalUrl(dataUrl)}
+                                              className="relative rounded-lg overflow-hidden border border-border max-h-[240px] bg-black/40 cursor-pointer group/img"
+                                            >
+                                              <img src={dataUrl} alt={fileName} className="w-full h-auto object-cover max-h-[240px] group-hover/img:scale-105 transition-transform duration-200" />
+                                            </div>
+                                          )}
+                                          <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono px-1">
+                                            <span className="truncate max-w-[200px]">{fileName}</span>
+                                            {fileSize && <span>{fileSize}</span>}
+                                          </div>
+                                          {caption && (
+                                            <p className="text-xs text-white/90 pt-1 leading-relaxed border-t border-white/5 whitespace-pre-line">
+                                              {caption}
+                                            </p>
+                                          )}
+                                        </div>
+                                      );
+                                    })()
+                                  ) : isLinkShared ? (
+                                    /* Shared Link */
+                                    (() => {
+                                      const parts = msg.content.replace("🔗 Link Shared: ", "").split("\n\n");
+                                      const metaStr = parts[0] || "";
+                                      const caption = parts.slice(1).join("\n\n");
+                                      const [titleParam, urlParam] = metaStr.split("|");
+                                      const title = titleParam || "Shared Link";
+                                      const url = urlParam ? urlParam.replace("url=", "") : "#";
+
+                                      return (
+                                        <div className="bg-[#12131a] border border-border rounded-xl p-3 max-w-[420px] shadow-sm space-y-2">
+                                          <div className="flex gap-2.5 items-start">
+                                            <div className="size-9 bg-primary/10 rounded-lg flex items-center justify-center border border-primary/20 shrink-0 text-primary">
+                                              <Globe className="size-4.5" />
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                              <h4 className="text-xs font-semibold text-white truncate">{title}</h4>
+                                              <p className="text-[10px] text-muted-foreground truncate font-mono">{url}</p>
+                                            </div>
+                                          </div>
+                                          {caption && (
+                                            <p className="text-xs text-white/90 pt-1 border-t border-white/5 leading-relaxed whitespace-pre-line">
+                                              {caption}
+                                            </p>
+                                          )}
+                                          <div className="border-t border-white/5 pt-2 flex items-center justify-between">
+                                            <span className="text-[9px] text-muted-foreground font-mono">Link</span>
+                                            <a
+                                              href={url}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-secondary hover:bg-secondary/80 text-foreground text-xs font-medium transition-colors cursor-pointer border border-border"
+                                            >
+                                              Open <ExternalLink className="size-3" />
+                                            </a>
+                                          </div>
+                                        </div>
+                                      );
+                                    })()
+                                  ) : (
+                                    /* Standard Clean Message Text */
+                                    <p className="whitespace-pre-line leading-relaxed text-[13.5px] text-foreground/90 font-sans">
+                                      {msg.content}
+                                    </p>
+                                  )}
+
+                                  {/* Professional Email Signature Block */}
+                                  {(isUser || isAI) && (
+                                    <div className="pt-4 border-t border-border/30 text-[11px] text-muted-foreground font-sans space-y-0.5 select-none">
+                                      <p className="font-semibold text-foreground/90">{fromName}</p>
+                                      <p className="text-[10.5px]">{isAI ? "AI Autonomous Qualification Concierge" : (session?.builderRole === 'owner' ? 'Founder & Principal Builder' : 'Senior Sales Director')}</p>
+                                      <p className="text-primary font-medium">{session?.companyName || "WeaverFrame Architecture OS"}</p>
+                                      <p className="text-[10px] font-mono text-muted-foreground/70">🌐 {builderDomain} · 🔒 Verified Sender</p>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="flex flex-col items-center justify-center h-full text-center py-16">
+                        <div className="size-12 rounded-2xl bg-secondary/60 border border-border flex items-center justify-center mb-3">
+                          <Mail className="size-6 text-muted-foreground" />
+                        </div>
+                        <p className="text-sm text-foreground font-semibold">No messages yet</p>
+                        <p className="text-xs text-muted-foreground mt-1 max-w-sm leading-relaxed">
+                          Send a message below to start your conversation with {selectedThread.leadName}.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Typing Indicator for simulated replies */}
+                    {isSimulating && (
+                      <div className="flex items-center gap-2 p-3 text-xs text-muted-foreground font-mono animate-in fade-in duration-150">
+                        <Loader2 className="size-3.5 animate-spin text-primary" />
+                        <span>AI is generating reply...</span>
+                      </div>
+                    )}
+
+                    {/* Scroll Anchor */}
+                    <div ref={chatEndRef} />
+                  </div>
+                </div>
+
+                {/* ════════════════════════════════════════════════════════════════
+                    GMAIL-STYLE EXECUTIVE BOTTOM COMPOSER
+                    ════════════════════════════════════════════════════════════════ */}
+                <div className="p-3.5 sm:p-4 border-t border-border/80 bg-[#08090d] relative z-30 shrink-0">
+                  {isUserScrolledUp && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        scrollToBottom(true, "smooth");
+                      }}
+                      className="absolute -top-12 left-1/2 -translate-x-1/2 z-50 pointer-events-auto flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#141418]/95 border border-primary/50 text-primary shadow-xl hover:bg-primary hover:text-black transition-all cursor-pointer animate-in fade-in slide-in-from-bottom-1 duration-150 text-xs"
+                      title="Scroll to latest messages"
+                    >
+                      <ChevronDown className="size-3.5" />
+                      <span>Latest Messages</span>
+                    </button>
+                  )}
+
+                  {/* Hidden File Input Picker */}
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileSelect}
+                    className="hidden"
+                    accept="image/*,application/pdf,.doc,.docx,.cad,.dwg,.txt,.csv"
+                  />
+
+                  {/* Pre-Send Attachment Banner (File) */}
+                  {attachedFile && (
+                    <div className="mb-2.5 p-2 px-3 rounded-lg bg-secondary border border-border flex items-center justify-between text-xs text-foreground animate-in slide-in-from-bottom-1">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <FileText className="size-4 text-primary shrink-0" />
+                        <span className="font-medium text-xs truncate">{attachedFile.name}</span>
+                        <span className="text-[10px] text-muted-foreground font-mono">({attachedFile.size})</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setAttachedFile(null)}
+                        className="p-1 rounded hover:bg-white/10 text-muted-foreground hover:text-foreground cursor-pointer"
+                      >
+                        <X className="size-3.5" />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Pre-Send Attachment Banner (Link) */}
+                  {attachedLink && (
+                    <div className="mb-2.5 p-2 px-3 rounded-lg bg-secondary border border-border flex items-center justify-between text-xs text-foreground animate-in slide-in-from-bottom-1">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <Globe className="size-4 text-primary shrink-0" />
+                        <span className="font-medium text-xs truncate">{attachedLink.title}</span>
+                        <span className="text-[10px] text-muted-foreground font-mono truncate max-w-[200px]">({attachedLink.url})</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setAttachedLink(null)}
+                        className="p-1 rounded hover:bg-white/10 text-muted-foreground hover:text-foreground cursor-pointer"
+                      >
+                        <X className="size-3.5" />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Compact Quick Reply Bar (When Not Focused) */}
+                  {!isComposerActive && !newMessageText ? (
+                    <div className="flex items-center justify-between gap-3 p-3 rounded-xl border border-border/80 bg-[#0c0d14] hover:border-primary/40 transition-colors">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsComposerActive(true);
+                          setTimeout(() => textareaRef.current?.focus(), 50);
+                        }}
+                        className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground font-medium cursor-pointer"
+                      >
+                        <Reply className="size-4 text-primary" />
+                        <span>Reply to <strong>{selectedThread.leadName}</strong>...</span>
+                      </button>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsComposerActive(true);
+                            setNewMessageText("Thank you for reaching out! We would love to schedule a design consultation to review your lot and architectural plans.");
+                          }}
+                          className="px-2.5 py-1 rounded-md bg-secondary hover:bg-secondary/80 border border-border text-[11px] text-muted-foreground hover:text-foreground font-mono transition-colors cursor-pointer hidden sm:inline"
+                        >
+                          ⚡ Quick Pitch Draft
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsSchedulingOpen(true)}
+                          className="px-2.5 py-1 rounded-md bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-[11px] font-semibold transition-colors cursor-pointer flex items-center gap-1"
+                        >
+                          <Calendar className="size-3" /> Book Visit
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Full Gmail Web Composer Box */
+                    <div className="rounded-2xl border border-primary/40 bg-[#0d0e16] shadow-xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-150">
+                      {/* From / To Header */}
+                      <div className="p-3 border-b border-border/50 bg-[#08090f] space-y-2 text-xs">
+                        {/* Dynamic Sender Identity Selector (Employee vs Company vs AI) */}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <span className="text-[10.5px] font-mono text-muted-foreground uppercase font-bold shrink-0">From:</span>
+                            <select
+                              value={selectedSenderIdentity}
+                              onChange={(e) => setSelectedSenderIdentity(e.target.value as any)}
+                              className="bg-secondary/60 border border-border rounded-md px-2 py-1 text-xs text-foreground font-mono focus:outline-none focus:border-primary/50 cursor-pointer"
+                            >
+                              <option value="employee">
+                                {session?.displayName || "Sarah Jenkins"} &lt;{builderSalesEmail}&gt; (Assigned Member)
+                              </option>
+                              <option value="company">
+                                {session?.companyName || "Custom Builder"} Concierge &lt;{builderCompanyEmail}&gt; (Company Desk)
+                              </option>
+                              <option value="ai">
+                                {session?.displayName || "Builder"} AI Concierge &lt;{builderAiEmail}&gt; (Autonomous AI)
+                              </option>
+                            </select>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => setShowCcDrawer(prev => !prev)}
+                              className="text-[11px] font-mono text-muted-foreground hover:text-primary cursor-pointer px-1.5 py-0.5 rounded hover:bg-white/5"
+                            >
+                              {showCcDrawer ? "Hide CC" : "Cc / Bcc"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsComposerActive(false);
+                                setNewMessageText("");
+                              }}
+                              className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-white/10 cursor-pointer"
+                              title="Minimize composer"
+                            >
+                              <X className="size-3.5" />
+                            </button>
                           </div>
                         </div>
-                      );
-                    })
-                  ) : (
-                    <div className="flex flex-col items-center justify-center h-full text-center py-16">
-                      <div className="size-12 rounded-2xl bg-secondary/60 border border-border flex items-center justify-center mb-3">
-                        <Mail className="size-6 text-muted-foreground" />
+
+                        {/* Recipient Row */}
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10.5px] font-mono text-muted-foreground uppercase font-bold shrink-0">To:</span>
+                          <span className="px-2 py-0.5 rounded-full bg-secondary border border-border text-foreground font-mono text-[11px] truncate">
+                            {selectedThread.leadName} &lt;{selectedThread.email || `${selectedThread.leadName?.toLowerCase().replace(/\s+/g, '')}@gmail.com`}&gt;
+                          </span>
+                        </div>
+
+                        {/* Optional CC Drawer */}
+                        {showCcDrawer && (
+                          <div className="pt-2 border-t border-border/30 flex flex-col gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-mono text-muted-foreground uppercase font-semibold shrink-0">Subject:</span>
+                              <input
+                                type="text"
+                                value={emailSubject}
+                                onChange={(e) => setEmailSubject(e.target.value)}
+                                className="w-full bg-transparent text-xs text-foreground focus:outline-none"
+                                placeholder={`Re: ${currentThreadSubject}`}
+                              />
+                            </div>
+                            <div className="flex items-center gap-2 pt-1 border-t border-border/20">
+                              <span className="text-[10px] font-mono text-muted-foreground uppercase font-semibold shrink-0">CC:</span>
+                              <input
+                                type="email"
+                                value={ccEmail}
+                                onChange={(e) => setCcEmail(e.target.value)}
+                                placeholder={`team@${builderDomain}`}
+                                className="w-full bg-transparent text-xs text-foreground focus:outline-none font-mono"
+                              />
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      <p className="text-sm text-foreground font-semibold">No messages yet</p>
-                      <p className="text-xs text-muted-foreground mt-1 max-w-sm leading-relaxed">
-                        Send a message below to start your conversation with {selectedThread.leadName}.
-                      </p>
-                    </div>
-                  )}
 
-                  {/* Typing Indicator for simulated replies */}
-                  {isSimulating && (
-                    <div className="flex items-center gap-2 p-3 text-xs text-muted-foreground font-mono animate-in fade-in duration-150">
-                      <Loader2 className="size-3.5 animate-spin text-primary" />
-                      <span>AI is generating reply...</span>
-                    </div>
-                  )}
-
-                  {/* Scroll Anchor */}
-                  <div ref={chatEndRef} />
-                </div>
-              </div>
-
-              {/* SIMPLE COMPACT COMPOSER */}
-              <div className="p-4 border-t border-border bg-[#090a0e] relative z-30 shrink-0">
-                {isUserScrolledUp && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      scrollToBottom(true, "smooth");
-                    }}
-                    className="absolute -top-12 left-1/2 -translate-x-1/2 z-50 pointer-events-auto flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#141418]/95 border border-primary/50 text-primary shadow-xl hover:bg-primary hover:text-black transition-all cursor-pointer animate-in fade-in slide-in-from-bottom-1 duration-150 text-xs"
-                    title="Scroll to latest messages"
-                  >
-                    <ChevronDown className="size-3.5" />
-                    <span>Latest Messages</span>
-                  </button>
-                )}
-
-                {/* Hidden File Input Picker */}
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleFileSelect}
-                  className="hidden"
-                  accept="image/*,application/pdf,.doc,.docx,.cad,.dwg,.txt,.csv"
-                />
-
-                {/* Pre-Send Attachment Banner (File) */}
-                {attachedFile && (
-                  <div className="mb-2.5 p-2 px-3 rounded-lg bg-secondary border border-border flex items-center justify-between text-xs text-foreground animate-in slide-in-from-bottom-1">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <FileText className="size-4 text-primary shrink-0" />
-                      <span className="font-medium text-xs truncate">{attachedFile.name}</span>
-                      <span className="text-[10px] text-muted-foreground font-mono">({attachedFile.size})</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setAttachedFile(null)}
-                      className="p-1 rounded hover:bg-white/10 text-muted-foreground hover:text-foreground cursor-pointer"
-                    >
-                      <X className="size-3.5" />
-                    </button>
-                  </div>
-                )}
-
-                {/* Pre-Send Attachment Banner (Link) */}
-                {attachedLink && (
-                  <div className="mb-2.5 p-2 px-3 rounded-lg bg-secondary border border-border flex items-center justify-between text-xs text-foreground animate-in slide-in-from-bottom-1">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <Globe className="size-4 text-primary shrink-0" />
-                      <span className="font-medium text-xs truncate">{attachedLink.title}</span>
-                      <span className="text-[10px] text-muted-foreground font-mono truncate max-w-[200px]">({attachedLink.url})</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setAttachedLink(null)}
-                      className="p-1 rounded hover:bg-white/10 text-muted-foreground hover:text-foreground cursor-pointer"
-                    >
-                      <X className="size-3.5" />
-                    </button>
-                  </div>
-                )}
-
-                {/* Unified Clean Composer Box */}
-                <div className="rounded-xl border border-border bg-[#0d0e14] focus-within:border-primary/60 transition-all overflow-hidden shadow-sm">
-                  {/* Optional CC/Subject expander */}
-                  {showCcDrawer && (
-                    <div className="p-2.5 border-b border-border/40 bg-secondary/20 flex flex-col gap-2 text-xs">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-mono text-muted-foreground uppercase font-semibold shrink-0">Subject:</span>
-                        <input
-                          type="text"
-                          value={emailSubject}
-                          onChange={(e) => setEmailSubject(e.target.value)}
-                          className="w-full bg-transparent text-xs text-foreground focus:outline-none"
-                          placeholder={`Re: ${currentThreadSubject}`}
+                      {/* Main Rich Textarea Body */}
+                      <div className="p-3.5">
+                        <textarea
+                          ref={textareaRef}
+                          rows={4}
+                          value={newMessageText}
+                          onChange={(e) => {
+                            setNewMessageText(e.target.value);
+                            e.target.style.height = "auto";
+                            e.target.style.height = `${Math.min(e.target.scrollHeight, 240)}px`;
+                          }}
+                          placeholder={`Write your response to ${selectedThread.leadName}...`}
+                          className="w-full bg-transparent p-0 text-xs sm:text-[13.5px] text-foreground placeholder:text-muted-foreground/60 focus:outline-none resize-none min-h-[90px] max-h-[240px] font-sans leading-relaxed custom-scrollbar"
                         />
                       </div>
-                      <div className="flex items-center gap-2 pt-1 border-t border-border/30">
-                        <span className="text-[10px] font-mono text-muted-foreground uppercase font-semibold shrink-0">CC:</span>
-                        <input
-                          type="email"
-                          value={ccEmail}
-                          onChange={(e) => setCcEmail(e.target.value)}
-                          placeholder={`team@${builderDomain}`}
-                          className="w-full bg-transparent text-xs text-foreground focus:outline-none font-mono"
-                        />
+
+                      {/* Gmail Bottom Action Toolbar */}
+                      <div className="px-3.5 py-2.5 border-t border-border/40 bg-[#08090f] flex items-center justify-between gap-2">
+                        {/* Left Action Buttons */}
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {/* Send Button */}
+                          <button
+                            type="button"
+                            onClick={() => handleSendMessage()}
+                            disabled={isSending || (!newMessageText.trim() && !attachedFile && !attachedLink)}
+                            className="px-4 py-1.5 rounded-lg bg-primary text-black text-xs font-bold hover:bg-primary/90 transition-all flex items-center gap-1.5 shadow-md disabled:opacity-40 cursor-pointer shrink-0"
+                          >
+                            {isSending ? (
+                              <>
+                                <Loader2 className="size-3.5 animate-spin" />
+                                <span>Sending...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Send className="size-3.5" />
+                                <span>Send</span>
+                              </>
+                            )}
+                          </button>
+
+                          <div className="w-px h-4 bg-border/60 mx-1" />
+
+                          {/* Attachment Tools */}
+                          <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={isSending}
+                            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
+                            title="Attach File / Document"
+                          >
+                            <Paperclip className="size-4" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setIsPortfolioModalOpen(true)}
+                            disabled={isSending}
+                            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
+                            title="Attach Architectural Lookbook PDF"
+                          >
+                            <BookOpen className="size-4" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setIsLinkModalOpen(true)}
+                            disabled={isSending}
+                            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
+                            title="Insert Link"
+                          >
+                            <Globe className="size-4" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setIsSchedulingOpen(true)}
+                            disabled={isSending}
+                            className="p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
+                            title="Book Site Walkthrough"
+                          >
+                            <Calendar className="size-4" />
+                          </button>
+
+                          {/* AI Polish */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!newMessageText.trim()) {
+                                setNewMessageText("Hi " + selectedThread.leadName + ",\n\nThank you for reaching out regarding your custom home build. We would love to review your preliminary architectural drawings and lot specifications.\n\nCould you please let us know your ideal move-in timeline?");
+                              } else {
+                                toast.success("AI polished draft!");
+                              }
+                            }}
+                            className="p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
+                            title="AI Polish Draft"
+                          >
+                            <Sparkles className="size-4 text-primary" />
+                          </button>
+                        </div>
+
+                        {/* Right: Discard Draft */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewMessageText("");
+                            setAttachedFile(null);
+                            setAttachedLink(null);
+                            setIsComposerActive(false);
+                          }}
+                          className="p-1.5 rounded-lg text-muted-foreground hover:text-danger hover:bg-danger/10 transition-colors cursor-pointer"
+                          title="Discard Draft"
+                        >
+                          <Trash2 className="size-4" />
+                        </button>
                       </div>
                     </div>
                   )}
-
-                  {/* Single Line Default Auto-Expanding Textarea */}
-                  <div className="px-3 py-2 flex items-center">
-                    <textarea
-                      ref={textareaRef}
-                      rows={1}
-                      value={newMessageText}
-                      onChange={(e) => {
-                        setNewMessageText(e.target.value);
-                        e.target.style.height = "auto";
-                        e.target.style.height = `${Math.min(e.target.scrollHeight, 180)}px`;
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                          handleSendMessage();
-                        }
-                      }}
-                      placeholder={`Reply to ${selectedThread.leadName}... (Enter to send, Shift+Enter for new line)`}
-                      className="w-full bg-transparent p-0 text-xs sm:text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none resize-none min-h-[24px] max-h-[180px] font-sans leading-normal custom-scrollbar"
-                    />
-                  </div>
-
-                  {/* Action Toolbar */}
-                  <div className="px-3 py-2 border-t border-border/30 bg-secondary/10 flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={isSending}
-                        className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
-                        title="Attach File"
-                      >
-                        <Paperclip className="size-4" />
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setIsLinkModalOpen(true)}
-                        disabled={isSending}
-                        className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
-                        title="Add Link"
-                      >
-                        <Globe className="size-4" />
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setIsPortfolioModalOpen(true)}
-                        disabled={isSending}
-                        className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
-                        title="Attach PDF"
-                      >
-                        <BookOpen className="size-4" />
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setIsSchedulingOpen(true)}
-                        disabled={isSending}
-                        className="p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
-                        title="Schedule Meeting"
-                      >
-                        <Calendar className="size-4" />
-                      </button>
-
-                      <div className="w-px h-4 bg-border mx-1" />
-
-                      <button
-                        type="button"
-                        onClick={() => setShowCcDrawer(prev => !prev)}
-                        className={`px-2 py-1 rounded text-[10.5px] font-mono transition-colors cursor-pointer ${
-                          showCcDrawer ? "bg-primary/20 text-primary font-bold" : "text-muted-foreground hover:text-foreground hover:bg-secondary"
-                        }`}
-                      >
-                        {showCcDrawer ? "Hide CC" : "+ CC / Subject"}
-                      </button>
-                    </div>
-
-                    {/* Send Button */}
-                    <button
-                      type="button"
-                      onClick={() => handleSendMessage()}
-                      disabled={isSending || (!newMessageText.trim() && !attachedFile && !attachedLink)}
-                      className="px-4 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all flex items-center gap-1.5 shadow-sm disabled:opacity-40 cursor-pointer shrink-0"
-                    >
-                      {isSending ? (
-                        <>
-                          <Loader2 className="size-3.5 animate-spin" />
-                          <span>Sending...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Send className="size-3.5" />
-                          <span>Send</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
                 </div>
-              </div>
             </>
           ) : (
             /* LOADING / EMPTY VIEW */

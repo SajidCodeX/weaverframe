@@ -22,8 +22,9 @@ import {
   updateBillingProfile,
   createStripeCheckoutSession,
   createStripeCustomerPortalSession,
+  addManualLead,
 } from "@/lib/dashboard";
-import { Loader2, Check, X, AlertCircle, Download, Mail, Sparkles, RefreshCw, Lock, ShieldCheck, CheckCircle2, Zap, Server, Globe, CreditCard, ExternalLink } from "lucide-react";
+import { Loader2, Check, X, AlertCircle, Download, Mail, Sparkles, RefreshCw, Lock, ShieldCheck, CheckCircle2, Zap, Server, Globe, CreditCard, ExternalLink, Copy, Code, Share2, Send, Terminal, Smartphone, Inbox, ArrowRight, CheckCircle } from "lucide-react";
 
 export const Route = createFileRoute("/settings")({
   beforeLoad: async ({ context }) => {
@@ -213,7 +214,7 @@ function SettingsPage() {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
     doc.text("Thank you for your business! If you have any questions, reach out to", 20, 210);
-    doc.text("billing@buildersedge.com. Built by Google DeepMind team.", 20, 215);
+    doc.text("support@weaverframe.in · WeaverFrame Architecture OS", 20, 215);
 
     doc.save(`BE_Invoice_${date.replace(/\s+/g, '_').replace(/,/g, '')}.pdf`);
   };
@@ -428,7 +429,7 @@ function SettingsPage() {
   };
 
   // ── Webhook URL State ───────────────────────────────────────────────────
-  const [webhookUrl, setWebhookUrl] = useState(loadedWebhookUrl || 'https://your-app.com/webhook/buildersedge');
+  const [webhookUrl, setWebhookUrl] = useState(loadedWebhookUrl || '');
 
   useEffect(() => {
     if (loadedWebhookUrl) {
@@ -658,6 +659,68 @@ function SettingsPage() {
     }
   };
 
+  // ── Inbound Lead Ingestion Hub State ─────────────────────────────────────────
+  const [inboundTab, setInboundTab] = useState<"wordpress" | "meta" | "webflow" | "email_forward" | "zapier" | "embed">("wordpress");
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [isTestingInbound, setIsTestingInbound] = useState(false);
+  const [testInboundResult, setTestInboundResult] = useState<{ success: boolean; message: string; leadId?: string; scoreTier?: string; dealScore?: number } | null>(null);
+
+  const copyToClipboard = (text: string, key: string) => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(null), 2500);
+    }
+  };
+
+  const builderToken = session?.builderId || loadedProfile?.id || "builder_primary";
+  const siteOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://weaverframe.in';
+  const inboundWebhookUrl = `${siteOrigin}/api/leads/inbound?token=${builderToken}`;
+  const inboundEmailAddress = `leads+${builderToken.slice(0, 8)}@inbound.weaverframe.in`;
+
+  const handleSendTestLead = async () => {
+    setIsTestingInbound(true);
+    setTestInboundResult(null);
+    try {
+      const county = profileForm.targetZipCodes ? `${profileForm.targetZipCodes.split(',')[0].trim()} CAD` : "Travis County";
+      const res = await addManualLead({
+        data: {
+          name: "Harrison Vance (Test Inbound Lead)",
+          email: `inbound.buyer.${Date.now().toString().slice(-4)}@example.com`,
+          phone: "+1 (512) 555-0199",
+          county,
+          state: "TX",
+          estimatedBudget: 2200000,
+          source: `${inboundTab.toUpperCase()} Inbound Lead Hub`,
+          scoreTier: "Hot",
+          notes: "Looking for a 4,800 sqft modern architectural estate in Westlake. Lot survey already completed. Requesting architectural consultation.",
+        }
+      });
+
+      if (res?.success) {
+        setTestInboundResult({
+          success: true,
+          message: `Inbound lead created (#${res.lead?.id?.slice(0, 8) || 'new'}). Score: ${res.lead?.dealScore || 85} (${res.lead?.scoreTier || 'Hot'}). Ingested & ready in Leads tab!`,
+          leadId: res.lead?.id,
+          scoreTier: res.lead?.scoreTier,
+          dealScore: res.lead?.dealScore,
+        });
+        await router.invalidate();
+      } else {
+        setTestInboundResult({
+          success: false,
+          message: "Failed to process inbound test lead.",
+        });
+      }
+    } catch (err: any) {
+      setTestInboundResult({
+        success: false,
+        message: err?.message || "Network error while sending test lead.",
+      });
+    } finally {
+      setIsTestingInbound(false);
+    }
+  };
 
   const integrationsList = [
     // {
@@ -863,16 +926,370 @@ function SettingsPage() {
           )}
 
           {active === "Integrations" && (
-            <div className="space-y-4">
+            <div className="space-y-6">
               <div>
                 <H>Integrations & API Credentials</H>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Connect company mailboxes and third-party platforms with encrypted credentials to synchronize reviews, leads, and AI communication.
+                  Connect inbound website lead sources, company mailboxes, and third-party CRMs to automate high-ticket buyer qualification.
                 </p>
               </div>
 
-              {/* Integrations List */}
-              <div className="space-y-3">
+              {/* ════════════════════════════════════════════════════════════════════
+                  1. INBOUND LEAD INGESTION & PLATFORM CONNECTION HUB (CORE WORKFLOW)
+                  ════════════════════════════════════════════════════════════════════ */}
+              <div className="border-2 border-primary/30 rounded-2xl bg-[#0a0b10] p-5 sm:p-6 space-y-5 shadow-xl relative overflow-hidden">
+                {/* Header Strip */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/50 pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="size-10 rounded-xl bg-primary/15 border border-primary/30 flex items-center justify-center text-primary shrink-0 shadow-inner">
+                      <Zap className="size-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-base font-bold text-foreground">Inbound Lead Connection Hub</h3>
+                        <span className="px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-primary/20 text-primary border border-primary/30 uppercase tracking-wider">
+                          Auto Ingest
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Route leads from your website forms, Meta Lead Ads, Houzz/Zillow emails, or Zapier directly into your pipeline.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Test Ping Button */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={handleSendTestLead}
+                      disabled={isTestingInbound}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-primary text-black hover:bg-primary/90 text-xs font-bold transition-all shadow-md cursor-pointer disabled:opacity-50"
+                      title="Send a sample high-ticket lead to test your pipeline"
+                    >
+                      {isTestingInbound ? (
+                        <>
+                          <Loader2 className="size-3.5 animate-spin" />
+                          <span>Ingesting Test Lead...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Send className="size-3.5" />
+                          <span>Send Test Inbound Lead</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Test Inbound Result Banner */}
+                {testInboundResult && (
+                  <div className={`p-3 rounded-xl border flex items-center justify-between text-xs animate-in fade-in slide-in-from-top-1 ${
+                    testInboundResult.success
+                      ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 font-medium"
+                      : "bg-red-500/10 border-red-500/30 text-red-400"
+                  }`}>
+                    <div className="flex items-center gap-2 min-w-0">
+                      {testInboundResult.success ? (
+                        <CheckCircle className="size-4 text-emerald-400 shrink-0" />
+                      ) : (
+                        <AlertCircle className="size-4 text-red-400 shrink-0" />
+                      )}
+                      <span className="truncate">{testInboundResult.message}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setTestInboundResult(null)}
+                      className="p-1 hover:bg-white/10 rounded text-muted-foreground hover:text-white cursor-pointer"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Master Webhook URL Box */}
+                <div className="p-4 rounded-xl bg-[#06070a] border border-border/80 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-[10.5px] font-mono text-muted-foreground uppercase font-semibold tracking-wider flex items-center gap-1.5">
+                      <Globe className="size-3.5 text-primary" />
+                      <span>Your Unique Inbound Webhook URL (POST)</span>
+                    </span>
+                    <span className="text-[10px] font-mono text-emerald-400 flex items-center gap-1">
+                      <Check className="size-3" /> Ready for POST requests
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 bg-secondary/30 border border-border rounded-lg px-3 py-2 text-xs font-mono text-foreground select-all overflow-x-auto whitespace-nowrap">
+                      {inboundWebhookUrl}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(inboundWebhookUrl, "webhook_url")}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-secondary hover:bg-secondary/80 border border-border text-xs font-medium text-foreground transition-colors shrink-0 cursor-pointer"
+                    >
+                      {copiedKey === "webhook_url" ? (
+                        <>
+                          <Check className="size-3.5 text-emerald-400" />
+                          <span className="text-emerald-400">Copied!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="size-3.5" />
+                          <span>Copy URL</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Platform Tabs Selector */}
+                <div className="space-y-3 pt-1">
+                  <label className="block text-[11px] text-muted-foreground uppercase tracking-wider font-semibold">
+                    Select Your Platform For Exact Step-by-Step Instructions:
+                  </label>
+
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { id: "wordpress", label: "WordPress / Elementor / WPForms", icon: "🌐" },
+                      { id: "meta", label: "Meta (FB & IG) Lead Ads", icon: "📱" },
+                      { id: "webflow", label: "Webflow, Wix & Squarespace", icon: "🎨" },
+                      { id: "email_forward", label: "Houzz & Zillow Email Routing", icon: "📨" },
+                      { id: "zapier", label: "Zapier & Make.com", icon: "⚡" },
+                      { id: "embed", label: "1-Line HTML / Embed Code", icon: "💻" },
+                    ].map((tab) => (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => setInboundTab(tab.id as any)}
+                        className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer border ${
+                          inboundTab === tab.id
+                            ? "bg-primary/15 border-primary/40 text-primary shadow-sm"
+                            : "bg-secondary/40 border-border text-muted-foreground hover:text-foreground hover:bg-secondary"
+                        }`}
+                      >
+                        <span>{tab.icon}</span>
+                        <span>{tab.label}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Platform-Specific Interactive Panels */}
+                  <div className="p-4 sm:p-5 rounded-xl bg-card border border-border/70 space-y-4 animate-in fade-in duration-150">
+                    {/* 1. WORDPRESS & ELEMENTOR */}
+                    {inboundTab === "wordpress" && (
+                      <div className="space-y-3.5">
+                        <div className="flex items-center justify-between border-b border-border/40 pb-2.5">
+                          <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
+                            <span>🌐 WordPress, Elementor Pro & WPForms Setup</span>
+                          </h4>
+                          <span className="text-[10px] font-mono text-muted-foreground">Setup time: 2 mins</span>
+                        </div>
+                        <ol className="text-xs text-muted-foreground space-y-2.5 list-decimal pl-4 leading-relaxed font-sans">
+                          <li>
+                            In your WordPress Dashboard, open your contact/inquiry form (e.g. <strong>Elementor Form</strong> or <strong>WPForms Webhooks</strong>).
+                          </li>
+                          <li>
+                            Under <strong>Actions After Submit</strong>, add <strong>Webhook</strong>.
+                          </li>
+                          <li>
+                            Paste your Webhook URL into the <strong>Webhook URL</strong> field:
+                            <code className="block mt-1 p-2 rounded bg-[#07080a] border border-border text-[11px] font-mono text-foreground break-all select-all">
+                              {inboundWebhookUrl}
+                            </code>
+                          </li>
+                          <li>
+                            Set Method to <strong>POST</strong>. WeaverFrame will automatically read standard fields: <code className="text-primary font-mono font-semibold">name</code>, <code className="text-primary font-mono font-semibold">email</code>, <code className="text-primary font-mono font-semibold">phone</code>, <code className="text-primary font-mono font-semibold">estimatedBudget</code>, <code className="text-primary font-mono font-semibold">county</code>, and <code className="text-primary font-mono font-semibold">message</code>.
+                          </li>
+                        </ol>
+                      </div>
+                    )}
+
+                    {/* 2. META LEAD ADS */}
+                    {inboundTab === "meta" && (
+                      <div className="space-y-3.5">
+                        <div className="flex items-center justify-between border-b border-border/40 pb-2.5">
+                          <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
+                            <span>📱 Facebook & Instagram Lead Generation Ads</span>
+                          </h4>
+                          <span className="text-[10px] font-mono text-muted-foreground">Instant 3s Lead Delivery</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                          Connect your Meta Ads directly via Zapier or Make.com so that every buyer form submission on Instagram or Facebook instantly enters your WeaverFrame pipeline:
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                          <div className="p-3 rounded-lg bg-secondary/30 border border-border space-y-1">
+                            <span className="text-[10px] font-mono uppercase text-primary font-bold">Step 1: Zapier Trigger</span>
+                            <p className="text-muted-foreground text-[11px]">App: <strong>Facebook Lead Ads</strong><br />Event: <strong>New Lead</strong></p>
+                          </div>
+                          <div className="p-3 rounded-lg bg-secondary/30 border border-border space-y-1">
+                            <span className="text-[10px] font-mono uppercase text-primary font-bold">Step 2: Zapier Action</span>
+                            <p className="text-muted-foreground text-[11px]">App: <strong>Webhooks by Zapier</strong><br />Action: <strong>POST</strong> to your Webhook URL</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 3. WEBFLOW, WIX & SQUARESPACE */}
+                    {inboundTab === "webflow" && (
+                      <div className="space-y-3.5">
+                        <div className="flex items-center justify-between border-b border-border/40 pb-2.5">
+                          <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
+                            <span>🎨 Webflow, Wix & Squarespace Custom Forms</span>
+                          </h4>
+                          <span className="text-[10px] font-mono text-muted-foreground">No Plugins Required</span>
+                        </div>
+                        <ol className="text-xs text-muted-foreground space-y-2.5 list-decimal pl-4 leading-relaxed font-sans">
+                          <li>
+                            In <strong>Webflow</strong>, select your Form block $\rightarrow$ Open Form Settings $\rightarrow$ Set <strong>Action</strong> to your Webhook URL and <strong>Method</strong> to <code className="font-mono text-foreground font-semibold">POST</code>.
+                          </li>
+                          <li>
+                            In <strong>Wix</strong> or <strong>Squarespace</strong>, use Wix Automations / Zapier Trigger to send form submissions directly to your WeaverFrame Webhook URL.
+                          </li>
+                          <li>
+                            When a client submits their budget and lot details, WeaverFrame ingests the lead and prepares the AI qualification reply within 60 seconds.
+                          </li>
+                        </ol>
+                      </div>
+                    )}
+
+                    {/* 4. HOUZZ & ZILLOW EMAIL ROUTING */}
+                    {inboundTab === "email_forward" && (
+                      <div className="space-y-3.5">
+                        <div className="flex items-center justify-between border-b border-border/40 pb-2.5">
+                          <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
+                            <span>📨 Houzz, Zillow & Real Estate Directory Email Routing</span>
+                          </h4>
+                          <span className="text-[10px] font-mono text-emerald-400 font-semibold">AI Automated Parser</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                          Real estate directories like Houzz and Zillow send new lead notifications to your email inbox. Forward them to your dedicated WeaverFrame Inbound routing address:
+                        </p>
+                        <div className="p-3.5 rounded-xl bg-[#06070a] border border-border flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                          <div className="min-w-0">
+                            <span className="text-[10px] font-mono text-muted-foreground uppercase font-semibold">Your Inbound Routing Email:</span>
+                            <div className="text-xs font-mono font-bold text-foreground truncate mt-0.5">{inboundEmailAddress}</div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => copyToClipboard(inboundEmailAddress, "inbound_email")}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary hover:bg-secondary/80 border border-border text-xs font-medium text-foreground transition-colors shrink-0 cursor-pointer"
+                          >
+                            {copiedKey === "inbound_email" ? <Check className="size-3.5 text-emerald-400" /> : <Copy className="size-3.5" />}
+                            <span>{copiedKey === "inbound_email" ? "Copied!" : "Copy Email"}</span>
+                          </button>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground leading-relaxed">
+                          💡 <strong>Pro Tip:</strong> Create an automatic forward rule in Gmail or Outlook for messages containing <em>"leads@houzz.com"</em> or <em>"leads@zillow.com"</em> to auto-forward to this address.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* 5. ZAPIER & MAKE.COM */}
+                    {inboundTab === "zapier" && (
+                      <div className="space-y-3.5">
+                        <div className="flex items-center justify-between border-b border-border/40 pb-2.5">
+                          <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
+                            <span>⚡ Universal Zapier & Make.com Ingestion</span>
+                          </h4>
+                          <span className="text-[10px] font-mono text-muted-foreground">Any CRM / App</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                          Connect any third-party app (Typeform, Google Sheets, HubSpot, Jotform, Calendly) in Zapier by sending a <code className="font-mono text-foreground font-semibold">POST</code> webhook to your WeaverFrame URL.
+                        </p>
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="font-mono text-muted-foreground">Sample JSON Payload:</span>
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(JSON.stringify({
+                                token: builderToken,
+                                name: "Harrison Vance",
+                                email: "harrison.vance@example.com",
+                                phone: "+1 (512) 555-0199",
+                                county: "Travis County",
+                                state: "TX",
+                                estimatedBudget: 1800000,
+                                source: "Zapier Inbound",
+                                message: "Looking for a 4,500 sqft modern architectural estate."
+                              }, null, 2), "sample_json")}
+                              className="text-primary hover:underline flex items-center gap-1 font-mono text-[10px] cursor-pointer"
+                            >
+                              {copiedKey === "sample_json" ? "Copied JSON!" : "Copy Sample JSON"}
+                            </button>
+                          </div>
+                          <pre className="p-3 rounded-lg bg-[#06070a] border border-border text-[11px] font-mono text-foreground/90 overflow-x-auto">
+{`{
+  "token": "${builderToken}",
+  "name": "Harrison Vance",
+  "email": "harrison.vance@example.com",
+  "phone": "+1 (512) 555-0199",
+  "county": "Travis County",
+  "state": "TX",
+  "estimatedBudget": 1800000,
+  "source": "Zapier Inbound",
+  "message": "Looking for a 4,500 sqft modern estate."
+}`}
+                          </pre>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 6. HTML / EMBED CODE */}
+                    {inboundTab === "embed" && (
+                      <div className="space-y-3.5">
+                        <div className="flex items-center justify-between border-b border-border/40 pb-2.5">
+                          <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
+                            <span>💻 1-Line HTML Form / Embed Snippet</span>
+                          </h4>
+                          <span className="text-[10px] font-mono text-muted-foreground">Raw HTML / React</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                          Copy and paste this standard HTML consultation form into any custom website page:
+                        </p>
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="font-mono text-muted-foreground">HTML Form Snippet:</span>
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(`<form action="${inboundWebhookUrl}" method="POST">
+  <input type="text" name="name" placeholder="Your Full Name" required />
+  <input type="email" name="email" placeholder="Your Email Address" required />
+  <input type="tel" name="phone" placeholder="Phone Number" />
+  <input type="number" name="estimatedBudget" placeholder="Target Budget (e.g. 1800000)" />
+  <input type="text" name="county" placeholder="County / Location (e.g. Travis County)" />
+  <textarea name="message" placeholder="Describe your dream home vision..."></textarea>
+  <button type="submit">Request Architectural Consultation</button>
+</form>`, "html_form")}
+                              className="text-primary hover:underline flex items-center gap-1 font-mono text-[10px] cursor-pointer"
+                            >
+                              {copiedKey === "html_form" ? "Copied HTML!" : "Copy HTML Snippet"}
+                            </button>
+                          </div>
+                          <pre className="p-3 rounded-lg bg-[#06070a] border border-border text-[11px] font-mono text-foreground/90 overflow-x-auto">
+{`<form action="${inboundWebhookUrl}" method="POST">
+  <input type="text" name="name" placeholder="Your Full Name" required />
+  <input type="email" name="email" placeholder="Your Email Address" required />
+  <input type="tel" name="phone" placeholder="Phone Number" />
+  <input type="number" name="estimatedBudget" placeholder="Target Budget (e.g. 1800000)" />
+  <input type="text" name="county" placeholder="County / Location" />
+  <textarea name="message" placeholder="Project details..."></textarea>
+  <button type="submit">Submit Inquiry</button>
+</form>`}
+                          </pre>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* ════════════════════════════════════════════════════════════════════
+                  2. COMPANY EMAIL & MAILBOX GATEWAY + CRM INTEGRATIONS
+                  ════════════════════════════════════════════════════════════════════ */}
+              <div className="space-y-3 pt-2">
+                <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
+                  Outbound Email Mailbox & Third-Party Sync
+                </h4>
+
                 {/* ── EMAIL & MAILBOX CONNECTION (PRIMARY AI MAIL GATEWAY) ── */}
                 <div className="border border-border rounded-lg bg-secondary/10 overflow-hidden transition-all duration-150">
                   <div className="flex items-center justify-between p-4 bg-secondary/30">
@@ -1186,11 +1603,11 @@ function SettingsPage() {
               </div>
               
               <div className="pt-4 space-y-2">
-                <Row label="Custom Webhook Trigger URL">
+                <Row label="Custom Outbound Webhook URL">
                   <Input
                     value={webhookUrl}
                     onChange={e => setWebhookUrl(e.target.value)}
-                    placeholder="https://your-app.com/webhook/buildersedge"
+                    placeholder="https://your-crm.com/api/leads-webhook"
                   />
                 </Row>
                 <p className="text-[10px] text-muted-foreground">
