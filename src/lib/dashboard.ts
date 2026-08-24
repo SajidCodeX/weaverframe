@@ -771,6 +771,37 @@ export const sendReviewRequest = createServerFn({ method: 'POST' })
       // Without a valid sig, the endpoint rejects the request before touching the DB.
       const { signReviewInviteId } = await import('./server-utils.server');
       const sig = await signReviewInviteId(request.id)
+
+      // Dispatch Review Invite Email via Resend if email provided
+      if (clientEmail) {
+        try {
+          const { sendOutboundEmail } = await import('./email.server');
+          const baseUrl = process.env.APP_BASE_URL || 'https://app.buildersedge.com';
+          const rateUrl = `${baseUrl}/api/rate?id=${request.id}&sig=${sig}`;
+          const companyName = session.companyName || 'Custom Builder';
+
+          await sendOutboundEmail({
+            to: clientEmail,
+            subject: `Feedback on your custom home build with ${companyName}`,
+            from: `${companyName} <onboarding@resend.dev>`,
+            html: `
+              <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px;">
+                <h2 style="color: #0f172a; margin-top: 0; font-size: 20px;">How was your experience with ${companyName}?</h2>
+                <p style="color: #475569; font-size: 15px; line-height: 1.6;">Hi ${clientName},</p>
+                <p style="color: #475569; font-size: 15px; line-height: 1.6;">Thank you for trusting us with your architectural custom build project. We take immense pride in our craftsmanship and would appreciate your honest feedback.</p>
+                <div style="text-align: center; margin: 32px 0;">
+                  <a href="${rateUrl}" style="background-color: #0f172a; color: #ffffff; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 15px; display: inline-block;">Leave a Quick 5-Star Review &rarr;</a>
+                </div>
+                <p style="color: #94a3b8; font-size: 12px; text-align: center; margin-bottom: 0;">Direct URL: <a href="${rateUrl}" style="color: #c9a84c;">${rateUrl}</a></p>
+              </div>
+            `,
+            text: `Hi ${clientName}, thank you for choosing ${companyName}. Please leave your review here: ${rateUrl}`
+          });
+        } catch (emailErr) {
+          console.error('[REVIEW EMAIL ERROR]', emailErr);
+        }
+      }
+
       return { ...request, sig }
     } catch (error) {
       console.error("Error in sendReviewRequest:", error)
@@ -1838,6 +1869,40 @@ export const bookAppointment = createServerFn({ method: 'POST' })
         type: "booking"
       });
 
+      // Dispatch Appointment Confirmation Email via Resend if lead has email
+      if (lead.email) {
+        try {
+          const { sendOutboundEmail } = await import('./email.server');
+          const companyName = session.companyName || 'Custom Builder';
+
+          await sendOutboundEmail({
+            to: lead.email,
+            subject: `Confirmed: ${data.type} with ${companyName}`,
+            from: `${companyName} <onboarding@resend.dev>`,
+            html: `
+              <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px;">
+                <h2 style="color: #0f172a; margin-top: 0; font-size: 20px;">Your Consultation is Confirmed</h2>
+                <p style="color: #475569; font-size: 15px; line-height: 1.6;">Hi ${lead.name},</p>
+                <p style="color: #475569; font-size: 15px; line-height: 1.6;">We have confirmed your upcoming meeting with the <strong>${companyName}</strong> team.</p>
+                
+                <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px 20px; margin: 24px 0;">
+                  <p style="margin: 0 0 8px 0; color: #0f172a; font-weight: 600; font-size: 14px;">📅 Session Details:</p>
+                  <p style="margin: 0 0 4px 0; color: #334155; font-size: 13px;"><strong>Type:</strong> ${data.type}</p>
+                  <p style="margin: 0 0 4px 0; color: #334155; font-size: 13px;"><strong>Date & Time:</strong> ${formattedDate}</p>
+                  <p style="margin: 0; color: #334155; font-size: 13px;"><strong>Location:</strong> ${data.location}</p>
+                  ${data.notes ? `<p style="margin: 4px 0 0 0; color: #64748b; font-size: 12px;"><strong>Notes:</strong> ${data.notes}</p>` : ''}
+                </div>
+
+                <p style="color: #475569; font-size: 14px; line-height: 1.5;">If you need to reschedule or have architectural plans to share ahead of time, please reply directly to this email.</p>
+              </div>
+            `,
+            text: `Hi ${lead.name}, your ${data.type} with ${companyName} is confirmed for ${formattedDate} at ${data.location}.`
+          });
+        } catch (emailErr) {
+          console.error('[APPT EMAIL ERROR]', emailErr);
+        }
+      }
+
       invalidateCache("dashboard_");
       return appt
     } catch (error) {
@@ -2069,7 +2134,7 @@ export const sendMessage = createServerFn({ method: 'POST' })
     try {
       const { leadId, content } = data
 
-      // Create user's message
+      // 1. Create user's message in DB
       const userMsg = await db.message.create({
         data: {
           builderId: session.builderId || '',
@@ -2080,10 +2145,22 @@ export const sendMessage = createServerFn({ method: 'POST' })
         }
       })
 
-      // Update lead status to "Replied" only if it's not already "Appointment"
+      // 2. Fetch full lead and builder details for Outbound Resend Email
       const currentLead = await db.lead.findUnique({
         where: { id: leadId },
-        select: { status: true }
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          county: true,
+          status: true,
+          builder: {
+            select: {
+              companyName: true,
+              email: true
+            }
+          }
+        }
       })
 
       if (currentLead && currentLead.status !== 'Appointment') {
@@ -2091,6 +2168,45 @@ export const sendMessage = createServerFn({ method: 'POST' })
           where: { id: leadId },
           data: { status: 'Replied' }
         })
+      }
+
+      // 3. Dispatch Outbound Real Email via Resend if lead has an email address
+      if (currentLead && currentLead.email) {
+        try {
+          const { sendOutboundEmail, buildArchitecturalEmailHtml } = await import('./email.server');
+          const companyName = session.companyName || currentLead.builder?.companyName || 'Custom Builder';
+          const senderName = session.displayName || 'Sales Representative';
+          const senderRole = session.builderRole === 'owner' ? 'Founder & Principal Builder' : 'Senior Sales Director';
+          const subject = `Re: Architectural Consultation — ${currentLead.county || 'Custom Build'} (${companyName})`;
+
+          const html = buildArchitecturalEmailHtml({
+            recipientName: currentLead.name || 'there',
+            senderName,
+            senderRole,
+            companyName,
+            messageContent: content,
+          });
+
+          await sendOutboundEmail({
+            to: currentLead.email,
+            subject,
+            html,
+            text: content,
+            from: `${senderName} · ${companyName} <onboarding@resend.dev>`,
+            replyTo: session.email || currentLead.builder?.email,
+          });
+
+          // Log activity
+          await db.activity.create({
+            data: {
+              builderId: session.builderId || '',
+              leadId,
+              action: `📧 Outbound Email sent to ${currentLead.email}: "${content.slice(0, 80)}..."`,
+            }
+          }).catch(() => {});
+        } catch (emailErr) {
+          console.error('[RESEND DISPATCH ERROR]', emailErr);
+        }
       }
 
       return {
@@ -2126,7 +2242,7 @@ export const simulateLeadMessage = createServerFn({ method: 'POST' })
 
       let systemMsg = null;
 
-      // 2. If AI is active, trigger Groq response
+      // 2. If AI is active, trigger Groq/Gemini response
       if (enableAiReply) {
         // Fetch chat history for context
         const history = await db.message.findMany({
@@ -2162,6 +2278,38 @@ export const simulateLeadMessage = createServerFn({ method: 'POST' })
               isSimulated: true
             }
           });
+
+          // Dispatch AI reply via Resend to lead's real inbox if email exists
+          const targetLead = await db.lead.findUnique({
+            where: { id: leadId },
+            select: { name: true, email: true, county: true, builder: { select: { companyName: true, email: true } } }
+          });
+
+          if (targetLead && targetLead.email) {
+            try {
+              const { sendOutboundEmail, buildArchitecturalEmailHtml } = await import('./email.server');
+              const companyName = session.companyName || targetLead.builder?.companyName || 'Custom Builder';
+              const subject = `Re: Custom Architectural Consultation — ${companyName}`;
+              const html = buildArchitecturalEmailHtml({
+                recipientName: targetLead.name || 'there',
+                senderName: 'AI Architectural Concierge',
+                senderRole: 'Autonomous Qualification Specialist',
+                companyName,
+                messageContent: aiResponse.replyText,
+              });
+
+              await sendOutboundEmail({
+                to: targetLead.email,
+                subject,
+                html,
+                text: aiResponse.replyText,
+                from: `${companyName} AI Concierge <onboarding@resend.dev>`,
+                replyTo: session.email || targetLead.builder?.email,
+              });
+            } catch (err) {
+              console.error('[AI RESEND ERROR]', err);
+            }
+          }
         }
       }
 

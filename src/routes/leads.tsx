@@ -17,7 +17,9 @@ export const Route = createFileRoute("/leads")({
     stage: (search.stage as string) || undefined,
   }),
   loader: ({ context }) => {
-    // SSR Blocking Loader: Fetches data on the server and blocks HTML streaming until ready.
+    if (typeof window === 'undefined' && !context.session) {
+      return [];
+    }
     const activeRole = typeof window !== 'undefined' 
       ? (sessionStorage.getItem('active_role') ?? undefined) 
       : undefined;
@@ -36,11 +38,14 @@ function LeadsPage() {
   const isPrivacyMode = session?.role === 'admin' && !!session?.actingAsBuilderId;
   const isSalesAgent = session?.role === 'builder' && session?.builderRole === 'sales';
 
-  const rawLeads = useLoaderData({ from: '/leads' }) || [];
-  const [optimisticLeads, setOptimisticLeads] = useState<any[]>(rawLeads);
+  const rawLeads = Route.useLoaderData();
+  const safeInitialLeads = Array.isArray(rawLeads) ? rawLeads : [];
+  const [optimisticLeads, setOptimisticLeads] = useState<any[]>(safeInitialLeads);
 
   useEffect(() => {
-    setOptimisticLeads(rawLeads);
+    if (Array.isArray(rawLeads)) {
+      setOptimisticLeads(rawLeads);
+    }
   }, [rawLeads]);
   const router = useRouter();
   const search = Route.useSearch();
@@ -194,36 +199,49 @@ function LeadsPage() {
   }, []);
 
   const { mappedLeads, availableSources, filtered } = useMemo(() => {
-    const mapped = optimisticLeads.map((l: any) => {
+    const safeLeads = Array.isArray(optimisticLeads) ? optimisticLeads : [];
+    const mapped = safeLeads.map((l: any) => {
+      if (!l) return null;
       // Read the accurate source string directly from Postgres
+      const leadName = l.name || "Prospective Buyer";
       const source = l.source || "Austin Building Permits";
-      const aiStatus = l.status === "New" ? "Awaiting" : l.status === "Replied" ? "Replied" : "Awaiting";
+      const scoreTier = l.scoreTier || "Warm";
+      const status = l.status || "New";
+      const aiStatus = status === "New" ? "Awaiting" : status === "Replied" ? "Replied" : "Awaiting";
+      const scoreKey = (scoreTier.toLowerCase() as any) || "warm";
 
       return {
         ...l,
-        firstName: l.name.split(' ')[0],
-        lastName: l.name.split(' ').slice(1).join(' '),
-        city: l.county,
-        budget: `$${(l.estimatedBudget / 1000).toFixed(0)}k`,
-        score: (l.scoreTier.toLowerCase() as any),
-        stage: l.status,
+        name: leadName,
+        firstName: leadName.split(' ')[0] || "Prospective",
+        lastName: leadName.split(' ').slice(1).join(' ') || "",
+        city: l.county || "Travis County",
+        budget: l.estimatedBudget ? `$${(l.estimatedBudget / 1000).toFixed(0)}k` : "$0k",
+        score: scoreKey,
+        scoreTier,
+        stage: status,
         source,
         aiStatus
       };
-    });
+    }).filter(Boolean) as any[];
 
     const sources = Array.from(
       new Set([
         "Austin Building Permits",
         "Travis County Public Records",
-        ...mapped.map(l => l.source)
+        ...mapped.map((l: any) => l.source)
       ])
     ).filter(Boolean) as string[];
 
     // Interactive filtering engine
-    const filt = mapped.filter((l) => {
+    const filt = mapped.filter((l: any) => {
+      if (!l) return false;
+      const firstName = l.firstName || "";
+      const lastName = l.lastName || "";
+      const phone = l.phone || "";
+      const city = l.city || "";
       // Text search query
-      const matchQuery = `${l.firstName} ${l.lastName} ${l.phone || ""} ${l.city}`.toLowerCase().includes(query.toLowerCase());
+      const matchQuery = `${firstName} ${lastName} ${phone} ${city}`.toLowerCase().includes((query || "").toLowerCase());
 
       // Multi-select status stage filter
       const matchStage = selectedStages.length === 0 || selectedStages.includes(l.stage);
@@ -236,40 +254,42 @@ function LeadsPage() {
 
       // Captured Date range filter
       let matchDate = true;
-      if (selectedDateRange !== "All Time") {
+      if (selectedDateRange !== "All Time" && l.createdAt) {
         const leadDate = new Date(l.createdAt);
-        const now = new Date();
+        if (!isNaN(leadDate.getTime())) {
+          const now = new Date();
 
-        if (selectedDateRange === "Today") {
-          matchDate = leadDate.toDateString() === now.toDateString();
-        } else if (selectedDateRange === "Yesterday") {
-          const yesterday = new Date();
-          yesterday.setDate(yesterday.getDate() - 1);
-          matchDate = leadDate.toDateString() === yesterday.toDateString();
-        } else if (selectedDateRange === "Last 7 Days") {
-          const diffTime = Math.abs(now.getTime() - leadDate.getTime());
-          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-          if (diffDays > 7) matchDate = false;
-        } else if (selectedDateRange === "Last 30 Days") {
-          const diffTime = Math.abs(now.getTime() - leadDate.getTime());
-          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-          if (diffDays > 30) matchDate = false;
-        } else if (selectedDateRange === "This Month") {
-          matchDate = leadDate.getMonth() === now.getMonth() && leadDate.getFullYear() === now.getFullYear();
-        } else if (selectedDateRange === "Custom Range" || selectedDateRange.includes("to")) {
-          if (customStart && customEnd) {
-            const startBound = new Date(customStart);
-            startBound.setHours(0, 0, 0, 0);
-            const endBound = new Date(customEnd);
-            endBound.setHours(23, 59, 59, 999);
-            matchDate = leadDate >= startBound && leadDate <= endBound;
-          } else if (selectedDateRange.includes("to")) {
-            const [sStr, eStr] = selectedDateRange.split(" to ");
-            const startBound = new Date(sStr.trim());
-            startBound.setHours(0, 0, 0, 0);
-            const endBound = new Date(eStr.trim());
-            endBound.setHours(23, 59, 59, 999);
-            matchDate = leadDate >= startBound && leadDate <= endBound;
+          if (selectedDateRange === "Today") {
+            matchDate = leadDate.toDateString() === now.toDateString();
+          } else if (selectedDateRange === "Yesterday") {
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+            matchDate = leadDate.toDateString() === yesterday.toDateString();
+          } else if (selectedDateRange === "Last 7 Days") {
+            const diffTime = Math.abs(now.getTime() - leadDate.getTime());
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            if (diffDays > 7) matchDate = false;
+          } else if (selectedDateRange === "Last 30 Days") {
+            const diffTime = Math.abs(now.getTime() - leadDate.getTime());
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            if (diffDays > 30) matchDate = false;
+          } else if (selectedDateRange === "This Month") {
+            matchDate = leadDate.getMonth() === now.getMonth() && leadDate.getFullYear() === now.getFullYear();
+          } else if (selectedDateRange === "Custom Range" || selectedDateRange.includes("to")) {
+            if (customStart && customEnd) {
+              const startBound = new Date(customStart);
+              startBound.setHours(0, 0, 0, 0);
+              const endBound = new Date(customEnd);
+              endBound.setHours(23, 59, 59, 999);
+              matchDate = leadDate >= startBound && leadDate <= endBound;
+            } else if (selectedDateRange.includes("to")) {
+              const [sStr, eStr] = selectedDateRange.split(" to ");
+              const startBound = new Date(sStr.trim());
+              startBound.setHours(0, 0, 0, 0);
+              const endBound = new Date(eStr.trim());
+              endBound.setHours(23, 59, 59, 999);
+              matchDate = leadDate >= startBound && leadDate <= endBound;
+            }
           }
         }
       }
@@ -278,18 +298,20 @@ function LeadsPage() {
     });
 
     // Interactive sorting engine
-    filt.sort((a, b) => {
+    filt.sort((a: any, b: any) => {
+      const aDate = new Date(a.purchaseDate || a.createdAt || 0).getTime();
+      const bDate = new Date(b.purchaseDate || b.createdAt || 0).getTime();
       if (sortOption === "Newest") {
-        return new Date(b.purchaseDate).getTime() - new Date(a.purchaseDate).getTime();
+        return bDate - aDate;
       }
       if (sortOption === "Oldest") {
-        return new Date(a.purchaseDate).getTime() - new Date(b.purchaseDate).getTime();
+        return aDate - bDate;
       }
       if (sortOption === "Budget: High to Low") {
-        return b.estimatedBudget - a.estimatedBudget;
+        return (b.estimatedBudget || 0) - (a.estimatedBudget || 0);
       }
       if (sortOption === "Budget: Low to High") {
-        return a.estimatedBudget - b.estimatedBudget;
+        return (a.estimatedBudget || 0) - (b.estimatedBudget || 0);
       }
       return 0;
     });
@@ -1394,6 +1416,7 @@ function ScheduleAppointmentModal({ lead, onClose, onSchedule }: { lead: any; on
 
 // Premium Individual Lead Detail Drawer (No Dummy Data)
 function LeadDetailPanel({ lead, onClose }: { lead: any; onClose: () => void }) {
+  if (!lead) return null;
   const { session } = useRouteContext({ strict: false }) as any;
   const isPrivacyMode = session?.role === 'admin' && !!session?.actingAsBuilderId;
 
@@ -1440,7 +1463,7 @@ function LeadDetailPanel({ lead, onClose }: { lead: any; onClose: () => void }) 
               <a href={isPrivacyMode ? '#' : `mailto:${lead.email || ""}`} className={`inline-flex items-center gap-1.5 transition-colors ${!isPrivacyMode ? 'hover:text-foreground' : 'cursor-default'}`}>
                 <Mail className="size-3" />{isPrivacyMode ? obscurePII(lead.email, 'email') : (lead.email || "No email")}
               </a>
-              <span>{lead.source} · received {new Date(lead.purchaseDate).toLocaleDateString()}</span>
+              <span>{lead.source || "Website Inbound"} · received {new Date(lead.purchaseDate || lead.createdAt || Date.now()).toLocaleDateString()}</span>
             </div>
           </div>
           <button onClick={onClose} className="size-8 rounded hover:bg-secondary flex items-center justify-center text-muted-foreground"><X className="size-4" /></button>
@@ -1572,7 +1595,7 @@ function LeadDetailPanel({ lead, onClose }: { lead: any; onClose: () => void }) 
               ))}
               <div className="flex items-center justify-between px-3 py-2.5 text-sm bg-secondary">
                 <span className="font-semibold text-foreground">Total Score</span>
-                <span className="font-mono font-semibold text-foreground">{totalScore} / 100 · {lead.score.toUpperCase()}</span>
+                <span className="font-mono font-semibold text-foreground">{dealScoreVal} / 100 · {String(lead.score || lead.scoreTier || 'Warm').toUpperCase()}</span>
               </div>
             </div>
           </section>
