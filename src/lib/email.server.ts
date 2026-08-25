@@ -34,10 +34,34 @@ export async function sendOutboundEmail(options: SendEmailOptions): Promise<Emai
     return { success: false, error: 'No valid recipient email provided.' };
   }
 
-  const smtpUser = (typeof process !== 'undefined' ? (process.env.SMTP_USER || process.env.GMAIL_USER) : undefined) || '';
-  const smtpPass = (typeof process !== 'undefined' ? (process.env.SMTP_PASS || process.env.GMAIL_PASS) : undefined) || '';
-  const smtpHost = (typeof process !== 'undefined' ? process.env.SMTP_HOST : undefined) || 'smtp.gmail.com';
-  const smtpPort = parseInt((typeof process !== 'undefined' ? process.env.SMTP_PORT : undefined) || '465', 10);
+  let smtpUser = (typeof process !== 'undefined' ? (process.env.SMTP_USER || process.env.GMAIL_USER) : undefined) || '';
+  let smtpPass = (typeof process !== 'undefined' ? (process.env.SMTP_PASS || process.env.GMAIL_PASS) : undefined) || '';
+  let smtpHost = (typeof process !== 'undefined' ? process.env.SMTP_HOST : undefined) || 'smtp.gmail.com';
+  let smtpPort = parseInt((typeof process !== 'undefined' ? process.env.SMTP_PORT : undefined) || '465', 10);
+
+  // If not in env, check database Integration table
+  if (!smtpUser || !smtpPass) {
+    try {
+      const { getDb } = await import('./db');
+      const db = await getDb();
+      const integration = await db.integration.findFirst({
+        where: { platform: 'email_mailbox', isActive: true }
+      });
+      if (integration && integration.credentials) {
+        const { decryptCredentials } = await import('./crypto');
+        const creds = JSON.parse(decryptCredentials(integration.credentials));
+        if (creds.email && creds.password && creds.password !== '••••••••••••••••') {
+          smtpUser = creds.email;
+          smtpPass = creds.password;
+          if (creds.provider === 'custom_smtp' && creds.smtpHost) {
+            smtpHost = creds.smtpHost;
+            smtpPort = parseInt(creds.smtpPort || '465', 10);
+          }
+        }
+      }
+    } catch {}
+  }
+
   const cleanSmtpPass = smtpPass.replace(/\s+/g, '').trim();
 
   // ── 1. GMAIL / CUSTOM SMTP ENGINE (NODEMAILER) ─────────────────────────────
