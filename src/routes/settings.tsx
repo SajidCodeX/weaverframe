@@ -23,6 +23,7 @@ import {
   createStripeCheckoutSession,
   createStripeCustomerPortalSession,
   addManualLead,
+  triggerMailboxSync,
 } from "@/lib/dashboard";
 import { Loader2, Check, X, AlertCircle, Download, Mail, Sparkles, RefreshCw, Lock, ShieldCheck, CheckCircle2, Zap, Server, Globe, CreditCard, ExternalLink, Copy, Code, Share2, Send, Terminal, Smartphone, Inbox, ArrowRight, CheckCircle } from "lucide-react";
 
@@ -573,8 +574,10 @@ function SettingsPage() {
       });
       setConnectionStatus(prev => ({ ...prev, email_mailbox: true }));
       setCredentials(prev => ({ ...prev, email_mailbox: creds }));
+      // Immediately trigger initial sync
+      triggerMailboxSync().catch((e) => console.warn('[INITIAL MAILBOX SYNC ERROR]:', e));
       await router.invalidate();
-      alert(`Success: Company mailbox linked! AI can now send and receive emails as ${emailAddress}.`);
+      alert(`Success: Company mailbox linked! Initial sync triggered and AI can now send and receive emails as ${emailAddress}.`);
     } catch (err: any) {
       console.error(err);
       alert(`Failed to save mailbox connection: ${err?.message || err}`);
