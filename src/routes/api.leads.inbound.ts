@@ -88,7 +88,7 @@ export const handleInboundLead = createServerFn({ method: 'POST' })
     }
 
     const { db } = await import('@/lib/db');
-    const { invalidateCache } = await import('@/lib/dashboard');
+    const { invalidateCache, triggerAutonomousAiOutreach } = await import('@/lib/dashboard');
 
     try {
       // 1. Determine target builder
@@ -190,6 +190,11 @@ export const handleInboundLead = createServerFn({ method: 'POST' })
               action: `New inquiry message received from ${source}`,
             }
           });
+
+          // Trigger AI autonomous response to the new message
+          triggerAutonomousAiOutreach(existing.id, targetBuilderId, message).catch((aiErr) => {
+            console.error('[EXISTING LEAD AI OUTREACH ERROR]:', aiErr);
+          });
         }
 
         invalidateCache("dashboard_");
@@ -201,7 +206,7 @@ export const handleInboundLead = createServerFn({ method: 'POST' })
             success: true,
             leadId: existing.id,
             isExisting: true,
-            message: "Existing lead updated with new inquiry message."
+            message: "Existing lead updated and AI autonomous reply dispatched."
           }
         };
       }
@@ -249,6 +254,11 @@ export const handleInboundLead = createServerFn({ method: 'POST' })
         }
       });
 
+      // ── Trigger Instant AI Autonomous Outreach & Resend Email ───────────
+      triggerAutonomousAiOutreach(lead.id, targetBuilderId, message).catch((aiErr) => {
+        console.error('[INBOUND AI OUTREACH ERROR]:', aiErr);
+      });
+
       invalidateCache("dashboard_");
 
       return {
@@ -259,7 +269,7 @@ export const handleInboundLead = createServerFn({ method: 'POST' })
           leadId: lead.id,
           scoreTier,
           dealScore,
-          message: "Lead successfully ingested and queued for instant AI qualification."
+          message: "Lead successfully ingested and AI autonomous outreach email dispatched."
         }
       };
     } catch (err: any) {
