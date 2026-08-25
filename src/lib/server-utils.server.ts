@@ -146,6 +146,7 @@ export type AuthSession = {
   displayName?: string
   companyName?: string
   email?: string           // The logged-in user's own email — used as Reply-To for outbound lead emails
+  companyEmail?: string    // The builder company's general email (e.g. contact@nexora.com) — shown as company sender
 }
 
 const getJwtSecret = () => {
@@ -507,7 +508,8 @@ export const handleLogin = async (data: { email: string; password: string; remem
     permissions: user.permissions,
     displayName: user.displayName,
     companyName: user.builder?.companyName,
-    email: user.email,   // ← stored in JWT so session.email is available for Reply-To headers
+    email: user.email,           // logged-in user's own email → Reply-To header
+    companyEmail: user.builder?.email,  // builder's company email → company sender identity
   }
 
   await setAuthCookie(payload, data.rememberMe ?? false)
@@ -559,7 +561,8 @@ export const handleSetInvitePassword = async (data: { token: string; password: s
     permissions: updated.permissions,
     displayName: updated.displayName,
     companyName: user.builder?.companyName,
-    email: updated.email,   // ← so Reply-To resolves to this team member's email from first login
+    email: updated.email,            // team member's own email → Reply-To header
+    companyEmail: user.builder?.email, // builder company email → company sender identity
   }
 
   await setAuthCookie(payload)
