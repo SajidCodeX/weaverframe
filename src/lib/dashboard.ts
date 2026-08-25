@@ -2033,6 +2033,15 @@ export const getConversations = createServerFn({ method: 'POST' })
   try {
     const session = await requireAuth(data?.activeRole ?? undefined)
     const db = await getTenantDb(session)
+
+    // Trigger Inbound Mailbox Sync (IMAP) in background
+    try {
+      const { syncInboundMailbox } = await import('./mailbox.server');
+      await syncInboundMailbox(session.builderId || '').catch((e) => {
+        console.warn('[MAILBOX SYNC NON-BLOCKING ERROR]:', e?.message || e);
+      });
+    } catch {}
+
     const whereClause: any = {}
     if (session.role === 'builder' && session.builderRole === 'sales') {
       whereClause.assignedToId = session.userId
@@ -2129,6 +2138,15 @@ export const getMessagesForLead = createServerFn({ method: 'POST' })
       throw error
     }
   })
+
+export const triggerMailboxSync = createServerFn({ method: 'POST' })
+  .inputValidator((data: { activeRole?: string | null } | undefined) => data)
+  .handler(async ({ data }) => {
+    const { requireAuth } = await import('./server-utils.server');
+    const session = await requireAuth(data?.activeRole ?? undefined);
+    const { syncInboundMailbox } = await import('./mailbox.server');
+    return syncInboundMailbox(session.builderId || '', true);
+  });
 
 export const sendMessage = createServerFn({ method: 'POST' })
   .inputValidator((data: { leadId: string; content: string }) => data)
