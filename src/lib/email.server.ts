@@ -1,4 +1,9 @@
-// ─── RESEND OUTBOUND EMAIL ENGINE (SERVER-ONLY) ─────────────────────────────
+import nodemailer from 'nodemailer';
+
+// ─── DUAL-ENGINE OUTBOUND EMAIL DISPATCHER (SERVER-ONLY) ─────────────────────
+// Priority 1: Gmail / Custom SMTP (via nodemailer with SMTP_USER & SMTP_PASS)
+// Priority 2: Resend API (via RESEND_API_KEY)
+// Priority 3: Informative Simulation fallback in local dev
 
 export interface SendEmailOptions {
   to: string | string[];
@@ -15,89 +20,138 @@ export interface EmailResult {
   id?: string;
   error?: string;
   simulated?: boolean;
+  engine?: 'smtp' | 'resend' | 'simulated';
 }
 
 /**
- * Dispatches an outbound email via the Resend API.
- * Automatically falls back to informative logging if RESEND_API_KEY is not configured in local dev.
+ * Dispatches an outbound email.
+ * Prioritizes SMTP (Gmail App Password) so emails deliver to ANY recipient without domain restrictions.
+ * Falls back to Resend API, and then to simulated mode if no credentials exist.
  */
 export async function sendOutboundEmail(options: SendEmailOptions): Promise<EmailResult> {
-  const apiKey = (typeof process !== 'undefined' ? process.env.RESEND_API_KEY : undefined) || '';
-  
   const recipient = Array.isArray(options.to) ? options.to.filter(Boolean) : [options.to].filter(Boolean);
   if (recipient.length === 0) {
     return { success: false, error: 'No valid recipient email provided.' };
   }
 
-  // Resend default verified sender for onboarding / testing: 'onboarding@resend.dev'
-  // Or builder's verified custom domain if set in env/options.
-  const verifiedFrom = options.from && options.from.includes('<') && !options.from.includes('@localhost')
-    ? options.from
-    : options.from && options.from.includes('@') && !options.from.includes('@localhost')
-      ? options.from
-      : 'WeaverFrame Concierge <onboarding@resend.dev>';
+  const smtpUser = (typeof process !== 'undefined' ? (process.env.SMTP_USER || process.env.GMAIL_USER) : undefined) || '';
+  const smtpPass = (typeof process !== 'undefined' ? (process.env.SMTP_PASS || process.env.GMAIL_PASS) : undefined) || '';
+  const smtpHost = (typeof process !== 'undefined' ? process.env.SMTP_HOST : undefined) || 'smtp.gmail.com';
+  const smtpPort = parseInt((typeof process !== 'undefined' ? process.env.SMTP_PORT : undefined) || '465', 10);
+  const cleanSmtpPass = smtpPass.replace(/\s+/g, '').trim();
 
-  if (!apiKey || apiKey.trim().length === 0 || apiKey.startsWith('YOUR_')) {
-    console.warn(`[EMAIL ENGINE] RESEND_API_KEY is not set. Simulated email to: ${recipient.join(', ')} | Subject: "${options.subject}"`);
-    return {
-      success: true,
-      simulated: true,
-      id: `sim_${Date.now()}`
-    };
+  // ── 1. GMAIL / CUSTOM SMTP ENGINE (NODEMAILER) ─────────────────────────────
+  if (smtpUser && smtpUser.trim().length > 0 && cleanSmtpPass && cleanSmtpPass.length > 0) {
+    try {
+      const transporter = nodemailer.createTransport({
+        host: smtpHost,
+        port: smtpPort,
+        secure: smtpPort === 465, // true for 465, false for 587
+        auth: {
+          user: smtpUser.trim(),
+          pass: cleanSmtpPass,
+        },
+        connectionTimeout: 10000,
+      });
+
+      // Extract sender display name if present
+      let senderDisplayName = 'AI Concierge';
+      if (options.from) {
+        const match = options.from.match(/^([^<]+)/);
+        if (match && match[1]) {
+          senderDisplayName = match[1].trim();
+        }
+      }
+
+      const mailOptions = {
+        from: `"${senderDisplayName}" <${smtpUser.trim()}>`,
+        to: recipient.join(', '),
+        subject: options.subject,
+        html: options.html,
+        text: options.text,
+        replyTo: options.replyTo || smtpUser.trim(),
+      };
+
+      const info = await transporter.sendMail(mailOptions);
+      console.log(`[SMTP EMAIL SUCCESS] Dispatched to ${recipient.join(', ')} via SMTP (${smtpUser}) | MessageId: ${info.messageId}`);
+      return {
+        success: true,
+        id: info.messageId,
+        engine: 'smtp',
+      };
+    } catch (smtpErr: any) {
+      console.error(`[SMTP ENGINE ERROR] Failed to send via SMTP (${smtpUser}):`, smtpErr?.message || smtpErr);
+      // Fall through to Resend fallback
+    }
   }
 
-  try {
-    const payload: Record<string, any> = {
-      from: verifiedFrom,
-      to: recipient,
-      subject: options.subject,
-    };
+  // ── 2. RESEND API ENGINE ───────────────────────────────────────────────────
+  const resendApiKey = (typeof process !== 'undefined' ? process.env.RESEND_API_KEY : undefined) || '';
 
-    if (options.html) {
-      payload.html = options.html;
-    }
-    if (options.text) {
-      payload.text = options.text;
-    }
-    if (options.replyTo) {
-      payload.reply_to = options.replyTo;
-    }
-    if (options.tags && options.tags.length > 0) {
-      payload.tags = options.tags;
-    }
+  if (resendApiKey && resendApiKey.trim().length > 0 && !resendApiKey.startsWith('YOUR_')) {
+    try {
+      const verifiedFrom = options.from && options.from.includes('<') && !options.from.includes('@localhost')
+        ? options.from
+        : options.from && options.from.includes('@') && !options.from.includes('@localhost')
+          ? options.from
+          : 'WeaverFrame Concierge <onboarding@resend.dev>';
 
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey.trim()}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
+      const payload: Record<string, any> = {
+        from: verifiedFrom,
+        to: recipient,
+        subject: options.subject,
+      };
 
-    const data = (await response.json().catch(() => ({}))) as any;
+      if (options.html) payload.html = options.html;
+      if (options.text) payload.text = options.text;
+      if (options.replyTo) payload.reply_to = options.replyTo;
+      if (options.tags && options.tags.length > 0) payload.tags = options.tags;
 
-    if (!response.ok) {
-      const errorMsg = data?.message || data?.error || `Resend HTTP ${response.status}: ${response.statusText}`;
-      console.error(`[EMAIL ENGINE ERROR] Failed to send email to ${recipient.join(', ')}:`, errorMsg);
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${resendApiKey.trim()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = (await response.json().catch(() => ({}))) as any;
+
+      if (!response.ok) {
+        const errorMsg = data?.message || data?.error || `Resend HTTP ${response.status}: ${response.statusText}`;
+        console.error(`[RESEND ENGINE ERROR] Failed to send to ${recipient.join(', ')}:`, errorMsg);
+        return {
+          success: false,
+          error: errorMsg,
+          engine: 'resend',
+        };
+      }
+
+      console.log(`[RESEND ENGINE SUCCESS] Dispatched to ${recipient.join(', ')} | Resend ID: ${data?.id}`);
+      return {
+        success: true,
+        id: data?.id,
+        engine: 'resend',
+      };
+    } catch (err: any) {
+      console.error(`[RESEND ENGINE EXCEPTION]:`, err?.message || err);
       return {
         success: false,
-        error: errorMsg
+        error: err?.message || 'Network error contacting Resend API',
+        engine: 'resend',
       };
     }
-
-    console.log(`[EMAIL ENGINE SUCCESS] Dispatched email to ${recipient.join(', ')} | Resend ID: ${data?.id}`);
-    return {
-      success: true,
-      id: data?.id
-    };
-  } catch (err: any) {
-    console.error(`[EMAIL ENGINE EXCEPTION] Error dispatching email:`, err?.message || err);
-    return {
-      success: false,
-      error: err?.message || 'Network error while contacting Resend API'
-    };
   }
+
+  // ── 3. LOCAL SIMULATION (WHEN NO CREDENTIALS CONFIGURED) ───────────────────
+  console.warn(`[EMAIL ENGINE] Neither SMTP nor RESEND_API_KEY configured. Simulated email to: ${recipient.join(', ')} | Subject: "${options.subject}"`);
+  return {
+    success: true,
+    simulated: true,
+    id: `sim_${Date.now()}`,
+    engine: 'simulated',
+  };
 }
 
 /**
