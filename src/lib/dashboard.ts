@@ -1303,7 +1303,11 @@ QUALIFICATION STANDARDS:
 - Target Timeline: Within ${maxTimeline} months
 - Land/Lot Readiness: ${lotRequirement === 'must_own_lot' ? 'Must own buildable lot or under contract' : 'Lot search assistance available or owns lot'}
 - Architectural Status: ${plansRequirement}
-
+${customDirectives ? `
+CUSTOM BUILDER DIRECTIVES & POLICIES (HIGHEST PRIORITY - STRICT ADHERENCE REQUIRED):
+The builder has configured the following custom directives, warranties, and business policies. You MUST honor every rule and incorporate these specific details into your advice and answers:
+${customDirectives}
+` : ''}
 OBJECTION HANDLING:
 1. "PRICING / BUDGET QUESTIONS":
    - Be transparent: "Our custom estates in ${leadCounty} typically start around ${minBudget}, with full fixed-price scope transparency and high-end architectural craftsmanship. Does that range align with your vision?"
