@@ -3181,6 +3181,47 @@ export const createTeamInvite = createServerFn({ method: 'POST' })
       }
     })
 
+    // Dispatch Official Invite Email via Resend to the invited member
+    try {
+      const { sendOutboundEmail } = await import('./email.server');
+      const baseUrl = process.env.APP_BASE_URL || 'https://app.buildersedge.com';
+      const inviteUrl = `${baseUrl}/invite/${token}`;
+      const companyName = session.companyName || 'Nexora Builders';
+      const inviterName = session.displayName || 'The Owner';
+      const roleLabel = data.role === 'owner' ? 'Co-Owner' : data.role === 'admin' ? 'Administrator' : data.role === 'manager' ? 'Sales Manager' : 'Sales Representative';
+
+      await sendOutboundEmail({
+        to: data.email,
+        subject: `You've been invited to join ${companyName} on WeaverFrame`,
+        from: `${companyName} Team <onboarding@resend.dev>`,
+        replyTo: session.email,
+        html: `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px;">
+            <h2 style="color: #0f172a; margin-top: 0; font-size: 20px;">Welcome to ${companyName}</h2>
+            <p style="color: #475569; font-size: 15px; line-height: 1.6;">Hi ${data.name},</p>
+            <p style="color: #475569; font-size: 15px; line-height: 1.6;"><strong>${inviterName}</strong> has invited you to join the <strong>${companyName}</strong> workspace on WeaverFrame as a <strong>${roleLabel}</strong>.</p>
+            
+            <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px 20px; margin: 24px 0;">
+              <p style="margin: 0 0 6px 0; color: #0f172a; font-weight: 600; font-size: 14px;">🔑 Account Details:</p>
+              <p style="margin: 0 0 4px 0; color: #334155; font-size: 13px;"><strong>Login Email:</strong> ${data.email}</p>
+              <p style="margin: 0; color: #334155; font-size: 13px;"><strong>Assigned Role:</strong> ${roleLabel}</p>
+            </div>
+
+            <p style="color: #475569; font-size: 14px; line-height: 1.5;">Click the secure button below to set your account password and activate your workspace:</p>
+
+            <div style="text-align: center; margin: 28px 0;">
+              <a href="${inviteUrl}" style="background-color: #0f172a; color: #ffffff; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 15px; display: inline-block;">Accept Invite & Set Password &rarr;</a>
+            </div>
+
+            <p style="color: #94a3b8; font-size: 11px; text-align: center; margin-bottom: 0;">This invite link will expire in 7 days.</p>
+          </div>
+        `,
+        text: `Hi ${data.name}, ${inviterName} invited you to join ${companyName}. Set your password and accept your invite here: ${inviteUrl}`
+      });
+    } catch (err) {
+      console.error('[INVITE EMAIL ERROR]', err);
+    }
+
     return { success: true, inviteLink: `/invite/${token}` }
   })
 
