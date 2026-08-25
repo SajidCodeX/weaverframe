@@ -145,6 +145,7 @@ export type AuthSession = {
   permissions?: string[]
   displayName?: string
   companyName?: string
+  email?: string           // The logged-in user's own email — used as Reply-To for outbound lead emails
 }
 
 const getJwtSecret = () => {
@@ -506,6 +507,7 @@ export const handleLogin = async (data: { email: string; password: string; remem
     permissions: user.permissions,
     displayName: user.displayName,
     companyName: user.builder?.companyName,
+    email: user.email,   // ← stored in JWT so session.email is available for Reply-To headers
   }
 
   await setAuthCookie(payload, data.rememberMe ?? false)
@@ -557,6 +559,7 @@ export const handleSetInvitePassword = async (data: { token: string; password: s
     permissions: updated.permissions,
     displayName: updated.displayName,
     companyName: user.builder?.companyName,
+    email: updated.email,   // ← so Reply-To resolves to this team member's email from first login
   }
 
   await setAuthCookie(payload)
