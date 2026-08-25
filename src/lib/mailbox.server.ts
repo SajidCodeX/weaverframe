@@ -37,14 +37,21 @@ export async function syncInboundMailbox(builderId?: string, force = false): Pro
   const db = await getDb();
 
   try {
-    // 1. Resolve Target Builder
+    // 1. Resolve Target Builder (if not passed, find builder with linked mailbox or active builder)
     let targetBuilderId = builderId;
     if (!targetBuilderId) {
-      const activeBuilder = await db.builder.findFirst({
-        where: { isActive: true },
-        select: { id: true }
+      const mailboxIntegration = await db.integration.findFirst({
+        where: { platformId: 'email_mailbox', isConnected: true },
+        select: { builderId: true }
       });
-      targetBuilderId = activeBuilder?.id;
+      targetBuilderId = mailboxIntegration?.builderId;
+      if (!targetBuilderId) {
+        const activeBuilder = await db.builder.findFirst({
+          where: { isActive: true },
+          select: { id: true }
+        });
+        targetBuilderId = activeBuilder?.id;
+      }
     }
 
     if (!targetBuilderId) {
@@ -69,15 +76,15 @@ export async function syncInboundMailbox(builderId?: string, force = false): Pro
     const integration = await db.integration.findFirst({
       where: {
         builderId: targetBuilderId,
-        platform: 'email_mailbox',
-        isActive: true,
+        platformId: 'email_mailbox',
+        isConnected: true,
       }
     });
 
-    if (integration && integration.credentials) {
+    if (integration && integration.configSecure) {
       try {
-        const { decryptCredentials } = await import('./crypto');
-        const creds = JSON.parse(decryptCredentials(integration.credentials));
+        const { decrypt } = await import('./crypto');
+        const creds = JSON.parse(decrypt(integration.configSecure));
         emailUser = creds.email || creds.username || '';
         emailPass = creds.password || '';
         if (creds.provider === 'custom_smtp' && creds.smtpHost) {
@@ -134,6 +141,9 @@ export async function syncInboundMailbox(builderId?: string, force = false): Pro
         pass: cleanPass,
       },
       logger: false,
+      connectionTimeout: 30000,
+      greetingTimeout: 30000,
+      socketTimeout: 60000,
     });
 
     await client.connect();
@@ -201,7 +211,8 @@ export async function syncInboundMailbox(builderId?: string, force = false): Pro
             });
 
             // C. Trigger Autonomous AI Reply
-            const { getAiToggleMap, triggerAutonomousAiOutreach, invalidateCache } = await import('./dashboard');
+            const { getAiToggleMap, triggerAutonomousAiOutreach } = await import('./dashboard');
+            const { invalidateCache } = await import('./cache');
             const aiToggleMap = await getAiToggleMap().catch(() => ({}));
             const isAiActive = aiToggleMap[matchedLead.id] !== false; // Default active
 

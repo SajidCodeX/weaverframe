@@ -45,11 +45,11 @@ export async function sendOutboundEmail(options: SendEmailOptions): Promise<Emai
       const { getDb } = await import('./db');
       const db = await getDb();
       const integration = await db.integration.findFirst({
-        where: { platform: 'email_mailbox', isActive: true }
+        where: { platformId: 'email_mailbox', isConnected: true }
       });
-      if (integration && integration.credentials) {
-        const { decryptCredentials } = await import('./crypto');
-        const creds = JSON.parse(decryptCredentials(integration.credentials));
+      if (integration && integration.configSecure) {
+        const { decrypt } = await import('./crypto');
+        const creds = JSON.parse(decrypt(integration.configSecure));
         if (creds.email && creds.password && creds.password !== '••••••••••••••••') {
           smtpUser = creds.email;
           smtpPass = creds.password;
