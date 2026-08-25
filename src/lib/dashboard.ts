@@ -2463,6 +2463,26 @@ export async function triggerAutonomousAiOutreach(
         }
       });
 
+      // 5. Automatically sync qualified lead to active CRMs (HubSpot / GHL) in background
+      try {
+        const { syncLeadToConnectedCrms } = await import('./crm.server');
+        syncLeadToConnectedCrms(builderId, {
+          id: lead.id,
+          name: lead.name,
+          email: lead.email,
+          phone: lead.phone,
+          county: lead.county,
+          state: lead.state,
+          estimatedBudget: lead.estimatedBudget,
+          landPrice: lead.landPrice,
+          scoreTier: lead.scoreTier,
+          status: lead.status,
+          intent: aiResponse.dealSummary,
+        }, companyName).catch(crmErr => console.warn('[CRM AUTO SYNC ERROR]:', crmErr));
+      } catch (crmLoadErr) {
+        console.warn('[CRM SYNC LOAD ERROR]:', crmLoadErr);
+      }
+
       invalidateCache("dashboard_");
       return { success: true, aiResponse, emailDispatched };
     }
@@ -2473,6 +2493,41 @@ export async function triggerAutonomousAiOutreach(
     return { success: false, error: err?.message || err };
   }
 }
+
+export const syncLeadToCrms = createServerFn({ method: 'POST' })
+  .inputValidator((data: { leadId: string }) => data)
+  .handler(async ({ data }) => {
+    const { getTenantDb, requireAuth } = await import('./server-utils.server');
+    const { syncLeadToConnectedCrms } = await import('./crm.server');
+    const session = await requireAuth();
+    const db = await getTenantDb(session);
+
+    const lead = await db.lead.findUnique({
+      where: { id: data.leadId },
+      include: { builder: true }
+    });
+
+    if (!lead) throw new Error('Lead not found.');
+
+    const results = await syncLeadToConnectedCrms(
+      session.builderId || lead.builderId,
+      {
+        id: lead.id,
+        name: lead.name,
+        email: lead.email,
+        phone: lead.phone,
+        county: lead.county,
+        state: lead.state,
+        estimatedBudget: lead.estimatedBudget,
+        landPrice: lead.landPrice,
+        scoreTier: lead.scoreTier,
+        status: lead.status,
+      },
+      lead.builder?.companyName || 'Custom Builder'
+    );
+
+    return { success: true, results };
+  });
 
 export const getReportsData = createServerFn({ method: 'POST' })
   .inputValidator((data: { activeRole?: string | null } | undefined) => data)
@@ -2836,30 +2891,16 @@ export const testIntegrationConnection = createServerFn({ method: 'POST' })
       if (!credentials.accessToken) {
         throw new Error("Missing HubSpot Private App Access Token.");
       }
-      if (credentials.accessToken !== "••••••••••••••••" && !credentials.accessToken.startsWith("pat-")) {
-        throw new Error("Invalid HubSpot Access Token format. Must start with 'pat-'.");
-      }
-    }
-
-    else if (platformId === "houzz") {
-      if (!credentials.apiKey || !credentials.profileUrl) {
-        throw new Error("Missing Houzz Partner API Key or Profile URL.");
-      }
-      if (credentials.apiKey !== "••••••••••••••••" && credentials.apiKey.length < 8) {
-        throw new Error("Invalid Houzz API Key length.");
-      }
-    }
-
-    else if (platformId === "facebook") {
-      if (!credentials.pageId || !credentials.accessToken) {
-        throw new Error("Missing Facebook Page ID or Access Token.");
-      }
+      const { testHubSpotConnection } = await import('./crm.server');
+      await testHubSpotConnection(credentials.accessToken);
     }
 
     else if (platformId === "ghl") {
       if (!credentials.apiKey) {
         throw new Error("Missing GoHighLevel Location API Key.");
       }
+      const { testGhlConnection } = await import('./crm.server');
+      await testGhlConnection(credentials.apiKey, credentials.locationId);
     }
 
     else if (platformId === "email_mailbox") {
