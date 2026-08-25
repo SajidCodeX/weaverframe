@@ -2862,16 +2862,38 @@ export const testIntegrationConnection = createServerFn({ method: 'POST' })
       if (!email || !emailRegex.test(email.trim())) {
         throw new Error("Invalid email address. Please enter a valid company mailbox address (e.g. alex@luxuryhomes.com).");
       }
-      const provider = credentials.provider || 'google';
-      if (provider === 'custom_smtp') {
-        if (!credentials.smtpHost) throw new Error("Missing SMTP Host (e.g. smtp.mailgun.org).");
-        if (!credentials.smtpPort) throw new Error("Missing SMTP Port (e.g. 587 or 465).");
-        if (!credentials.password && credentials.password !== "••••••••••••••••") {
-          throw new Error("Missing SMTP Password or App Password.");
-        }
-      } else {
-        if (!credentials.password && credentials.password !== "••••••••••••••••") {
-          throw new Error("Missing App Password or Access Secret for mailbox authentication.");
+      const rawPassword = credentials.password || '';
+      if (!rawPassword) {
+        throw new Error("Missing App Password. Please enter your 16-character Google App Password.");
+      }
+
+      // If user provided an actual password (not the masked placeholder), perform REAL live Google authentication check
+      if (rawPassword !== "••••••••••••••••") {
+        const cleanPassword = rawPassword.replace(/\s+/g, '').trim();
+        const provider = credentials.provider || 'google';
+        const smtpHost = provider === 'google' ? 'smtp.gmail.com' : (credentials.smtpHost || 'smtp.gmail.com');
+        const smtpPort = provider === 'google' ? 465 : parseInt(credentials.smtpPort || '465', 10);
+
+        try {
+          const nodemailer = await import('nodemailer');
+          const transporter = nodemailer.createTransport({
+            host: smtpHost,
+            port: smtpPort,
+            secure: smtpPort === 465,
+            auth: {
+              user: email.trim(),
+              pass: cleanPassword,
+            },
+            connectionTimeout: 8000,
+          });
+          await transporter.verify();
+        } catch (verifyErr: any) {
+          console.error('[REAL GOOGLE SMTP VERIFY FAILED]:', verifyErr);
+          const errorMsg = verifyErr?.message || '';
+          if (errorMsg.includes('535') || errorMsg.includes('Username and Password not accepted') || errorMsg.includes('Invalid login')) {
+            throw new Error("Google Authentication Failed: Invalid Google App Password. Please ensure 2-Step Verification is ON and generate a new 16-character App Password at myaccount.google.com/apppasswords.");
+          }
+          throw new Error(`Mailbox Connection Failed: ${verifyErr?.message || 'Unable to connect to mail server.'}`);
         }
       }
     }
