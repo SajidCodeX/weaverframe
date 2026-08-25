@@ -2317,10 +2317,11 @@ export const simulateLeadMessage = createServerFn({ method: 'POST' })
               const { sendOutboundEmail, buildArchitecturalEmailHtml } = await import('./email.server');
               const companyName = session.companyName || targetLead.builder?.companyName || 'Custom Builder';
               const subject = `Re: Custom Architectural Consultation — ${companyName}`;
+              const senderDisplayName = session.displayName || 'Sajid Ali';
               const html = buildArchitecturalEmailHtml({
                 recipientName: targetLead.name || 'there',
-                senderName: 'AI Architectural Concierge',
-                senderRole: 'Autonomous Qualification Specialist',
+                senderName: senderDisplayName,
+                senderRole: session.builderRole === 'owner' ? 'Founder & Principal Builder' : 'Senior Client Director',
                 companyName,
                 messageContent: aiResponse.replyText,
               });
@@ -2330,7 +2331,7 @@ export const simulateLeadMessage = createServerFn({ method: 'POST' })
                 subject,
                 html,
                 text: aiResponse.replyText,
-                from: `${companyName} AI Concierge <onboarding@resend.dev>`,
+                from: `${senderDisplayName} · ${companyName} <${session.email || targetLead.builder?.email || 'onboarding@resend.dev'}>`,
                 replyTo: session.email || targetLead.builder?.email,
               });
             } catch (err) {
@@ -2424,10 +2425,11 @@ export async function triggerAutonomousAiOutreach(
       try {
         const { sendOutboundEmail, buildArchitecturalEmailHtml } = await import('./email.server');
         const subject = `Re: Custom Architectural Consultation & Build — ${companyName}`;
+        const senderDisplayName = personaName || builderProfile.primaryContact || 'Sajid Ali';
         const html = buildArchitecturalEmailHtml({
           recipientName: lead.name || 'there',
-          senderName: personaName,
-          senderRole: 'AI Architectural Concierge',
+          senderName: senderDisplayName,
+          senderRole: 'Principal Builder & Director',
           companyName,
           messageContent: aiResponse.replyText,
         });
@@ -2437,7 +2439,7 @@ export async function triggerAutonomousAiOutreach(
           subject,
           html,
           text: aiResponse.replyText,
-          from: `${companyName} AI Concierge <onboarding@resend.dev>`,
+          from: `${senderDisplayName} · ${companyName} <${profileEmail || 'onboarding@resend.dev'}>`,
           replyTo: profileEmail,
         });
 
