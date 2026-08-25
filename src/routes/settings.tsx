@@ -25,7 +25,7 @@ import {
   addManualLead,
   triggerMailboxSync,
 } from "@/lib/dashboard";
-import { Loader2, Check, X, AlertCircle, Download, Mail, Sparkles, RefreshCw, Lock, ShieldCheck, CheckCircle2, Zap, Server, Globe, CreditCard, ExternalLink, Copy, Code, Share2, Send, Terminal, Smartphone, Inbox, ArrowRight, CheckCircle } from "lucide-react";
+import { Loader2, Check, X, AlertCircle, Download, Mail, Sparkles, RefreshCw, Lock, ShieldCheck, CheckCircle2, Zap, Server, Globe, CreditCard, ExternalLink, Copy, Code, Share2, Send, Terminal, Smartphone, Inbox, ArrowRight, CheckCircle, Eye, EyeOff } from "lucide-react";
 
 export const Route = createFileRoute("/settings")({
   beforeLoad: async ({ context }) => {
@@ -440,6 +440,7 @@ function SettingsPage() {
 
   const [isSavingWebhook, setIsSavingWebhook] = useState(false);
   const [webhookSaved, setWebhookSaved] = useState(false);
+  const [showWebhookUrl, setShowWebhookUrl] = useState(false);
 
   const handleSaveWebhook = async () => {
     setIsSavingWebhook(true);
@@ -949,13 +950,13 @@ function SettingsPage() {
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <h3 className="text-base font-bold text-foreground">Inbound Lead Connection Hub</h3>
+                        <h3 className="text-base font-bold text-foreground">Inbound Lead Ingestion</h3>
                         <span className="px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-primary/20 text-primary border border-primary/30 uppercase tracking-wider">
                           Auto Ingest
                         </span>
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        Route leads from your website forms, Meta Lead Ads, Houzz/Zillow emails, or Zapier directly into your pipeline.
+                        Directly capture inquiries from your website forms, Meta ads, or Zapier into your autonomous pipeline.
                       </p>
                     </div>
                   </div>
@@ -1009,39 +1010,66 @@ function SettingsPage() {
                   </div>
                 )}
 
-                {/* Master Webhook URL Box */}
-                <div className="p-4 rounded-xl bg-[#06070a] border border-border/80 space-y-2">
+                {/* Master Webhook URL Box (Clean & Collapsible) */}
+                <div className="p-3.5 sm:p-4 rounded-xl bg-[#06070a] border border-border/80 space-y-3">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-[10.5px] font-mono text-muted-foreground uppercase font-semibold tracking-wider flex items-center gap-1.5">
-                      <Globe className="size-3.5 text-primary" />
-                      <span>Your Unique Inbound Webhook URL (POST)</span>
-                    </span>
-                    <span className="text-[10px] font-mono text-emerald-400 flex items-center gap-1">
-                      <Check className="size-3" /> Ready for POST requests
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 bg-secondary/30 border border-border rounded-lg px-3 py-2 text-xs font-mono text-foreground select-all overflow-x-auto whitespace-nowrap">
-                      {inboundWebhookUrl}
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-mono text-muted-foreground uppercase font-semibold tracking-wider flex items-center gap-1.5">
+                        <Globe className="size-3.5 text-primary" />
+                        <span>Inbound Webhook Endpoint (POST)</span>
+                      </span>
+                      <span className="text-[10px] font-mono text-emerald-400 hidden sm:inline-flex items-center gap-1">
+                        <Check className="size-3" /> Ready
+                      </span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => copyToClipboard(inboundWebhookUrl, "webhook_url")}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-secondary hover:bg-secondary/80 border border-border text-xs font-medium text-foreground transition-colors shrink-0 cursor-pointer"
-                    >
-                      {copiedKey === "webhook_url" ? (
-                        <>
-                          <Check className="size-3.5 text-emerald-400" />
-                          <span className="text-emerald-400">Copied!</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="size-3.5" />
-                          <span>Copy URL</span>
-                        </>
-                      )}
-                    </button>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowWebhookUrl(!showWebhookUrl)}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-secondary/60 hover:bg-secondary border border-border text-[11px] font-medium text-foreground transition-colors cursor-pointer"
+                        title={showWebhookUrl ? "Hide full webhook URL" : "Show full webhook URL"}
+                      >
+                        {showWebhookUrl ? (
+                          <>
+                            <EyeOff className="size-3.5 text-muted-foreground" />
+                            <span>Hide URL</span>
+                          </>
+                        ) : (
+                          <>
+                            <Eye className="size-3.5 text-primary" />
+                            <span>Show URL</span>
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(inboundWebhookUrl, "webhook_url")}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary hover:bg-secondary/80 border border-border text-[11px] font-medium text-foreground transition-colors shrink-0 cursor-pointer"
+                      >
+                        {copiedKey === "webhook_url" ? (
+                          <>
+                            <Check className="size-3.5 text-emerald-400" />
+                            <span className="text-emerald-400">Copied!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="size-3.5" />
+                            <span>Copy URL</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
+
+                  {showWebhookUrl && (
+                    <div className="flex items-center gap-2 pt-1 animate-in fade-in slide-in-from-top-1 duration-150">
+                      <div className="flex-1 bg-secondary/30 border border-border rounded-lg px-3 py-2 text-xs font-mono text-foreground select-all overflow-x-auto whitespace-nowrap">
+                        {inboundWebhookUrl}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Platform Tabs Selector */}
