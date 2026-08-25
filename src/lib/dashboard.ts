@@ -468,6 +468,14 @@ export const addManualLead = createServerFn({ method: 'POST' })
         });
       }
 
+      // ── Autonomous AI Outreach & Qualification Trigger ──────────────────
+      if (data.email && data.email.includes('@') && (status === 'New' || status === 'Emailed')) {
+        // Run AI outreach in background with safe error handling
+        triggerAutonomousAiOutreach(lead.id, session.builderId || '', data.notes).catch((err) => {
+          console.error('[MANUAL LEAD AI OUTREACH ERROR]:', err);
+        });
+      }
+
       invalidateCache("dashboard_");
       return lead
     } catch (error) {
@@ -2319,6 +2327,120 @@ export const simulateLeadMessage = createServerFn({ method: 'POST' })
       throw error;
     }
   });
+
+/**
+ * ─── AUTONOMOUS AI OUTREACH & QUALIFICATION ENGINE ───────────────────────────
+ * Triggered automatically when a lead enters via Inbound Webhooks, Forms, or Manual Entry.
+ * 
+ * Works completely independent of logged-in sessions by reading builder settings directly from the DB,
+ * generating a bespoke architectural response, saving messages & activities, and dispatching
+ * real branded emails via Resend with the Builder's profile email as Reply-To.
+ */
+export async function triggerAutonomousAiOutreach(
+  leadId: string,
+  builderId: string,
+  initialUserMessage?: string
+) {
+  const { getDb } = await import('./db');
+  const db = await getDb();
+
+  try {
+    const lead = await db.lead.findUnique({
+      where: { id: leadId },
+      include: { builder: true }
+    });
+
+    if (!lead || !lead.email || !builderId) {
+      return { success: false, reason: 'No lead, email or builderId found' };
+    }
+
+    const builder = lead.builder || await db.builder.findUnique({ where: { id: builderId } });
+    if (!builder || !builder.isActive) {
+      return { success: false, reason: 'Builder is not active' };
+    }
+
+    // Direct DB settings extraction — zero session / requireAuth dependency
+    const settingsObj = builder.settings
+      ? (typeof builder.settings === 'string' ? JSON.parse(builder.settings) : builder.settings)
+      : {};
+    const builderProfile = settingsObj.builder_profile || {};
+    const brainConfig = settingsObj.ai_brain_config || {};
+
+    const companyName = builderProfile.companyName || builder.companyName || 'Custom Estate Builder';
+    const profileEmail = builderProfile.email || builder.email; // e.g. promonth2004@gmail.com
+    const personaName = brainConfig.personaName || builderProfile.primaryContact || 'Alex';
+
+    const messagePrompt = initialUserMessage && initialUserMessage.trim().length > 0
+      ? initialUserMessage.trim()
+      : `Hello, I submitted an architectural inquiry for a custom build with an estimated budget of $${(lead.estimatedBudget || 1500000).toLocaleString()} in ${lead.county || 'your area'}. What is your current availability and design process?`;
+
+    // 1. Generate bespoke architectural qualification reply (Gemini / Groq engine)
+    const aiResponse = await generateAiReplyCore(
+      db,
+      leadId,
+      builderId,
+      messagePrompt,
+      [],
+      false // false = writes activities and updates DB status/memory
+    );
+
+    if (aiResponse && aiResponse.replyText) {
+      // 2. Save the autonomous AI response in Message table
+      await db.message.create({
+        data: {
+          builderId,
+          leadId,
+          sender: 'system',
+          content: aiResponse.replyText,
+          channel: 'portal',
+          isRead: false,
+          isSimulated: false,
+        }
+      });
+
+      // 3. Dispatch the real branded architectural HTML email via Resend
+      try {
+        const { sendOutboundEmail, buildArchitecturalEmailHtml } = await import('./email.server');
+        const subject = `Re: Custom Architectural Consultation & Build — ${companyName}`;
+        const html = buildArchitecturalEmailHtml({
+          recipientName: lead.name || 'there',
+          senderName: personaName,
+          senderRole: 'AI Architectural Concierge',
+          companyName,
+          messageContent: aiResponse.replyText,
+        });
+
+        await sendOutboundEmail({
+          to: lead.email,
+          subject,
+          html,
+          text: aiResponse.replyText,
+          from: `${companyName} AI Concierge <onboarding@resend.dev>`,
+          replyTo: profileEmail,
+        });
+      } catch (emailErr) {
+        console.error('[AUTONOMOUS AI RESEND DISPATCH ERROR]:', emailErr);
+      }
+
+      // 4. Log high-visibility Activity in timeline
+      await db.activity.create({
+        data: {
+          builderId,
+          leadId,
+          action: `🤖 AI Autonomous Outreach: Bespoke qualification email dispatched to ${lead.email} (Reply-To: ${profileEmail})`,
+        }
+      });
+
+      invalidateCache("dashboard_");
+      return { success: true, aiResponse };
+    }
+
+    return { success: false, reason: 'AI generated empty reply' };
+  } catch (err: any) {
+    console.error('[AUTONOMOUS AI OUTREACH ERROR]:', err);
+    return { success: false, error: err?.message || err };
+  }
+}
 
 export const getReportsData = createServerFn({ method: 'POST' })
   .inputValidator((data: { activeRole?: string | null } | undefined) => data)
