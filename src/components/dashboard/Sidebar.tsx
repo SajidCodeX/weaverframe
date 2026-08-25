@@ -16,6 +16,7 @@ import {
   DollarSign,
   Layers,
   EyeOff,
+  UserPlus,
 } from "lucide-react";
 import { logoutFn } from "@/lib/auth";
 import { stopBuilderPreview } from "@/lib/admin";
@@ -26,9 +27,9 @@ const builderItems = [
   { to: "/leads",        label: "Leads",        icon: Users },
   { to: "/appointments", label: "Appointments", icon: Calendar },
   { to: "/ai-activity",  label: "AI Brain",     icon: Bot,           badge: true },
+  { to: "/team",         label: "Team",         icon: UserPlus },
   // { to: "/reviews",      label: "Reviews",      icon: Star },
   // { to: "/reports",      label: "Reports",      icon: BarChart3 },
-  // { to: "/team",         label: "Team",         icon: Users },
   { to: "/settings",     label: "Settings",     icon: Settings },
 ];
 
