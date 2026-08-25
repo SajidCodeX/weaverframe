@@ -2876,24 +2876,35 @@ export const testIntegrationConnection = createServerFn({ method: 'POST' })
 
         try {
           const nodemailer = await import('nodemailer');
-          const transporter = nodemailer.createTransport({
-            host: smtpHost,
-            port: smtpPort,
-            secure: smtpPort === 465,
-            auth: {
-              user: email.trim(),
-              pass: cleanPassword,
-            },
-            connectionTimeout: 8000,
-          });
+          const transportOptions: any = provider === 'google'
+            ? {
+                service: 'gmail',
+                auth: {
+                  user: email.trim(),
+                  pass: cleanPassword,
+                },
+                connectionTimeout: 10000,
+              }
+            : {
+                host: smtpHost,
+                port: smtpPort,
+                secure: smtpPort === 465,
+                auth: {
+                  user: email.trim(),
+                  pass: cleanPassword,
+                },
+                connectionTimeout: 10000,
+              };
+
+          const transporter = nodemailer.createTransport(transportOptions);
           await transporter.verify();
         } catch (verifyErr: any) {
           console.error('[REAL GOOGLE SMTP VERIFY FAILED]:', verifyErr);
-          const errorMsg = verifyErr?.message || '';
-          if (errorMsg.includes('535') || errorMsg.includes('Username and Password not accepted') || errorMsg.includes('Invalid login')) {
-            throw new Error("Google Authentication Failed: Invalid Google App Password. Please ensure 2-Step Verification is ON and generate a new 16-character App Password at myaccount.google.com/apppasswords.");
+          const rawError = verifyErr?.message || '';
+          if (rawError.includes('535') || rawError.includes('Username and Password not accepted') || rawError.includes('BadCredentials')) {
+            throw new Error(`Google Authentication Failed (535): App Password rejected for ${email.trim()}.\n\nCommon Causes:\n1. Account Mismatch: Ensure the 16-letter App Password was generated while logged into ${email.trim()} (not another Google account).\n2. 2-Step Verification: Ensure 2-Step Verification is ON for ${email.trim()}.\n3. Regular Password Used: Google requires a dedicated 16-character App Password from myaccount.google.com/apppasswords.`);
           }
-          throw new Error(`Mailbox Connection Failed: ${verifyErr?.message || 'Unable to connect to mail server.'}`);
+          throw new Error(`Mailbox Connection Failed: ${rawError}`);
         }
       }
     }
