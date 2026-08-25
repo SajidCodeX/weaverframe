@@ -13,7 +13,8 @@ import {
   getIntegrationsStatus,
   summarizeConversation,
   simulateLeadMessage,
-  generatePortalToken
+  generatePortalToken,
+  getBuilderProfile,
 } from "@/lib/dashboard";
 import {
   MessageSquare,
@@ -75,20 +76,24 @@ export const Route = createFileRoute("/messages")({
   loader: async ({ context }) => {
     try {
       if (typeof window === 'undefined' && !context.session) {
-        return { conversations: [], aiToggleMap: {}, integrationsStatus: {} };
+        return { conversations: [], aiToggleMap: {}, integrationsStatus: {}, builderProfile: {} };
       }
       const activeRole = typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? undefined) : undefined;
-      const conversations = await getConversations({ data: { activeRole } });
-      const aiToggleMap = await getAiToggleMap();
-      const integrationsStatus = await getIntegrationsStatus();
+      const [conversations, aiToggleMap, integrationsStatus, builderProfile] = await Promise.all([
+        getConversations({ data: { activeRole } }),
+        getAiToggleMap(),
+        getIntegrationsStatus(),
+        getBuilderProfile({ data: { activeRole } }).catch(() => ({})),
+      ]);
       return {
         conversations: conversations || [],
         aiToggleMap: aiToggleMap || {},
-        integrationsStatus: integrationsStatus || {}
+        integrationsStatus: integrationsStatus || {},
+        builderProfile: builderProfile || {},
       };
     } catch (err) {
       console.error("Error in messages route loader:", err);
-      return { conversations: [], aiToggleMap: {}, integrationsStatus: {} };
+      return { conversations: [], aiToggleMap: {}, integrationsStatus: {}, builderProfile: {} };
     }
   },
   staleTime: 60_000,
@@ -166,6 +171,8 @@ function MessagesPage() {
   const initialConversations = loaderData?.conversations || [];
   const initialAiToggleMap = loaderData?.aiToggleMap || {};
   const initialIntegrationsStatus = loaderData?.integrationsStatus || {};
+  // Profile email (set in Settings > Profile) — used as sender identity, NOT the login email
+  const profileData = loaderData?.builderProfile || {};
 
   const [conversationsList, setConversationsList] = useState<any[]>(initialConversations || []);
 
@@ -340,8 +347,11 @@ function MessagesPage() {
     return "weaverframe.in";
   }, [session?.companyName]);
 
-  const builderCompanyEmail = session?.companyEmail || `contact@${builderDomain}`;
-  const builderSalesEmail = session?.email || `sales@${builderDomain}`;
+  const builderCompanyEmail = session?.companyEmail || profileData?.email || `contact@${builderDomain}`;
+  // Priority: Profile Settings email > login email > domain fallback
+  // Profile email is what the user set in Settings > Profile (e.g. promonth2004@gmail.com)
+  // Login email (session.email) is just for authentication (e.g. demo@builder.com)
+  const builderSalesEmail = profileData?.email || session?.email || `sales@${builderDomain}`;
   const builderAiEmail = `ai@${builderDomain}`;
 
   // ── Gmail Executive States ──────────────────────────────────────────────────
