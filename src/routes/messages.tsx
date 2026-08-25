@@ -352,7 +352,7 @@ function MessagesPage() {
   // Profile email is what the user set in Settings > Profile (e.g. promonth2004@gmail.com)
   // Login email (session.email) is just for authentication (e.g. demo@builder.com)
   const builderSalesEmail = profileData?.email || session?.email || `sales@${builderDomain}`;
-  const builderAiEmail = `ai@${builderDomain}`;
+  const builderAiEmail = profileData?.email || session?.companyEmail || session?.email || `ai@${builderDomain}`;
 
   // ── Gmail Executive States ──────────────────────────────────────────────────
   const [expandedMsgIds, setExpandedMsgIds] = useState<Set<string>>(new Set());
@@ -1561,7 +1561,7 @@ function MessagesPage() {
                                     <div className="min-w-0">
                                       <div className="flex items-center gap-2 flex-wrap">
                                         <span className="font-bold text-xs sm:text-sm text-foreground font-sans">{fromName}</span>
-                                        <span className="text-[11px] text-muted-foreground font-mono">&lt;{fromEmail}&gt;</span>
+                                        <span className="text-[11px] text-muted-foreground font-mono break-all">&lt;{fromEmail}&gt;</span>
                                         {isAI && (
                                           <span className="px-1.5 py-0.2 rounded text-[8.5px] font-mono font-bold bg-primary/15 text-primary border border-primary/30">
                                             AI CONCIERGE
@@ -1587,27 +1587,27 @@ function MessagesPage() {
 
                                         {/* Real Gmail Security & Envelope Details Box */}
                                         {isDetailsOpen && (
-                                          <div className="absolute left-0 top-6 w-80 p-3 rounded-xl bg-[#0f1016] border border-border shadow-2xl z-40 text-xs font-mono space-y-1.5 animate-in fade-in zoom-in-95 duration-150">
-                                            <div className="flex gap-2">
-                                              <span className="text-muted-foreground w-16 shrink-0">from:</span>
-                                              <span className="text-foreground truncate">{fromName} &lt;{fromEmail}&gt;</span>
+                                          <div className="absolute left-0 top-6 w-[380px] sm:w-[460px] max-w-[90vw] p-3.5 rounded-xl bg-[#0f1016] border border-border shadow-2xl z-40 text-xs font-mono space-y-2 animate-in fade-in zoom-in-95 duration-150">
+                                            <div className="flex gap-2 items-baseline">
+                                              <span className="text-muted-foreground w-16 shrink-0 text-right pr-1">from:</span>
+                                              <span className="text-foreground break-all leading-relaxed font-sans">{fromName} &lt;<span className="font-mono text-emerald-400/90">{fromEmail}</span>&gt;</span>
                                             </div>
-                                            <div className="flex gap-2">
-                                              <span className="text-muted-foreground w-16 shrink-0">to:</span>
-                                              <span className="text-foreground truncate">{toName} &lt;{toEmail}&gt;</span>
+                                            <div className="flex gap-2 items-baseline">
+                                              <span className="text-muted-foreground w-16 shrink-0 text-right pr-1">to:</span>
+                                              <span className="text-foreground break-all leading-relaxed font-sans">{toName} &lt;<span className="font-mono text-blue-400/90">{toEmail}</span>&gt;</span>
                                             </div>
-                                            <div className="flex gap-2">
-                                              <span className="text-muted-foreground w-16 shrink-0">date:</span>
-                                              <span className="text-foreground">{msgDate.toUTCString()}</span>
+                                            <div className="flex gap-2 items-baseline">
+                                              <span className="text-muted-foreground w-16 shrink-0 text-right pr-1">date:</span>
+                                              <span className="text-foreground break-all leading-relaxed font-mono text-[11px]">{msgDate.toUTCString()}</span>
                                             </div>
-                                            <div className="flex gap-2">
-                                              <span className="text-muted-foreground w-16 shrink-0">subject:</span>
-                                              <span className="text-foreground">{msgSubject}</span>
+                                            <div className="flex gap-2 items-baseline">
+                                              <span className="text-muted-foreground w-16 shrink-0 text-right pr-1">subject:</span>
+                                              <span className="text-foreground break-words leading-relaxed font-sans font-medium">{msgSubject}</span>
                                             </div>
-                                            <div className="flex gap-2 pt-1 border-t border-border/40">
-                                              <span className="text-muted-foreground w-16 shrink-0">security:</span>
-                                              <span className="text-emerald-400 flex items-center gap-1">
-                                                <ShieldCheck className="size-3" /> Standard TLS Encryption
+                                            <div className="flex gap-2 pt-2 border-t border-border/40 items-center">
+                                              <span className="text-muted-foreground w-16 shrink-0 text-right pr-1">security:</span>
+                                              <span className="text-emerald-400 flex items-center gap-1.5 font-sans text-[11px]">
+                                                <ShieldCheck className="size-3.5" /> Standard TLS 1.3 Encryption & Verified Sender
                                               </span>
                                             </div>
                                           </div>
