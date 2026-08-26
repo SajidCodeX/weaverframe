@@ -25,7 +25,7 @@ import {
   addManualLead,
   triggerMailboxSync,
 } from "@/lib/dashboard";
-import { Loader2, Check, X, AlertCircle, Download, Mail, Sparkles, RefreshCw, Lock, ShieldCheck, CheckCircle2, Zap, Server, Globe, CreditCard, ExternalLink, Copy, Code, Share2, Send, Terminal, Smartphone, Inbox, ArrowRight, CheckCircle } from "lucide-react";
+import { Loader2, Check, X, AlertCircle, Download, Mail, Sparkles, RefreshCw, Lock, ShieldCheck, CheckCircle2, Zap, Server, Globe, CreditCard, ExternalLink, Copy, Code, Share2, Send, Terminal, Smartphone, Inbox, ArrowRight, CheckCircle, Eye, EyeOff, ChevronDown, FileText } from "lucide-react";
 
 export const Route = createFileRoute("/settings")({
   beforeLoad: async ({ context }) => {
@@ -156,6 +156,7 @@ function SettingsPage() {
   const [adSpendBalance, setAdSpendBalance] = useState(loadedBillingProfile.adSpendBalance);
   const [paymentMethod, setPaymentMethod] = useState(loadedBillingProfile.paymentMethod);
   const [billingPlan, setBillingPlan] = useState(loadedBillingProfile.plan || "professional");
+  const [isPlansExpanded, setIsPlansExpanded] = useState(false);
 
   useEffect(() => {
     setAdSpendBalance(loadedBillingProfile.adSpendBalance);
@@ -175,49 +176,231 @@ function SettingsPage() {
   const currentPlanKey = (billingPlan || loadedBillingProfile.plan || loadedProfile.plan || "professional").toLowerCase();
   const currentPlan = clientPlanDetails[currentPlanKey] || clientPlanDetails.professional;
 
-  const downloadInvoicePDF = async (date: string, amount: string, status: string) => {
+  const downloadInvoicePDF = async (inv: { invoiceNumber?: string; date: string; amount: string; status: string; planName?: string; paymentMethod?: string }) => {
     const company = loadedProfile.companyName || "Your Company LLC";
     const { jsPDF } = await import("jspdf");
     const doc = new jsPDF();
+    const invNum = inv.invoiceNumber || `INV-WF-${inv.date.replace(/\s+/g, '-').replace(/,/g, '')}`;
+    const cleanMethod = (inv.paymentMethod || 'Stripe Card (ending in 4242)').replace(/•/g, '*');
+
+    // ── 1. TOP OBSIDIAN & CHAMPAGNE GOLD BANNER ──────────────────────────────
+    doc.setFillColor(15, 23, 42); // Obsidian Slate (#0f172a)
+    doc.rect(0, 0, 210, 42, 'F');
+
+    doc.setFillColor(201, 168, 76); // Champagne Gold (#c9a84c)
+    doc.rect(0, 42, 210, 2.5, 'F');
+
+    // Left Header Branding
+    doc.setTextColor(255, 255, 255);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(20);
-    doc.text(`${company} — INVOICE`, 20, 20);
-    
+    doc.text("WEAVERFRAME", 20, 19);
+
+    doc.setTextColor(201, 168, 76);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.text("AUTONOMOUS ARCHITECTURAL SALES OS", 20, 26);
+
+    doc.setTextColor(148, 163, 184); // Slate 400
     doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.text("support@weaverframe.in | https://weaverframe.in", 20, 33);
+
+    // Right Header Invoice Meta
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(12);
-    doc.text(`Invoice Date: ${date}`, 20, 40);
-    doc.text(`Client Name: ${company}`, 20, 50);
-    doc.text(`Contract ID: WF-2026-904`, 20, 60);
-    doc.text(`Platform Fees: WeaverFrame SaaS ${currentPlan.name}`, 20, 70);
-    doc.text(`Payment Status: ${status} (Visa •••• 4242)`, 20, 80);
-    doc.text(`Merchant: WeaverFrame Inc.`, 20, 90);
+    doc.text("OFFICIAL TAX INVOICE", 130, 18);
 
-    doc.setLineWidth(0.5);
-    doc.line(20, 100, 190, 100);
-
+    doc.setTextColor(201, 168, 76);
     doc.setFont("helvetica", "bold");
-    doc.text("Plan Description", 20, 110);
-    doc.text("Total", 170, 110);
-    
-    doc.line(20, 115, 190, 115);
+    doc.setFontSize(9);
+    doc.text(invNum, 130, 25);
 
+    doc.setTextColor(148, 163, 184);
     doc.setFont("helvetica", "normal");
-    doc.text(`WeaverFrame AI Lead Conversion OS (${currentPlan.name})`, 20, 125);
-    doc.text("- 24/7 AI Lead Concierge & Automated Qualification", 25, 135);
-    doc.text("- 24/7 Autonomous AI Email Concierge & Pipeline Sync", 25, 145);
-    doc.text(amount, 170, 125);
+    doc.setFontSize(8);
+    doc.text(`Date: ${inv.date}`, 130, 32);
 
-    doc.line(20, 170, 190, 170);
+    // ── 2. BILLED TO & PAYMENT DETAILS CARDS ─────────────────────────────────
+    // Billed To Card (Left)
+    doc.setFillColor(248, 250, 252);
+    doc.roundedRect(20, 50, 82, 36, 2.5, 2.5, 'F');
+    doc.setFillColor(201, 168, 76); // Gold Accent Left Border
+    doc.roundedRect(20, 50, 2.5, 36, 1, 1, 'F');
+
+    doc.setTextColor(100, 116, 139);
     doc.setFont("helvetica", "bold");
-    doc.text("Total Paid:", 20, 180);
-    doc.text(amount, 170, 180);
-    
-    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.text("BILLED TO CLIENT:", 26, 58);
+
+    doc.setTextColor(15, 23, 42);
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(10);
-    doc.text("Thank you for your business! If you have any questions, reach out to", 20, 210);
-    doc.text("support@weaverframe.in · WeaverFrame Architecture OS", 20, 215);
+    doc.text(company, 26, 65);
 
-    doc.save(`BE_Invoice_${date.replace(/\s+/g, '_').replace(/,/g, '')}.pdf`);
+    doc.setTextColor(51, 65, 85);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.text(`Attn: ${loadedProfile.contactName || 'Principal Director'}`, 26, 72);
+    doc.text(`Email: ${loadedProfile.email || 'builder@domain.com'}`, 26, 78);
+
+    // Payment Info Card (Right)
+    doc.setFillColor(248, 250, 252);
+    doc.roundedRect(108, 50, 82, 36, 2.5, 2.5, 'F');
+    doc.setFillColor(15, 23, 42); // Navy Accent Left Border
+    doc.roundedRect(108, 50, 2.5, 36, 1, 1, 'F');
+
+    doc.setTextColor(100, 116, 139);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.text("PAYMENT & SETTLEMENT:", 114, 58);
+
+    // Emerald Paid Badge Pill
+    doc.setFillColor(236, 253, 245);
+    doc.roundedRect(114, 62, 42, 6.5, 2, 2, 'F');
+    // Vector Green Dot
+    doc.setFillColor(5, 150, 105);
+    doc.circle(118, 65.2, 1, 'F');
+    doc.setTextColor(5, 150, 105);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.text("PAID & SETTLED", 121, 66.8);
+
+    doc.setTextColor(51, 65, 85);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.text(`Method: ${cleanMethod}`, 114, 74);
+    doc.text("Currency: USD ($) | Automatic Settlement", 114, 80);
+
+    // ── 3. SERVICE ITEMS TABLE ───────────────────────────────────────────────
+    // Table Header Bar
+    doc.setFillColor(15, 23, 42);
+    doc.roundedRect(20, 93, 170, 8.5, 2, 2, 'F');
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.text("SERVICE / PLAN DESCRIPTION", 25, 98.8);
+    doc.text("CYCLE", 125, 98.8);
+    doc.text("AMOUNT (USD)", 155, 98.8);
+
+    // Table Row Box
+    doc.setFillColor(255, 255, 255);
+    doc.rect(20, 101.5, 170, 44, 'F');
+    doc.setDrawColor(226, 232, 240);
+    doc.rect(20, 101.5, 170, 44, 'D');
+
+    doc.setTextColor(15, 23, 42);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.5);
+    doc.text(`WeaverFrame AI Lead Engine - ${inv.planName || currentPlan.name}`, 25, 110);
+
+    const featureItems = [
+      "24/7 Autonomous Architectural Email Concierge & Live Reply Outreach",
+      "Inbound Webhook Ingestion (WordPress Forms, Meta Ads, Zapier / Make)",
+      "Real-Time Lead Qualification Scoring, Memory Graph & Multi-CRM Sync",
+      "Automated Walkthrough Calendar Booking & High-Alert Builder Notifications"
+    ];
+
+    featureItems.forEach((itemText, idx) => {
+      const lineY = 117 + idx * 7;
+      // Native vector gold circle bullet
+      doc.setFillColor(201, 168, 76);
+      doc.circle(26, lineY - 1, 0.9, 'F');
+      
+      doc.setTextColor(100, 116, 139);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.5);
+      doc.text(itemText, 29, lineY);
+    });
+
+    doc.setTextColor(51, 65, 85);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.text("Monthly", 126, 110);
+
+    doc.setTextColor(15, 23, 42);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.text(inv.amount, 160, 110);
+
+    // ── 4. VERIFICATION & SUMMARY TOTALS BOXES ────────────────────────────────
+    // Security / Auth Box (Left)
+    doc.setFillColor(248, 250, 252);
+    doc.roundedRect(20, 151, 82, 33, 2.5, 2.5, 'F');
+    doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(20, 151, 82, 33, 2.5, 2.5, 'D');
+
+    // Vector Shield/Check indicator
+    doc.setFillColor(5, 150, 105);
+    doc.circle(27, 157.5, 1.2, 'F');
+    doc.setTextColor(5, 150, 105);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.text("VERIFIED TRANSACTION", 31, 159);
+
+    doc.setTextColor(100, 116, 139);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.text("Processed via Stripe PCI-DSS Level 1 Gateway.", 26, 166);
+    doc.text("256-Bit Encrypted SaaS Billing Infrastructure.", 26, 172);
+    doc.text("Account ID: WF-TENANT-" + (loadedProfile.id ? loadedProfile.id.slice(0, 8).toUpperCase() : "ACTIVE"), 26, 178);
+
+    // Summary Totals Box (Right)
+    doc.setFillColor(248, 250, 252);
+    doc.roundedRect(108, 151, 82, 33, 2.5, 2.5, 'F');
+    doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(108, 151, 82, 33, 2.5, 2.5, 'D');
+
+    doc.setTextColor(100, 116, 139);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.text("Subtotal:", 114, 159);
+    doc.setTextColor(15, 23, 42);
+    doc.text(inv.amount, 165, 159);
+
+    doc.setTextColor(100, 116, 139);
+    doc.text("Estimated Tax (0%):", 114, 166);
+    doc.setTextColor(15, 23, 42);
+    doc.text("$0.00", 165, 166);
+
+    doc.setDrawColor(201, 168, 76);
+    doc.line(114, 170, 184, 170);
+
+    doc.setTextColor(15, 23, 42);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.5);
+    doc.text("Total Paid:", 114, 178);
+
+    doc.setTextColor(201, 168, 76);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.text(inv.amount, 160, 178);
+
+    // ── 5. BOTTOM OBSIDIAN FOOTER BANNER ─────────────────────────────────────
+    doc.setFillColor(15, 23, 42);
+    doc.rect(0, 270, 210, 27, 'F');
+
+    doc.setFillColor(201, 168, 76);
+    doc.rect(0, 270, 210, 1.5, 'F');
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.text("THANK YOU FOR BUILDING WITH WEAVERFRAME", 20, 281);
+
+    doc.setTextColor(148, 163, 184);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.text("For corporate billing questions or tax compliance, reach out to billing@weaverframe.in", 20, 287);
+
+    doc.setTextColor(201, 168, 76);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.text("WEAVERFRAME.IN", 155, 281);
+
+    doc.save(`${invNum}.pdf`);
   };
 
   // ── Stripe Subscription Checkout Handlers ─────────────────────────────────────
@@ -440,6 +623,8 @@ function SettingsPage() {
 
   const [isSavingWebhook, setIsSavingWebhook] = useState(false);
   const [webhookSaved, setWebhookSaved] = useState(false);
+  const [showWebhookUrl, setShowWebhookUrl] = useState(false);
+  const [isInboundExpanded, setIsInboundExpanded] = useState(false);
 
   const handleSaveWebhook = async () => {
     setIsSavingWebhook(true);
@@ -663,7 +848,7 @@ function SettingsPage() {
   };
 
   // ── Inbound Lead Ingestion Hub State ─────────────────────────────────────────
-  const [inboundTab, setInboundTab] = useState<"wordpress" | "meta" | "webflow" | "email_forward" | "zapier" | "embed">("wordpress");
+  const [inboundTab, setInboundTab] = useState<"zapier" | "make" | "wordpress" | "meta" | "webflow" | "html">("zapier");
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [isTestingInbound, setIsTestingInbound] = useState(false);
   const [testInboundResult, setTestInboundResult] = useState<{ success: boolean; message: string; leadId?: string; scoreTier?: string; dealScore?: number } | null>(null);
@@ -937,323 +1122,301 @@ function SettingsPage() {
                 </p>
               </div>
 
-              {/* ════════════════════════════════════════════════════════════════════
-                  1. INBOUND LEAD INGESTION & PLATFORM CONNECTION HUB (CORE WORKFLOW)
-                  ════════════════════════════════════════════════════════════════════ */}
-              <div className="border-2 border-primary/30 rounded-2xl bg-[#0a0b10] p-5 sm:p-6 space-y-5 shadow-xl relative overflow-hidden">
+              <div className="border border-border rounded-lg bg-secondary/10 overflow-hidden transition-all duration-150">
                 {/* Header Strip */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/50 pb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="size-10 rounded-xl bg-primary/15 border border-primary/30 flex items-center justify-center text-primary shrink-0 shadow-inner">
-                      <Zap className="size-5" />
+                <div className="flex items-center justify-between p-4 bg-secondary/30">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="size-9 rounded-md bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-foreground text-xs font-mono font-bold shrink-0">
+                      <Zap className="size-4 text-primary" />
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <h3 className="text-base font-bold text-foreground">Inbound Lead Connection Hub</h3>
-                        <span className="px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-primary/20 text-primary border border-primary/30 uppercase tracking-wider">
+                        <span className="text-sm font-medium text-foreground truncate">Inbound Lead Ingestion</span>
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-primary/20 text-primary border border-primary/30 uppercase tracking-wider">
                           Auto Ingest
                         </span>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Route leads from your website forms, Meta Lead Ads, Houzz/Zillow emails, or Zapier directly into your pipeline.
-                      </p>
+                      <div className="text-xs text-muted-foreground mt-0.5 truncate">
+                        Directly capture inquiries from your website forms, Meta ads, or Zapier into your autonomous pipeline.
+                      </div>
                     </div>
                   </div>
 
-                  {/* Test Ping Button */}
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0 ml-4">
+                    <span className="text-[10px] uppercase font-mono tracking-widest px-2 py-0.5 rounded bg-success/10 text-success">
+                      Active
+                    </span>
+
                     <button
                       type="button"
                       onClick={handleSendTestLead}
                       disabled={isTestingInbound}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-primary text-black hover:bg-primary/90 text-xs font-bold transition-all shadow-md cursor-pointer disabled:opacity-50"
+                      className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-border bg-secondary hover:bg-secondary/80 text-xs font-medium text-foreground transition-colors cursor-pointer disabled:opacity-50"
                       title="Send a sample high-ticket lead to test your pipeline"
                     >
                       {isTestingInbound ? (
                         <>
-                          <Loader2 className="size-3.5 animate-spin" />
-                          <span>Ingesting Test Lead...</span>
+                          <Loader2 className="size-3 animate-spin" />
+                          <span>Testing...</span>
                         </>
                       ) : (
                         <>
-                          <Send className="size-3.5" />
-                          <span>Send Test Inbound Lead</span>
+                          <Send className="size-3 text-primary" />
+                          <span>Test Lead</span>
                         </>
                       )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsInboundExpanded(!isInboundExpanded)}
+                      className="text-xs px-3 py-1.5 rounded border border-border text-foreground hover:bg-secondary transition-colors cursor-pointer flex items-center gap-1"
+                    >
+                      <span>{isInboundExpanded ? "Close" : "Configure"}</span>
+                      <ChevronDown className={`size-3.5 transition-transform duration-200 ${isInboundExpanded ? "rotate-180" : ""}`} />
                     </button>
                   </div>
                 </div>
 
-                {/* Test Inbound Result Banner */}
-                {testInboundResult && (
-                  <div className={`p-3 rounded-xl border flex items-center justify-between text-xs animate-in fade-in slide-in-from-top-1 ${
-                    testInboundResult.success
-                      ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 font-medium"
-                      : "bg-red-500/10 border-red-500/30 text-red-400"
-                  }`}>
-                    <div className="flex items-center gap-2 min-w-0">
-                      {testInboundResult.success ? (
-                        <CheckCircle className="size-4 text-emerald-400 shrink-0" />
-                      ) : (
-                        <AlertCircle className="size-4 text-red-400 shrink-0" />
-                      )}
-                      <span className="truncate">{testInboundResult.message}</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setTestInboundResult(null)}
-                      className="p-1 hover:bg-white/10 rounded text-muted-foreground hover:text-white cursor-pointer"
-                    >
-                      <X className="size-3.5" />
-                    </button>
-                  </div>
-                )}
-
-                {/* Master Webhook URL Box */}
-                <div className="p-4 rounded-xl bg-[#06070a] border border-border/80 space-y-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-[10.5px] font-mono text-muted-foreground uppercase font-semibold tracking-wider flex items-center gap-1.5">
-                      <Globe className="size-3.5 text-primary" />
-                      <span>Your Unique Inbound Webhook URL (POST)</span>
-                    </span>
-                    <span className="text-[10px] font-mono text-emerald-400 flex items-center gap-1">
-                      <Check className="size-3" /> Ready for POST requests
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 bg-secondary/30 border border-border rounded-lg px-3 py-2 text-xs font-mono text-foreground select-all overflow-x-auto whitespace-nowrap">
-                      {inboundWebhookUrl}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => copyToClipboard(inboundWebhookUrl, "webhook_url")}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-secondary hover:bg-secondary/80 border border-border text-xs font-medium text-foreground transition-colors shrink-0 cursor-pointer"
-                    >
-                      {copiedKey === "webhook_url" ? (
-                        <>
-                          <Check className="size-3.5 text-emerald-400" />
-                          <span className="text-emerald-400">Copied!</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="size-3.5" />
-                          <span>Copy URL</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Platform Tabs Selector */}
-                <div className="space-y-3 pt-1">
-                  <label className="block text-[11px] text-muted-foreground uppercase tracking-wider font-semibold">
-                    Select Your Platform For Exact Step-by-Step Instructions:
-                  </label>
-
-                  <div className="flex flex-wrap gap-2">
-                    {[
-                      { id: "wordpress", label: "WordPress / Elementor / WPForms", icon: "🌐" },
-                      { id: "meta", label: "Meta (FB & IG) Lead Ads", icon: "📱" },
-                      { id: "webflow", label: "Webflow, Wix & Squarespace", icon: "🎨" },
-                      { id: "email_forward", label: "Houzz & Zillow Email Routing", icon: "📨" },
-                      { id: "zapier", label: "Zapier & Make.com", icon: "⚡" },
-                      { id: "embed", label: "1-Line HTML / Embed Code", icon: "💻" },
-                    ].map((tab) => (
+                {isInboundExpanded && (
+                  <div className="p-5 border-t border-border/40 bg-card space-y-5 animate-in slide-in-from-top-2 duration-150">
+                    {/* Mobile Test Button */}
+                    <div className="sm:hidden flex justify-end">
                       <button
-                        key={tab.id}
                         type="button"
-                        onClick={() => setInboundTab(tab.id as any)}
-                        className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer border ${
-                          inboundTab === tab.id
-                            ? "bg-primary/15 border-primary/40 text-primary shadow-sm"
-                            : "bg-secondary/40 border-border text-muted-foreground hover:text-foreground hover:bg-secondary"
-                        }`}
+                        onClick={handleSendTestLead}
+                        disabled={isTestingInbound}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-primary text-black text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
                       >
-                        <span>{tab.icon}</span>
-                        <span>{tab.label}</span>
+                        {isTestingInbound ? (
+                          <>
+                            <Loader2 className="size-3 animate-spin" />
+                            <span>Ingesting Test Lead...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Send className="size-3" />
+                            <span>Send Test Inbound Lead</span>
+                          </>
+                        )}
                       </button>
-                    ))}
-                  </div>
+                    </div>
 
-                  {/* Platform-Specific Interactive Panels */}
-                  <div className="p-4 sm:p-5 rounded-xl bg-card border border-border/70 space-y-4 animate-in fade-in duration-150">
-                    {/* 1. WORDPRESS & ELEMENTOR */}
-                    {inboundTab === "wordpress" && (
-                      <div className="space-y-3.5">
-                        <div className="flex items-center justify-between border-b border-border/40 pb-2.5">
-                          <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
-                            <span>🌐 WordPress, Elementor Pro & WPForms Setup</span>
-                          </h4>
-                          <span className="text-[10px] font-mono text-muted-foreground">Setup time: 2 mins</span>
+                    {/* Test Inbound Result Banner */}
+                    {testInboundResult && (
+                      <div className={`p-3 rounded-xl border flex items-center justify-between text-xs animate-in fade-in slide-in-from-top-1 ${
+                        testInboundResult.success
+                          ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 font-medium"
+                          : "bg-red-500/10 border-red-500/30 text-red-400"
+                      }`}>
+                        <div className="flex items-center gap-2 min-w-0">
+                          {testInboundResult.success ? (
+                            <CheckCircle className="size-4 text-emerald-400 shrink-0" />
+                          ) : (
+                            <AlertCircle className="size-4 text-red-400 shrink-0" />
+                          )}
+                          <span className="truncate">{testInboundResult.message}</span>
                         </div>
-                        <ol className="text-xs text-muted-foreground space-y-2.5 list-decimal pl-4 leading-relaxed font-sans">
-                          <li>
-                            In your WordPress Dashboard, open your contact/inquiry form (e.g. <strong>Elementor Form</strong> or <strong>WPForms Webhooks</strong>).
-                          </li>
-                          <li>
-                            Under <strong>Actions After Submit</strong>, add <strong>Webhook</strong>.
-                          </li>
-                          <li>
-                            Paste your Webhook URL into the <strong>Webhook URL</strong> field:
-                            <code className="block mt-1 p-2 rounded bg-[#07080a] border border-border text-[11px] font-mono text-foreground break-all select-all">
-                              {inboundWebhookUrl}
-                            </code>
-                          </li>
-                          <li>
-                            Set Method to <strong>POST</strong>. WeaverFrame will automatically read standard fields: <code className="text-primary font-mono font-semibold">name</code>, <code className="text-primary font-mono font-semibold">email</code>, <code className="text-primary font-mono font-semibold">phone</code>, <code className="text-primary font-mono font-semibold">estimatedBudget</code>, <code className="text-primary font-mono font-semibold">county</code>, and <code className="text-primary font-mono font-semibold">message</code>.
-                          </li>
-                        </ol>
+                        <button
+                          type="button"
+                          onClick={() => setTestInboundResult(null)}
+                          className="p-1 hover:bg-white/10 rounded text-muted-foreground hover:text-white cursor-pointer"
+                        >
+                          <X className="size-3.5" />
+                        </button>
                       </div>
                     )}
 
-                    {/* 2. META LEAD ADS */}
-                    {inboundTab === "meta" && (
-                      <div className="space-y-3.5">
-                        <div className="flex items-center justify-between border-b border-border/40 pb-2.5">
-                          <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
-                            <span>📱 Facebook & Instagram Lead Generation Ads</span>
-                          </h4>
-                          <span className="text-[10px] font-mono text-muted-foreground">Instant 3s Lead Delivery</span>
+                    {/* Master Webhook URL Box (Clean & Collapsible) */}
+                    <div className="p-3.5 sm:p-4 rounded-xl bg-[#06070a] border border-border/80 space-y-3">
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] font-mono text-muted-foreground uppercase font-semibold tracking-wider flex items-center gap-1.5">
+                            <Globe className="size-3.5 text-primary" />
+                            <span>Inbound Webhook Endpoint (POST)</span>
+                          </span>
+                          <span className="text-[10px] font-mono text-emerald-400 hidden sm:inline-flex items-center gap-1">
+                            <Check className="size-3" /> Ready
+                          </span>
                         </div>
-                        <p className="text-xs text-muted-foreground leading-relaxed">
-                          Connect your Meta Ads directly via Zapier or Make.com so that every buyer form submission on Instagram or Facebook instantly enters your WeaverFrame pipeline:
-                        </p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                          <div className="p-3 rounded-lg bg-secondary/30 border border-border space-y-1">
-                            <span className="text-[10px] font-mono uppercase text-primary font-bold">Step 1: Zapier Trigger</span>
-                            <p className="text-muted-foreground text-[11px]">App: <strong>Facebook Lead Ads</strong><br />Event: <strong>New Lead</strong></p>
-                          </div>
-                          <div className="p-3 rounded-lg bg-secondary/30 border border-border space-y-1">
-                            <span className="text-[10px] font-mono uppercase text-primary font-bold">Step 2: Zapier Action</span>
-                            <p className="text-muted-foreground text-[11px]">App: <strong>Webhooks by Zapier</strong><br />Action: <strong>POST</strong> to your Webhook URL</p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
 
-                    {/* 3. WEBFLOW, WIX & SQUARESPACE */}
-                    {inboundTab === "webflow" && (
-                      <div className="space-y-3.5">
-                        <div className="flex items-center justify-between border-b border-border/40 pb-2.5">
-                          <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
-                            <span>🎨 Webflow, Wix & Squarespace Custom Forms</span>
-                          </h4>
-                          <span className="text-[10px] font-mono text-muted-foreground">No Plugins Required</span>
-                        </div>
-                        <ol className="text-xs text-muted-foreground space-y-2.5 list-decimal pl-4 leading-relaxed font-sans">
-                          <li>
-                            In <strong>Webflow</strong>, select your Form block $\rightarrow$ Open Form Settings $\rightarrow$ Set <strong>Action</strong> to your Webhook URL and <strong>Method</strong> to <code className="font-mono text-foreground font-semibold">POST</code>.
-                          </li>
-                          <li>
-                            In <strong>Wix</strong> or <strong>Squarespace</strong>, use Wix Automations / Zapier Trigger to send form submissions directly to your WeaverFrame Webhook URL.
-                          </li>
-                          <li>
-                            When a client submits their budget and lot details, WeaverFrame ingests the lead and prepares the AI qualification reply within 60 seconds.
-                          </li>
-                        </ol>
-                      </div>
-                    )}
-
-                    {/* 4. HOUZZ & ZILLOW EMAIL ROUTING */}
-                    {inboundTab === "email_forward" && (
-                      <div className="space-y-3.5">
-                        <div className="flex items-center justify-between border-b border-border/40 pb-2.5">
-                          <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
-                            <span>📨 Houzz, Zillow & Real Estate Directory Email Routing</span>
-                          </h4>
-                          <span className="text-[10px] font-mono text-emerald-400 font-semibold">AI Automated Parser</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground leading-relaxed">
-                          Real estate directories like Houzz and Zillow send new lead notifications to your email inbox. Forward them to your dedicated WeaverFrame Inbound routing address:
-                        </p>
-                        <div className="p-3.5 rounded-xl bg-[#06070a] border border-border flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                          <div className="min-w-0">
-                            <span className="text-[10px] font-mono text-muted-foreground uppercase font-semibold">Your Inbound Routing Email:</span>
-                            <div className="text-xs font-mono font-bold text-foreground truncate mt-0.5">{inboundEmailAddress}</div>
-                          </div>
+                        <div className="flex items-center gap-2">
                           <button
                             type="button"
-                            onClick={() => copyToClipboard(inboundEmailAddress, "inbound_email")}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary hover:bg-secondary/80 border border-border text-xs font-medium text-foreground transition-colors shrink-0 cursor-pointer"
+                            onClick={() => setShowWebhookUrl(!showWebhookUrl)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-secondary/60 hover:bg-secondary border border-border text-[11px] font-medium text-foreground transition-colors cursor-pointer"
+                            title={showWebhookUrl ? "Hide full webhook URL" : "Show full webhook URL"}
                           >
-                            {copiedKey === "inbound_email" ? <Check className="size-3.5 text-emerald-400" /> : <Copy className="size-3.5" />}
-                            <span>{copiedKey === "inbound_email" ? "Copied!" : "Copy Email"}</span>
+                            {showWebhookUrl ? (
+                              <>
+                                <EyeOff className="size-3.5 text-muted-foreground" />
+                                <span>Hide URL</span>
+                              </>
+                            ) : (
+                              <>
+                                <Eye className="size-3.5 text-primary" />
+                                <span>Show URL</span>
+                              </>
+                            )}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => copyToClipboard(inboundWebhookUrl, "webhook_url")}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary hover:bg-secondary/80 border border-border text-[11px] font-medium text-foreground transition-colors shrink-0 cursor-pointer"
+                          >
+                            {copiedKey === "webhook_url" ? (
+                              <>
+                                <Check className="size-3.5 text-emerald-400" />
+                                <span className="text-emerald-400">Copied!</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="size-3.5" />
+                                <span>Copy URL</span>
+                              </>
+                            )}
                           </button>
                         </div>
-                        <p className="text-[11px] text-muted-foreground leading-relaxed">
-                          💡 <strong>Pro Tip:</strong> Create an automatic forward rule in Gmail or Outlook for messages containing <em>"leads@houzz.com"</em> or <em>"leads@zillow.com"</em> to auto-forward to this address.
-                        </p>
                       </div>
-                    )}
 
-                    {/* 5. ZAPIER & MAKE.COM */}
-                    {inboundTab === "zapier" && (
-                      <div className="space-y-3.5">
-                        <div className="flex items-center justify-between border-b border-border/40 pb-2.5">
-                          <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
-                            <span>⚡ Universal Zapier & Make.com Ingestion</span>
-                          </h4>
-                          <span className="text-[10px] font-mono text-muted-foreground">Any CRM / App</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground leading-relaxed">
-                          Connect any third-party app (Typeform, Google Sheets, HubSpot, Jotform, Calendly) in Zapier by sending a <code className="font-mono text-foreground font-semibold">POST</code> webhook to your WeaverFrame URL.
-                        </p>
-                        <div className="space-y-1.5">
-                          <div className="flex items-center justify-between text-[11px]">
-                            <span className="font-mono text-muted-foreground">Sample JSON Payload:</span>
-                            <button
-                              type="button"
-                              onClick={() => copyToClipboard(JSON.stringify({
-                                token: builderToken,
-                                name: "Harrison Vance",
-                                email: "harrison.vance@example.com",
-                                phone: "+1 (512) 555-0199",
-                                county: "Travis County",
-                                state: "TX",
-                                estimatedBudget: 1800000,
-                                source: "Zapier Inbound",
-                                message: "Looking for a 4,500 sqft modern architectural estate."
-                              }, null, 2), "sample_json")}
-                              className="text-primary hover:underline flex items-center gap-1 font-mono text-[10px] cursor-pointer"
-                            >
-                              {copiedKey === "sample_json" ? "Copied JSON!" : "Copy Sample JSON"}
-                            </button>
+                      {showWebhookUrl && (
+                        <div className="flex items-center gap-2 pt-1 animate-in fade-in slide-in-from-top-1 duration-150">
+                          <div className="flex-1 bg-secondary/30 border border-border rounded-lg px-3 py-2 text-xs font-mono text-foreground select-all overflow-x-auto whitespace-nowrap">
+                            {inboundWebhookUrl}
                           </div>
-                          <pre className="p-3 rounded-lg bg-[#06070a] border border-border text-[11px] font-mono text-foreground/90 overflow-x-auto">
-{`{
-  "token": "${builderToken}",
-  "name": "Harrison Vance",
-  "email": "harrison.vance@example.com",
-  "phone": "+1 (512) 555-0199",
-  "county": "Travis County",
-  "state": "TX",
-  "estimatedBudget": 1800000,
-  "source": "Zapier Inbound",
-  "message": "Looking for a 4,500 sqft modern estate."
-}`}
-                          </pre>
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
 
-                    {/* 6. HTML / EMBED CODE */}
-                    {inboundTab === "embed" && (
-                      <div className="space-y-3.5">
-                        <div className="flex items-center justify-between border-b border-border/40 pb-2.5">
-                          <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
-                            <span>💻 1-Line HTML Form / Embed Snippet</span>
-                          </h4>
-                          <span className="text-[10px] font-mono text-muted-foreground">Raw HTML / React</span>
+                    {/* Platform Tabs Selector */}
+                    <div className="space-y-3 pt-1">
+                      <label className="block text-[11px] text-muted-foreground uppercase tracking-wider font-semibold">
+                        Select Your Platform For Exact Step-by-Step Instructions:
+                      </label>
+
+                      <div className="flex flex-wrap gap-2">
+                        {[
+                          { id: "zapier", name: "⚡ Zapier Webhook (Easiest)", icon: "⚡" },
+                          { id: "make", name: "🟣 Make.com (Integromat)", icon: "🟣" },
+                          { id: "wordpress", name: "🟦 WordPress / Elementor", icon: "🟦" },
+                          { id: "meta", name: "📱 Meta (FB/IG) Lead Ads", icon: "📱" },
+                          { id: "webflow", name: "🌊 Webflow Forms", icon: "🌊" },
+                          { id: "html", name: "💻 Direct HTML / Custom Code", icon: "💻" },
+                        ].map((plat) => (
+                          <button
+                            key={plat.id}
+                            type="button"
+                            onClick={() => setInboundTab(plat.id as any)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer ${
+                              inboundTab === plat.id
+                                ? "bg-primary text-black font-bold shadow-sm"
+                                : "bg-secondary/40 hover:bg-secondary border border-border/60 text-muted-foreground hover:text-foreground"
+                            }`}
+                          >
+                            <span>{plat.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Active Platform Guide Box */}
+                    <div className="p-4 rounded-xl bg-[#06070a] border border-border/80 space-y-3">
+                      {inboundTab === "zapier" && (
+                        <div className="space-y-2.5">
+                          <div className="flex items-center justify-between border-b border-border/40 pb-2.5">
+                            <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
+                              <span>⚡ Connecting via Zapier Webhooks</span>
+                            </h4>
+                            <span className="text-[10px] font-mono text-muted-foreground">3-Step Setup</span>
+                          </div>
+                          <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal pl-4 leading-relaxed">
+                            <li>In Zapier, create a new Zap and set your Trigger to any app (e.g. Google Forms, Calendly, Typeform).</li>
+                            <li>For Action, select <strong className="text-foreground">"Webhooks by Zapier"</strong> &rarr; Event: <strong className="text-foreground">"Custom Request"</strong> (or <strong className="text-foreground">POST</strong>).</li>
+                            <li>Paste your Unique Webhook URL in the <code className="text-foreground font-mono">URL</code> field, set <code className="text-foreground font-mono">Payload Type: JSON</code>, and map fields like <code className="text-foreground font-mono">name</code>, <code className="text-foreground font-mono">email</code>, <code className="text-foreground font-mono">phone</code>, <code className="text-foreground font-mono">estimatedBudget</code>.</li>
+                          </ol>
                         </div>
-                        <p className="text-xs text-muted-foreground leading-relaxed">
-                          Copy and paste this standard HTML consultation form into any custom website page:
-                        </p>
-                        <div className="space-y-1.5">
-                          <div className="flex items-center justify-between text-[11px]">
-                            <span className="font-mono text-muted-foreground">HTML Form Snippet:</span>
-                            <button
-                              type="button"
-                              onClick={() => copyToClipboard(`<form action="${inboundWebhookUrl}" method="POST">
+                      )}
+
+                      {inboundTab === "make" && (
+                        <div className="space-y-2.5">
+                          <div className="flex items-center justify-between border-b border-border/40 pb-2.5">
+                            <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
+                              <span>🟣 Connecting via Make.com (Integromat)</span>
+                            </h4>
+                            <span className="text-[10px] font-mono text-muted-foreground">HTTP Module</span>
+                          </div>
+                          <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal pl-4 leading-relaxed">
+                            <li>Add an <strong className="text-foreground">"HTTP &rarr; Make a request"</strong> module at the end of your scenario.</li>
+                            <li>Set URL to your WeaverFrame Inbound Webhook URL.</li>
+                            <li>Method: <strong className="text-foreground">POST</strong>, Body type: <strong className="text-foreground">Raw (JSON)</strong>. Map your lead variables in the JSON body.</li>
+                          </ol>
+                        </div>
+                      )}
+
+                      {inboundTab === "wordpress" && (
+                        <div className="space-y-2.5">
+                          <div className="flex items-center justify-between border-b border-border/40 pb-2.5">
+                            <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
+                              <span>🟦 WordPress (Elementor Pro / WPForms / Gravity)</span>
+                            </h4>
+                            <span className="text-[10px] font-mono text-muted-foreground">Form Actions</span>
+                          </div>
+                          <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal pl-4 leading-relaxed">
+                            <li>In your WordPress Form builder (Elementor Form, WPForms Webhooks addon, or Gravity Forms Webhooks), go to <strong className="text-foreground">"Actions After Submit"</strong>.</li>
+                            <li>Select <strong className="text-foreground">"Webhook"</strong> and paste your Webhook URL.</li>
+                            <li>Ensure field names or Shortcodes match <code className="text-foreground font-mono">name</code>, <code className="text-foreground font-mono">email</code>, <code className="text-foreground font-mono">phone</code>, and <code className="text-foreground font-mono">estimatedBudget</code>.</li>
+                          </ol>
+                        </div>
+                      )}
+
+                      {inboundTab === "meta" && (
+                        <div className="space-y-2.5">
+                          <div className="flex items-center justify-between border-b border-border/40 pb-2.5">
+                            <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
+                              <span>📱 Meta Lead Ads (Facebook & Instagram)</span>
+                            </h4>
+                            <span className="text-[10px] font-mono text-muted-foreground">Instant Lead Sync</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground leading-relaxed">
+                            Connect Meta Lead Ads directly to your WeaverFrame webhook using Zapier's free <strong className="text-foreground">Facebook Lead Ads</strong> integration or Make.com. Whenever a prospect submits an ad form on Instagram or Facebook, WeaverFrame ingests the lead in under 1 second and immediately sends the personalized AI introductory email!
+                          </p>
+                        </div>
+                      )}
+
+                      {inboundTab === "webflow" && (
+                        <div className="space-y-2.5">
+                          <div className="flex items-center justify-between border-b border-border/40 pb-2.5">
+                            <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
+                              <span>🌊 Webflow Forms Webhook</span>
+                            </h4>
+                            <span className="text-[10px] font-mono text-muted-foreground">Project Settings</span>
+                          </div>
+                          <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal pl-4 leading-relaxed">
+                            <li>In Webflow, navigate to <strong className="text-foreground">Project Settings &rarr; Integrations &rarr; Webhooks</strong>.</li>
+                            <li>Click <strong className="text-foreground">"Add Webhook"</strong>, select Trigger: <strong className="text-foreground">"Form Submission"</strong>.</li>
+                            <li>Paste your Unique Webhook URL and click Save!</li>
+                          </ol>
+                        </div>
+                      )}
+
+                      {inboundTab === "html" && (
+                        <div className="space-y-2.5">
+                          <div className="flex items-center justify-between border-b border-border/40 pb-2.5">
+                            <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
+                              <span>💻 1-Line HTML Form / Embed Snippet</span>
+                            </h4>
+                            <span className="text-[10px] font-mono text-muted-foreground">Raw HTML / React</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground leading-relaxed">
+                            Copy and paste this standard HTML consultation form into any custom website page:
+                          </p>
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between text-[11px]">
+                              <span className="font-mono text-muted-foreground">HTML Form Snippet:</span>
+                              <button
+                                type="button"
+                                onClick={() => copyToClipboard(`<form action="${inboundWebhookUrl}" method="POST">
   <input type="text" name="name" placeholder="Your Full Name" required />
   <input type="email" name="email" placeholder="Your Email Address" required />
   <input type="tel" name="phone" placeholder="Phone Number" />
@@ -1262,12 +1425,12 @@ function SettingsPage() {
   <textarea name="message" placeholder="Describe your dream home vision..."></textarea>
   <button type="submit">Request Architectural Consultation</button>
 </form>`, "html_form")}
-                              className="text-primary hover:underline flex items-center gap-1 font-mono text-[10px] cursor-pointer"
-                            >
-                              {copiedKey === "html_form" ? "Copied HTML!" : "Copy HTML Snippet"}
-                            </button>
-                          </div>
-                          <pre className="p-3 rounded-lg bg-[#06070a] border border-border text-[11px] font-mono text-foreground/90 overflow-x-auto">
+                                className="text-primary hover:underline flex items-center gap-1 font-mono text-[10px] cursor-pointer"
+                              >
+                                {copiedKey === "html_form" ? "Copied HTML!" : "Copy HTML Snippet"}
+                              </button>
+                            </div>
+                            <pre className="p-3 rounded-lg bg-[#06070a] border border-border text-[11px] font-mono text-foreground/90 overflow-x-auto">
 {`<form action="${inboundWebhookUrl}" method="POST">
   <input type="text" name="name" placeholder="Your Full Name" required />
   <input type="email" name="email" placeholder="Your Email Address" required />
@@ -1277,14 +1440,14 @@ function SettingsPage() {
   <textarea name="message" placeholder="Project details..."></textarea>
   <button type="submit">Submit Inquiry</button>
 </form>`}
-                          </pre>
+                            </pre>
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
-
               {/* ════════════════════════════════════════════════════════════════════
                   2. COMPANY EMAIL & MAILBOX GATEWAY + CRM INTEGRATIONS
                   ════════════════════════════════════════════════════════════════════ */}
@@ -1627,7 +1790,7 @@ function SettingsPage() {
                 <div>
                   <h2 className="text-lg font-semibold text-foreground">Subscription & Billing</h2>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Manage your organization's subscription tier, billing cycle, and Stripe payments.
+                    Active subscription tier, automated monthly billing, and Stripe payment methods.
                   </p>
                 </div>
                 <div className="flex items-center gap-2 self-start sm:self-auto">
@@ -1636,7 +1799,7 @@ function SettingsPage() {
                     onClick={handleOpenPortal}
                     disabled={isOpeningPortal}
                     className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-secondary/80 hover:bg-secondary border border-border text-foreground text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50 shadow-sm"
-                    title="Manage credit cards and receipts in Stripe"
+                    title="Manage payment methods and receipts in Stripe"
                   >
                     {isOpeningPortal ? (
                       <>
@@ -1651,170 +1814,221 @@ function SettingsPage() {
                       </>
                     )}
                   </button>
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-mono font-bold">
-                    <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-                    ACTIVE
-                  </span>
                 </div>
               </div>
 
-              {/* Interactive Subscription Plan Cards */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {/* 1. Starter Tier */}
-                <Card className={`p-5 rounded-2xl flex flex-col justify-between transition-all duration-200 ${
-                  currentPlanKey === 'starter' || currentPlanKey === 'professional'
-                    ? 'border-2 border-[#e5d9c5]/80 bg-card shadow-md shadow-[#e5d9c5]/5'
-                    : 'border border-border/80 bg-card/60 hover:border-border'
-                }`}>
-                  <div>
-                    <div className="flex items-center justify-between gap-2 mb-2">
-                      <span className="text-[10.5px] uppercase tracking-wider text-muted-foreground font-mono font-semibold">
-                        Entry-Level Plan
-                      </span>
-                      <span className="px-2.5 py-0.5 rounded-full text-[9.5px] font-mono font-bold bg-[#c9a84c]/15 text-[#c9a84c] dark:text-[#e5d9c5] border border-[#c9a84c]/30">
-                        STARTER TIER
-                      </span>
+              {/* Collapsible Active Subscription & Tier Comparison Card */}
+              <div className="border border-border rounded-xl bg-secondary/10 overflow-hidden transition-all duration-150">
+                {/* Header Strip */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-secondary/30 gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="size-10 rounded-xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-[#c9a84c] dark:text-[#e5d9c5] shrink-0 shadow-inner">
+                      <ShieldCheck className="size-5" />
                     </div>
-
-                    <div className="text-xl font-bold text-foreground font-mono">
-                      Starter
-                    </div>
-
-                    <div className="flex items-baseline gap-1 my-2">
-                      <span className="font-nevera text-3xl sm:text-4xl font-normal text-foreground">
-                        $149
-                      </span>
-                      <span className="text-xs font-mono text-muted-foreground">
-                        / month (up to 50 leads)
-                      </span>
-                    </div>
-
-                    <p className="text-xs text-muted-foreground font-light mb-4 leading-relaxed">
-                      Designed for boutique builders. Autonomous AI email qualification, lead memory, and instant hot lead dispatches.
-                    </p>
-
-                    <div className="space-y-2 pt-3 border-t border-border/50 text-xs font-mono text-muted-foreground">
-                      {[
-                        "Up to 50 active leads / month",
-                        "Autonomous AI email outreach & reply engine",
-                        "Smart Hot/Warm/Cold score qualification",
-                        "Instant SMS/Email builder notifications",
-                        "Standard email support"
-                      ].map((feat, idx) => (
-                        <div key={idx} className="flex items-center gap-2 text-[11px]">
-                          <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0" />
-                          <span>{feat}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="mt-6 pt-4 border-t border-border/50">
-                    {currentPlanKey === 'starter' || currentPlanKey === 'professional' ? (
-                      <div className="w-full py-2 rounded-xl bg-secondary/80 border border-border text-center text-xs font-mono font-semibold text-foreground flex items-center justify-center gap-1.5">
-                        <Check className="size-3.5 text-emerald-400" />
-                        <span>Current Active Plan</span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-foreground truncate">
+                          {currentPlan.name}
+                        </span>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#c9a84c]/15 text-[#c9a84c] dark:text-[#e5d9c5] border border-[#c9a84c]/30">
+                          {currentPlan.price} / mo
+                        </span>
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-[10px] font-mono font-bold">
+                          <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          ACTIVE
+                        </span>
                       </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => handleUpgradePlan('starter')}
-                        disabled={isUpgradingPlan !== null}
-                        className="w-full py-2.5 rounded-xl bg-secondary hover:bg-secondary/80 border border-border text-foreground text-xs font-mono font-semibold transition-all cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
-                      >
-                        {isUpgradingPlan === 'starter' ? (
-                          <>
-                            <Loader2 className="size-3.5 animate-spin" />
-                            <span>Connecting to Stripe...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Zap className="size-3.5 text-[#e5d9c5]" />
-                            <span>Switch to Starter ($149/mo)</span>
-                          </>
-                        )}
-                      </button>
-                    )}
-                  </div>
-                </Card>
-
-                {/* 2. Growth Tier */}
-                <Card className={`p-5 rounded-2xl flex flex-col justify-between transition-all duration-200 ${
-                  currentPlanKey === 'growth' || currentPlanKey === 'enterprise'
-                    ? 'border-2 border-[#e5d9c5]/80 bg-card shadow-md shadow-[#e5d9c5]/5'
-                    : 'border border-[#e5d9c5]/30 bg-card/80 hover:border-[#e5d9c5]/60'
-                }`}>
-                  <div>
-                    <div className="flex items-center justify-between gap-2 mb-2">
-                      <span className="text-[10.5px] uppercase tracking-wider text-[#e5d9c5] font-mono font-semibold">
-                        Most Popular
-                      </span>
-                      <span className="px-2.5 py-0.5 rounded-full text-[9.5px] font-mono font-bold bg-[#e5d9c5] text-black font-semibold shadow-sm">
-                        GROWTH TIER
-                      </span>
-                    </div>
-
-                    <div className="text-xl font-bold text-foreground font-mono">
-                      Growth
-                    </div>
-
-                    <div className="flex items-baseline gap-1 my-2">
-                      <span className="font-nevera text-3xl sm:text-4xl font-normal text-gold-gradient">
-                        $349
-                      </span>
-                      <span className="text-xs font-mono text-muted-foreground">
-                        / month (up to 200 leads)
-                      </span>
-                    </div>
-
-                    <p className="text-xs text-muted-foreground font-light mb-4 leading-relaxed">
-                      For high-volume residential custom builders. Advanced conversational nuance, multi-turn objection handling & site visit booking.
-                    </p>
-
-                    <div className="space-y-2 pt-3 border-t border-border/50 text-xs font-mono text-muted-foreground">
-                      {[
-                        "Up to 200 active leads / month",
-                        "Live site walkthrough & calendar booking",
-                        "Deep architectural memory & floor plan context",
-                        "Multi-seat builder team collaboration",
-                        "Priority concierge onboarding & support"
-                      ].map((feat, idx) => (
-                        <div key={idx} className="flex items-center gap-2 text-[11px]">
-                          <CheckCircle2 className="size-3.5 text-[#e5d9c5] shrink-0" />
-                          <span>{feat}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="mt-6 pt-4 border-t border-border/50">
-                    {currentPlanKey === 'growth' || currentPlanKey === 'enterprise' ? (
-                      <div className="w-full py-2 rounded-xl bg-secondary/80 border border-border text-center text-xs font-mono font-semibold text-foreground flex items-center justify-center gap-1.5">
-                        <Check className="size-3.5 text-emerald-400" />
-                        <span>Current Active Plan</span>
+                      <div className="text-xs text-muted-foreground mt-0.5 truncate">
+                        {currentPlan.description}
                       </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => handleUpgradePlan('growth')}
-                        disabled={isUpgradingPlan !== null}
-                        className="w-full py-2.5 rounded-xl bg-[#e5d9c5] hover:bg-white text-black text-xs font-mono font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md shadow-[#e5d9c5]/20 disabled:opacity-50"
-                      >
-                        {isUpgradingPlan === 'growth' ? (
-                          <>
-                            <Loader2 className="size-3.5 animate-spin text-black" />
-                            <span>Connecting to Stripe...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="size-3.5 text-black" />
-                            <span>Upgrade to Growth ($349/mo)</span>
-                          </>
-                        )}
-                      </button>
-                    )}
+                    </div>
                   </div>
-                </Card>
+
+                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                    <button
+                      type="button"
+                      onClick={() => setIsPlansExpanded(!isPlansExpanded)}
+                      className="text-xs px-3.5 py-1.5 rounded-lg border border-border text-foreground hover:bg-secondary transition-colors cursor-pointer flex items-center gap-1.5 font-medium"
+                    >
+                      <span>{isPlansExpanded ? "Hide Plans" : "Change / Compare Plans"}</span>
+                      <ChevronDown className={`size-3.5 transition-transform duration-200 ${isPlansExpanded ? "rotate-180" : ""}`} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Expanded Plan Comparison Drawer */}
+                {isPlansExpanded && (
+                  <div className="p-5 border-t border-border/40 bg-card space-y-5 animate-in slide-in-from-top-2 duration-150">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="text-xs font-bold text-foreground uppercase tracking-wider font-mono">
+                          Available Subscription Tiers
+                        </h4>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Upgrade or adjust your monthly pipeline capacity at any time.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      {/* 1. Starter Tier */}
+                      <Card className={`p-5 rounded-2xl flex flex-col justify-between transition-all duration-200 ${
+                        currentPlanKey === 'starter' || currentPlanKey === 'professional'
+                          ? 'border-2 border-[#e5d9c5]/80 bg-card shadow-md shadow-[#e5d9c5]/5'
+                          : 'border border-border/80 bg-card/60 hover:border-border'
+                      }`}>
+                        <div>
+                          <div className="flex items-center justify-between gap-2 mb-2">
+                            <span className="text-[10.5px] uppercase tracking-wider text-muted-foreground font-mono font-semibold">
+                              Entry-Level Plan
+                            </span>
+                            <span className="px-2.5 py-0.5 rounded-full text-[9.5px] font-mono font-bold bg-[#c9a84c]/15 text-[#c9a84c] dark:text-[#e5d9c5] border border-[#c9a84c]/30">
+                              STARTER TIER
+                            </span>
+                          </div>
+
+                          <div className="text-xl font-bold text-foreground font-mono">
+                            Starter
+                          </div>
+
+                          <div className="flex items-baseline gap-1 my-2">
+                            <span className="font-nevera text-3xl sm:text-4xl font-normal text-foreground">
+                              $149
+                            </span>
+                            <span className="text-xs font-mono text-muted-foreground">
+                              / month (up to 50 leads)
+                            </span>
+                          </div>
+
+                          <p className="text-xs text-muted-foreground font-light mb-4 leading-relaxed">
+                            Designed for boutique builders. Autonomous AI email qualification, lead memory, and instant hot lead dispatches.
+                          </p>
+
+                          <div className="space-y-2 pt-3 border-t border-border/50 text-xs font-mono text-muted-foreground">
+                            {[
+                              "Up to 50 active leads / month",
+                              "Autonomous AI email outreach & reply engine",
+                              "Smart Hot/Warm/Cold score qualification",
+                              "Instant email notifications & lead alerts",
+                              "Standard email support"
+                            ].map((feat, idx) => (
+                              <div key={idx} className="flex items-center gap-2 text-[11px]">
+                                <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0" />
+                                <span>{feat}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="mt-6 pt-4 border-t border-border/50">
+                          {currentPlanKey === 'starter' || currentPlanKey === 'professional' ? (
+                            <div className="w-full py-2 rounded-xl bg-secondary/80 border border-border text-center text-xs font-mono font-semibold text-foreground flex items-center justify-center gap-1.5">
+                              <Check className="size-3.5 text-emerald-400" />
+                              <span>Current Active Plan</span>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleUpgradePlan('starter')}
+                              disabled={isUpgradingPlan !== null}
+                              className="w-full py-2.5 rounded-xl bg-secondary hover:bg-secondary/80 border border-border text-foreground text-xs font-mono font-semibold transition-all cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
+                            >
+                              {isUpgradingPlan === 'starter' ? (
+                                <>
+                                  <Loader2 className="size-3.5 animate-spin" />
+                                  <span>Connecting to Stripe...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Zap className="size-3.5 text-[#e5d9c5]" />
+                                  <span>Switch to Starter ($149/mo)</span>
+                                </>
+                              )}
+                            </button>
+                          )}
+                        </div>
+                      </Card>
+
+                      {/* 2. Growth Tier */}
+                      <Card className={`p-5 rounded-2xl flex flex-col justify-between transition-all duration-200 ${
+                        currentPlanKey === 'growth' || currentPlanKey === 'enterprise'
+                          ? 'border-2 border-[#e5d9c5]/80 bg-card shadow-md shadow-[#e5d9c5]/5'
+                          : 'border border-[#e5d9c5]/30 bg-card/80 hover:border-[#e5d9c5]/60'
+                      }`}>
+                        <div>
+                          <div className="flex items-center justify-between gap-2 mb-2">
+                            <span className="text-[10.5px] uppercase tracking-wider text-[#e5d9c5] font-mono font-semibold">
+                              Most Popular
+                            </span>
+                            <span className="px-2.5 py-0.5 rounded-full text-[9.5px] font-mono font-bold bg-[#e5d9c5] text-black font-semibold shadow-sm">
+                              GROWTH TIER
+                            </span>
+                          </div>
+
+                          <div className="text-xl font-bold text-foreground font-mono">
+                            Growth
+                          </div>
+
+                          <div className="flex items-baseline gap-1 my-2">
+                            <span className="font-nevera text-3xl sm:text-4xl font-normal text-gold-gradient">
+                              $349
+                            </span>
+                            <span className="text-xs font-mono text-muted-foreground">
+                              / month (up to 200 leads)
+                            </span>
+                          </div>
+
+                          <p className="text-xs text-muted-foreground font-light mb-4 leading-relaxed">
+                            For high-volume residential custom builders. Advanced conversational nuance, multi-turn objection handling & site visit booking.
+                          </p>
+
+                          <div className="space-y-2 pt-3 border-t border-border/50 text-xs font-mono text-muted-foreground">
+                            {[
+                              "Up to 200 active leads / month",
+                              "Live site walkthrough & calendar booking",
+                              "Deep architectural memory & floor plan context",
+                              "Multi-seat builder team collaboration",
+                              "Priority concierge onboarding & support"
+                            ].map((feat, idx) => (
+                              <div key={idx} className="flex items-center gap-2 text-[11px]">
+                                <CheckCircle2 className="size-3.5 text-[#e5d9c5] shrink-0" />
+                                <span>{feat}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="mt-6 pt-4 border-t border-border/50">
+                          {currentPlanKey === 'growth' || currentPlanKey === 'enterprise' ? (
+                            <div className="w-full py-2 rounded-xl bg-secondary/80 border border-border text-center text-xs font-mono font-semibold text-foreground flex items-center justify-center gap-1.5">
+                              <Check className="size-3.5 text-emerald-400" />
+                              <span>Current Active Plan</span>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleUpgradePlan('growth')}
+                              disabled={isUpgradingPlan !== null}
+                              className="w-full py-2.5 rounded-xl bg-[#e5d9c5] hover:bg-white text-black text-xs font-mono font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md shadow-[#e5d9c5]/20 disabled:opacity-50"
+                            >
+                              {isUpgradingPlan === 'growth' ? (
+                                <>
+                                  <Loader2 className="size-3.5 animate-spin text-black" />
+                                  <span>Connecting to Stripe...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Sparkles className="size-3.5 text-black" />
+                                  <span>Upgrade to Growth ($349/mo)</span>
+                                </>
+                              )}
+                            </button>
+                          )}
+                        </div>
+                      </Card>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Infrastructure Readiness & Billing History */}
@@ -1843,42 +2057,86 @@ function SettingsPage() {
 
               {/* Invoice History */}
               <div className="pt-2">
-                <div className="text-xs uppercase tracking-wider text-muted-foreground font-mono font-semibold mb-2.5">
-                  Invoice & Billing History
+                <div className="flex items-center justify-between mb-2.5">
+                  <div className="text-xs uppercase tracking-wider text-muted-foreground font-mono font-semibold">
+                    Invoice & Billing History
+                  </div>
+                  <span className="text-[10px] font-mono text-muted-foreground">
+                    Automated Monthly Receipts
+                  </span>
                 </div>
-                <table className="w-full text-sm border border-border rounded-xl overflow-hidden bg-card">
-                  <thead className="bg-secondary/50 text-[10.5px] font-mono text-muted-foreground uppercase tracking-wider">
-                    <tr className="text-left">
-                      <th className="px-4 py-2.5 font-medium">Date</th>
-                      <th className="px-4 py-2.5 font-medium">Amount</th>
-                      <th className="px-4 py-2.5 font-medium">Status</th>
-                      <th className="px-4 py-2.5 font-medium text-right">Receipt</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {[
-                      ["May 1, 2026", currentPlan.price, "Paid"],
-                      ["Apr 1, 2026", currentPlan.price, "Paid"],
-                      ["Mar 1, 2026", currentPlan.price, "Paid"]
-                    ].map(([d, a, s]) => (
-                      <tr key={d} className="hover:bg-muted/20 transition-colors">
-                        <td className="px-4 py-2.5 text-foreground text-xs">{d}</td>
-                        <td className="px-4 py-2.5 font-mono text-foreground text-xs font-bold">{a}</td>
-                        <td className="px-4 py-2.5">
-                          <span className="text-[10px] px-2 py-0.5 rounded-full font-mono font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">{s}</span>
-                        </td>
-                        <td className="px-4 py-2.5 text-right">
-                          <button
-                            onClick={() => downloadInvoicePDF(d, a, s)}
-                            className="inline-flex items-center gap-1 text-xs text-primary hover:underline font-mono font-semibold cursor-pointer"
-                          >
-                            <Download className="size-3" /> Download Invoice
-                          </button>
-                        </td>
+                <div className="border border-border rounded-xl overflow-hidden bg-card shadow-sm">
+                  <table className="w-full text-sm">
+                    <thead className="bg-secondary/50 text-[10.5px] font-mono text-muted-foreground uppercase tracking-wider border-b border-border">
+                      <tr className="text-left">
+                        <th className="px-4 py-2.5 font-medium">Invoice #</th>
+                        <th className="px-4 py-2.5 font-medium">Billing Date</th>
+                        <th className="px-4 py-2.5 font-medium">Amount</th>
+                        <th className="px-4 py-2.5 font-medium">Status</th>
+                        <th className="px-4 py-2.5 font-medium text-right">Action</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-border/60">
+                      {(loadedBillingProfile?.invoices && loadedBillingProfile.invoices.length > 0) ? (
+                        loadedBillingProfile.invoices.map((inv: any) => (
+                          <tr key={inv.id || inv.invoiceNumber} className="hover:bg-muted/20 transition-colors">
+                            <td className="px-4 py-3 font-mono text-foreground text-xs font-semibold">
+                              {inv.invoiceNumber}
+                            </td>
+                            <td className="px-4 py-3 text-muted-foreground text-xs font-sans">
+                              {inv.date}
+                            </td>
+                            <td className="px-4 py-3 font-mono text-foreground text-xs font-bold">
+                              {inv.amount}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold border inline-flex items-center gap-1 ${
+                                inv.status === 'Paid' 
+                                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
+                                  : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                              }`}>
+                                <span className={`size-1 rounded-full ${inv.status === 'Paid' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                                {inv.status}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              {inv.pdfUrl ? (
+                                <a
+                                  href={inv.pdfUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline font-mono font-semibold"
+                                >
+                                  <ExternalLink className="size-3" /> View Stripe Receipt
+                                </a>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => downloadInvoicePDF(inv)}
+                                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline font-mono font-semibold cursor-pointer"
+                                >
+                                  <Download className="size-3" /> Download Invoice PDF
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={5} className="px-4 py-8 text-center text-xs text-muted-foreground">
+                            <div className="flex flex-col items-center justify-center gap-1.5 font-mono">
+                              <FileText className="size-5 text-muted-foreground/60" />
+                              <span className="font-semibold text-foreground">No invoices yet</span>
+                              <span className="text-[11px] text-muted-foreground">
+                                Receipts and invoice history will appear automatically once a payment is processed.
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}
