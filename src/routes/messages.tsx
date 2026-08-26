@@ -537,55 +537,72 @@ function MessagesPage() {
     return () => { isMounted = false; };
   }, [selectedLeadId]);
 
-  // Real-time Live WhatsApp Polling: Refresh active chat & thread list every 2.5s
+  // Live polling — two separate intervals for different freshness needs:
+  //   • Active chat messages: every 5s  (feels real-time for ongoing conversations)
+  //   • Thread sidebar list: every 10s  (unread counts + online status, slower-moving)
+  // IMAP sync is fire-and-forget inside getConversations and is throttled to max once/2min,
+  // so frequent polling here does NOT trigger IMAP connections.
   useEffect(() => {
     let isMounted = true;
-    const pollLiveChat = async () => {
+
+    // ── Poll active chat messages (5s) ────────────────────────────────────────
+    const pollMessages = async () => {
+      if (!selectedLeadId) return;
       try {
         const activeRole = sessionStorage.getItem('active_role') ?? undefined;
-        // 1. Silently update thread list
+        const { messages: latestMsgs } = await getMessagesForLead({ data: { leadId: selectedLeadId, activeRole } });
+        if (!isMounted || !Array.isArray(latestMsgs)) return;
+
+        if ((window as any)._messagesCache) {
+          (window as any)._messagesCache.set(selectedLeadId, latestMsgs);
+        }
+        setActiveChat(prev => {
+          if (!prev) return null;
+          const diffCount = latestMsgs.length - prev.messages.length;
+          const hasNewMessages =
+            diffCount > 0 ||
+            (latestMsgs.length > 0 &&
+              prev.messages[prev.messages.length - 1]?.id !== latestMsgs[latestMsgs.length - 1]?.id);
+
+          if (hasNewMessages) {
+            if (isUserScrolledUpRef.current) {
+              setNewMessagesCount(c => c + Math.max(1, diffCount));
+            } else {
+              setTimeout(() => scrollToBottom(true, "smooth"), 60);
+            }
+            return { ...prev, messages: latestMsgs };
+          }
+          return prev;
+        });
+      } catch (_) { /* silent — background poll */ }
+    };
+
+    // ── Poll thread sidebar (10s) ─────────────────────────────────────────────
+    const pollThreads = async () => {
+      try {
+        const activeRole = sessionStorage.getItem('active_role') ?? undefined;
         const latestThreads = await getConversations({ data: { activeRole } });
         if (isMounted && Array.isArray(latestThreads) && latestThreads.length > 0) {
           setConversationsList(latestThreads);
-        }
-
-        // 2. Silently update messages for active selected lead
-        if (selectedLeadId) {
-          const { messages: latestMsgs } = await getMessagesForLead({ data: { leadId: selectedLeadId, activeRole } });
-          if (isMounted && Array.isArray(latestMsgs)) {
-            if ((window as any)._messagesCache) {
-              (window as any)._messagesCache.set(selectedLeadId, latestMsgs);
-            }
+          // Keep active chat's lead metadata fresh
+          if (selectedLeadId) {
             setActiveChat(prev => {
               if (!prev) return null;
-              const lead = latestThreads.find(c => c.leadId === selectedLeadId) || prev.lead;
-              const diffCount = latestMsgs.length - prev.messages.length;
-              const hasNewMessages = diffCount > 0 ||
-                (latestMsgs.length > 0 && prev.messages[prev.messages.length - 1]?.id !== latestMsgs[latestMsgs.length - 1]?.id);
-
-              if (hasNewMessages) {
-                if (isUserScrolledUpRef.current) {
-                  // WhatsApp behavior: Do NOT auto-scroll when user is reading history! Show unread badge.
-                  setNewMessagesCount(c => c + Math.max(1, diffCount));
-                } else {
-                  // User is already at the bottom — scroll down to show new message
-                  setTimeout(() => scrollToBottom(true, "smooth"), 60);
-                }
-                return { lead, messages: latestMsgs };
-              }
-              return { ...prev, lead };
+              const freshLead = latestThreads.find(c => c.leadId === selectedLeadId);
+              return freshLead ? { ...prev, lead: freshLead } : prev;
             });
           }
         }
-      } catch (_) {
-        // Silent catch for background poll
-      }
+      } catch (_) { /* silent */ }
     };
 
-    const timer = setInterval(pollLiveChat, 2500);
+    const msgTimer = setInterval(pollMessages, 5000);
+    const threadTimer = setInterval(pollThreads, 10000);
+
     return () => {
       isMounted = false;
-      clearInterval(timer);
+      clearInterval(msgTimer);
+      clearInterval(threadTimer);
     };
   }, [selectedLeadId]);
 

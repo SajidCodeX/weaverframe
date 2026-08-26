@@ -25,8 +25,11 @@ export function stripEmailQuotedHistory(text: string): string {
   return cleanLines.join('\n').trim();
 }
 
-// In-memory throttle map to avoid overloading IMAP on rapid clicks
+// In-memory throttle map: prevents the 2.5s UI poller from hammering IMAP.
+// Minimum 120 seconds (2 min) between real IMAP connections per builder.
+// `force=true` bypasses this (used by the manual "Sync" button only).
 const lastSyncTimeMap = new Map<string, number>();
+const IMAP_THROTTLE_MS = 120_000; // 2 minutes
 
 /**
  * Syncs incoming emails from the Builder's linked Gmail / Google Workspace inbox
@@ -58,10 +61,10 @@ export async function syncInboundMailbox(builderId?: string, force = false): Pro
       return { success: false, synced: 0, error: 'No active builder ID found for mailbox sync.' };
     }
 
-    // 2. Throttle checks (at most once every 10 seconds per builder unless forced)
+    // 2. Throttle: at most once per IMAP_THROTTLE_MS per builder, unless forced
     const now = Date.now();
     const lastSync = lastSyncTimeMap.get(targetBuilderId) || 0;
-    if (!force && now - lastSync < 10000) {
+    if (!force && now - lastSync < IMAP_THROTTLE_MS) {
       return { success: true, synced: 0 };
     }
     lastSyncTimeMap.set(targetBuilderId, now);

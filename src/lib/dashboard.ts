@@ -2128,13 +2128,15 @@ export const getConversations = createServerFn({ method: 'POST' })
     const session = await requireAuth(data?.activeRole ?? undefined)
     const db = await getTenantDb(session)
 
-    // Trigger Inbound Mailbox Sync (IMAP) in background
-    try {
-      const { syncInboundMailbox } = await import('./mailbox.server');
-      await syncInboundMailbox(session.builderId || '').catch((e) => {
+    // Trigger Inbound Mailbox Sync (IMAP) — truly fire-and-forget.
+    // IMPORTANT: No `await` here. The DB query runs immediately and the response
+    // is returned to the client without waiting for the IMAP network round-trip.
+    // The throttle inside syncInboundMailbox prevents spam (max once per 2 min per builder).
+    import('./mailbox.server').then(({ syncInboundMailbox }) => {
+      syncInboundMailbox(session.builderId || '').catch((e) => {
         console.warn('[MAILBOX SYNC NON-BLOCKING ERROR]:', e?.message || e);
       });
-    } catch {}
+    }).catch(() => { /* ignore dynamic import errors */ });
 
     const whereClause: any = {}
     if (session.role === 'builder' && session.builderRole === 'sales') {
