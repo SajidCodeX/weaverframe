@@ -3757,4 +3757,194 @@ export const createStripeCustomerPortalSession = createServerFn({ method: 'POST'
     }
   });
 
+export const submitDemoRequest = createServerFn({ method: 'POST' })
+  .inputValidator((data: {
+    name: string;
+    company: string;
+    email: string;
+    phone: string;
+    buildVolume: string;
+  }) => data)
+  .handler(async ({ data }) => {
+    // 1. Validate Input
+    if (!data.name || data.name.trim().length < 2) {
+      throw new Error('Please enter your full name.');
+    }
+    if (!data.company || data.company.trim().length < 2) {
+      throw new Error('Please enter your building company name.');
+    }
+    if (!data.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email.trim())) {
+      throw new Error('Please enter a valid work email address.');
+    }
+    if (!data.phone || data.phone.trim().length < 5) {
+      throw new Error('Please enter a valid phone number.');
+    }
+
+    const { getDb } = await import('./db');
+    const db = await getDb();
+    const { sendOutboundEmail, buildAdminDemoNotificationHtml, buildUserDemoConfirmationHtml } = await import('./email.server');
+    const crypto = await import('crypto');
+
+    try {
+      // 2. Resolve primary active builder to assign lead
+      const activeBuilder = await db.builder.findFirst({
+        where: { isActive: true },
+        orderBy: { createdAt: 'asc' }
+      });
+
+      if (!activeBuilder) {
+        console.warn('[DEMO REQUEST] No active builder found in database.');
+      }
+
+      // 3. Parse build volume to numeric budget
+      let estimatedBudget = 2000000;
+      const vol = data.buildVolume || '';
+      if (vol.includes('500k')) estimatedBudget = 750000;
+      else if (vol.includes('1M') && vol.includes('3M')) estimatedBudget = 2000000;
+      else if (vol.includes('3M') || vol.includes('5M')) estimatedBudget = 4000000;
+
+      // 4. Create portal token
+      const portalToken = crypto.randomBytes(16).toString('hex');
+
+      // 5. Create Lead in DB if builder exists
+      let leadId = '';
+      if (activeBuilder) {
+        const newLead = await db.lead.create({
+          data: {
+            builderId: activeBuilder.id,
+            name: data.name.trim(),
+            email: data.email.trim().toLowerCase(),
+            phone: data.phone.trim(),
+            source: 'Website Landing Page / Demo Request',
+            status: 'New',
+            scoreTier: 'Hot',
+            dealScore: 90,
+            estimatedBudget,
+            landPrice: 0,
+            county: data.company.trim(),
+            state: 'US',
+            purchaseDate: new Date(),
+            portalToken,
+            leadMemory: JSON.stringify({
+              company: data.company.trim(),
+              buildVolume: data.buildVolume,
+              requestType: 'Private Architecture Demonstration Walkthrough',
+              submittedAt: new Date().toISOString(),
+            }),
+            qualificationData: JSON.stringify({
+              intent: 'High Intent (Website Demo Request)',
+              company: data.company.trim(),
+              buildVolume: data.buildVolume,
+              stage: 'Scheduled for Discovery Walkthrough',
+            }),
+          }
+        });
+        leadId = newLead.id;
+
+        // Log Activity
+        await db.activity.create({
+          data: {
+            builderId: activeBuilder.id,
+            leadId: newLead.id,
+            action: `🚀 Private Demo Walkthrough requested by ${data.name.trim()} (${data.company.trim()}) — Volume: ${data.buildVolume}`,
+          }
+        });
+
+        // Add Initial Inbound Message
+        await db.message.create({
+          data: {
+            builderId: activeBuilder.id,
+            leadId: newLead.id,
+            sender: 'lead',
+            content: `Hello, I requested a private WeaverFrame demonstration for ${data.company.trim()}. (Typical build volume: ${data.buildVolume})`,
+            channel: 'portal',
+          }
+        });
+      }
+
+      // 6. Resolve Platform Admin Email for Notification
+      let adminEmail = (typeof process !== 'undefined' ? (process.env.ADMIN_EMAIL || process.env.SMTP_USER || process.env.GMAIL_USER) : '') || '';
+      if (!adminEmail) {
+        // Try platform settings or super admin user
+        const platformSettings = await db.platformSettings.findFirst().catch(() => null);
+        if (platformSettings?.supportEmail) {
+          adminEmail = platformSettings.supportEmail;
+        } else {
+          const adminUser = await db.user.findFirst({ where: { role: 'admin' } }).catch(() => null);
+          if (adminUser?.email) adminEmail = adminUser.email;
+        }
+      }
+      if (!adminEmail && activeBuilder?.email) {
+        adminEmail = activeBuilder.email;
+      }
+
+      const baseUrl = (typeof process !== 'undefined' ? process.env.APP_BASE_URL : '') || 'https://weaverframe.in';
+      const dashboardLeadUrl = leadId ? `${baseUrl}/leads` : `${baseUrl}/login`;
+
+      // 7. Dispatch Email 1: Notification to Admin (Parallel)
+      const emailPromises: Promise<any>[] = [];
+
+      if (adminEmail) {
+        emailPromises.push(
+          sendOutboundEmail({
+            to: adminEmail,
+            subject: `🚀 [Demo Request] ${data.name.trim()} from ${data.company.trim()} (${data.buildVolume})`,
+            html: buildAdminDemoNotificationHtml({
+              name: data.name.trim(),
+              company: data.company.trim(),
+              email: data.email.trim(),
+              phone: data.phone.trim(),
+              buildVolume: data.buildVolume,
+              dashboardUrl: dashboardLeadUrl,
+            }),
+            from: 'WeaverFrame Concierge <onboarding@resend.dev>',
+          }).catch((err) => {
+            console.error('[DEMO REQUEST ADMIN EMAIL ERROR]:', err);
+          })
+        );
+      }
+
+      // 8. Dispatch Email 2: Confirmation Receipt to Prospect User
+      emailPromises.push(
+        sendOutboundEmail({
+          to: data.email.trim(),
+          subject: `WeaverFrame — Private OS Demonstration Request Received`,
+          html: buildUserDemoConfirmationHtml({
+            recipientName: data.name.trim(),
+            company: data.company.trim(),
+            buildVolume: data.buildVolume,
+          }),
+          from: 'WeaverFrame Executive Advisory <onboarding@resend.dev>',
+        }).catch((err) => {
+          console.error('[DEMO REQUEST USER CONFIRMATION ERROR]:', err);
+        })
+      );
+
+      await Promise.all(emailPromises);
+
+      // 9. Sync to Connected CRMs in Background (HubSpot & GoHighLevel)
+      if (leadId && activeBuilder) {
+        import('./crm.server').then(({ syncLeadToConnectedCrms }) => {
+          syncLeadToConnectedCrms(leadId, activeBuilder.id).catch((e) => {
+            console.warn('[DEMO REQUEST CRM SYNC ERROR]:', e);
+          });
+        }).catch(() => {});
+      }
+
+      // 10. Invalidate Cache
+      const { invalidateCache } = await import('./cache');
+      invalidateCache('dashboard_');
+
+      return {
+        success: true,
+        message: 'Your demonstration request has been received. Our executive advisor will reach out shortly.',
+        leadId,
+      };
+    } catch (error: any) {
+      console.error('[DEMO REQUEST ERROR]:', error);
+      throw new Error(error?.message || 'Failed to submit demonstration request. Please try again.');
+    }
+  });
+
+
 

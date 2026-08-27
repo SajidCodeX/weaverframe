@@ -12,7 +12,7 @@ Before starting any task, understand the current project context.
 - Read Obsidian memory first.
 - Do not scan the full codebase every session.
 - Use the codebase only when explicitly asked, or when a major drift is suspected.
-- Before any Obsidian update, show a summary and wait for user approval.
+- **Before any Obsidian update, show a summary and wait for user approval.**
 - Never write stale or uncertain information into permanent memory.
 
 ---

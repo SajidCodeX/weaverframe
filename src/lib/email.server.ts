@@ -280,3 +280,212 @@ export function buildArchitecturalEmailHtml({
 </html>
   `.trim();
 }
+
+/**
+ * Executive Admin Notification Email for New Demo Requests
+ */
+export function buildAdminDemoNotificationHtml({
+  name,
+  company,
+  email,
+  phone,
+  buildVolume,
+  dashboardUrl = 'https://weaverframe.in/leads',
+}: {
+  name: string;
+  company: string;
+  email: string;
+  phone: string;
+  buildVolume: string;
+  dashboardUrl?: string;
+}) {
+  const timestamp = new Date().toLocaleString('en-US', {
+    timeZone: 'America/Chicago',
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>New Demo Request — WeaverFrame</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #060608; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; color: #f1f5f9;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #060608; padding: 40px 16px;">
+    <tr>
+      <td align="center">
+        <table width="100%" max-width="600" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px; background-color: #0e0f14; border-radius: 16px; border: 1px solid rgba(255,255,255,0.12); overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8);">
+          
+          <!-- Header Banner -->
+          <tr>
+            <td style="padding: 28px 36px; background-color: #12131a; border-bottom: 2px solid #c9a84c;">
+              <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td>
+                    <span style="display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: #c9a84c; font-family: monospace;">NEW PROSPECT INQUIRY</span>
+                    <h1 style="margin: 6px 0 0 0; color: #ffffff; font-size: 20px; font-weight: 700; letter-spacing: 0.5px;">🚀 Private Demo Walkthrough Requested</h1>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Prospect Information Card -->
+          <tr>
+            <td style="padding: 32px 36px;">
+              <p style="margin: 0 0 22px 0; color: #94a3b8; font-size: 14px; line-height: 1.6;">
+                A custom builder just requested an executive demonstration of the <strong style="color: #ffffff;">WeaverFrame Autonomous Operating System</strong> from the landing page.
+              </p>
+
+              <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #161720; border-radius: 10px; border: 1px solid rgba(255,255,255,0.08); overflow: hidden; margin-bottom: 28px;">
+                <tr>
+                  <td style="padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.06); width: 35%; color: #64748b; font-size: 12px; text-transform: uppercase; font-family: monospace; letter-spacing: 1px;">Contact Name</td>
+                  <td style="padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.06); color: #ffffff; font-size: 14px; font-weight: 600;">${name}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.06); color: #64748b; font-size: 12px; text-transform: uppercase; font-family: monospace; letter-spacing: 1px;">Building Company</td>
+                  <td style="padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.06); color: #c9a84c; font-size: 14px; font-weight: 700;">${company}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.06); color: #64748b; font-size: 12px; text-transform: uppercase; font-family: monospace; letter-spacing: 1px;">Typical Home Price</td>
+                  <td style="padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.06); color: #10b981; font-size: 14px; font-weight: 700;">${buildVolume}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.06); color: #64748b; font-size: 12px; text-transform: uppercase; font-family: monospace; letter-spacing: 1px;">Work Email</td>
+                  <td style="padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.06); color: #ffffff; font-size: 14px;"><a href="mailto:${email}" style="color: #93c5fd; text-decoration: none;">${email}</a></td>
+                </tr>
+                <tr>
+                  <td style="padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.06); color: #64748b; font-size: 12px; text-transform: uppercase; font-family: monospace; letter-spacing: 1px;">Direct Phone</td>
+                  <td style="padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.06); color: #ffffff; font-size: 14px;"><a href="tel:${phone.replace(/[^0-9+]/g, '')}" style="color: #93c5fd; text-decoration: none;">${phone}</a></td>
+                </tr>
+                <tr>
+                  <td style="padding: 14px 20px; color: #64748b; font-size: 12px; text-transform: uppercase; font-family: monospace; letter-spacing: 1px;">Requested At</td>
+                  <td style="padding: 14px 20px; color: #94a3b8; font-size: 12px;">${timestamp} (CT)</td>
+                </tr>
+              </table>
+
+              <!-- CTA Button -->
+              <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td align="center">
+                    <a href="${dashboardUrl}" target="_blank" style="display: inline-block; padding: 14px 32px; background-color: #c9a84c; color: #000000; text-decoration: none; font-size: 13px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; border-radius: 8px; box-shadow: 0 4px 14px rgba(201,168,76,0.3);">
+                      Open Lead in WeaverFrame &rarr;
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 18px 36px; background-color: #08090c; border-top: 1px solid rgba(255,255,255,0.06); text-align: center;">
+              <p style="margin: 0; color: #475569; font-size: 11px;">
+                WeaverFrame Autonomous AI Lead Engine · Automatic Inbound Notification
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `.trim();
+}
+
+/**
+ * Luxury Confirmation Email Dispatched to the Prospect
+ */
+export function buildUserDemoConfirmationHtml({
+  recipientName,
+  company,
+  buildVolume,
+}: {
+  recipientName: string;
+  company: string;
+  buildVolume: string;
+}) {
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Demonstration Confirmation — WeaverFrame</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #060608; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; color: #f1f5f9;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #060608; padding: 40px 16px;">
+    <tr>
+      <td align="center">
+        <table width="100%" max-width="600" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px; background-color: #0e0f14; border-radius: 16px; border: 1px solid rgba(255,255,255,0.12); overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8);">
+          
+          <!-- Header Banner -->
+          <tr>
+            <td style="padding: 32px 36px; background-color: #12131a; border-bottom: 2px solid #e5d9c5;">
+              <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td>
+                    <span style="display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase; color: #e5d9c5; font-family: monospace;">WHITE-GLOVE ONBOARDING</span>
+                    <h1 style="margin: 6px 0 0 0; color: #ffffff; font-size: 22px; font-weight: 600; letter-spacing: 0.5px;">WeaverFrame Demonstration Request</h1>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Body Content -->
+          <tr>
+            <td style="padding: 36px 36px 28px 36px;">
+              <p style="margin: 0 0 18px 0; color: #ffffff; font-size: 16px; font-weight: 600;">
+                Dear ${recipientName || 'Builder'},
+              </p>
+              
+              <p style="margin: 0 0 16px 0; color: #cbd5e1; font-size: 14px; line-height: 1.7;">
+                Thank you for requesting a private architectural walkthrough of the <strong style="color: #ffffff;">WeaverFrame Autonomous OS</strong> for <strong style="color: #e5d9c5;">${company}</strong>.
+              </p>
+
+              <p style="margin: 0 0 24px 0; color: #cbd5e1; font-size: 14px; line-height: 1.7;">
+                An executive solutions advisor has received your request and will contact you directly within <strong style="color: #ffffff;">2 business hours</strong> to coordinate a private live demonstration tailored to your portfolio (${buildVolume} build volume).
+              </p>
+
+              <!-- Session Focus Box -->
+              <div style="background-color: #161720; border-radius: 12px; border: 1px solid rgba(255,255,255,0.08); padding: 22px 24px; margin-bottom: 28px;">
+                <h4 style="margin: 0 0 12px 0; color: #e5d9c5; font-size: 12px; text-transform: uppercase; font-family: monospace; letter-spacing: 1.5px;">What We Will Explore During Your Walkthrough:</h4>
+                <ul style="margin: 0; padding-left: 18px; color: #94a3b8; font-size: 13px; line-height: 1.8;">
+                  <li><strong style="color: #ffffff;">Autonomous Buyer Qualification:</strong> Live budget, land survey & timeline scoring in under 60 seconds.</li>
+                  <li><strong style="color: #ffffff;">Lead Memory Graph:</strong> Persistent architectural preference tracking across multi-turn interactions.</li>
+                  <li><strong style="color: #ffffff;">Bi-Directional CRM Sync:</strong> Instant automated synchronization to HubSpot & GoHighLevel.</li>
+                </ul>
+              </div>
+
+              <!-- Executive Signature -->
+              <div style="margin-top: 30px; padding-top: 22px; border-top: 1px solid rgba(255,255,255,0.08);">
+                <p style="margin: 0; color: #ffffff; font-size: 14px; font-weight: 700;">Executive Advisory Team</p>
+                <p style="margin: 3px 0 0 0; color: #64748b; font-size: 12px; font-weight: 500;">WeaverFrame Custom Architecture OS</p>
+                <p style="margin: 2px 0 0 0; color: #e5d9c5; font-size: 11px; font-family: monospace;">https://weaverframe.in</p>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 18px 36px; background-color: #08090c; border-top: 1px solid rgba(255,255,255,0.06); text-align: center;">
+              <p style="margin: 0; color: #475569; font-size: 11px; line-height: 1.5;">
+                Strict confidentiality. You are receiving this confirmation because a demonstration was requested with this email address.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `.trim();
+}
