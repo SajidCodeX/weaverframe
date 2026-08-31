@@ -221,15 +221,12 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
   // Notifications
   const [notifications, setNotifications] = useState<any[]>([]);
 
-  // Fetch dynamic notifications on open/mount
+  // Fetch dynamic notifications on open/mount (supports both Super Admin and Builder)
   useEffect(() => {
-    if (isAdmin) {
-      setNotifications([]);
-      return;
-    }
-    const activeRole =
-      sessionStorage.getItem('active_role') ??
-      undefined;
+    const activeRole = isAdmin
+      ? 'admin'
+      : (sessionStorage.getItem('active_role') ?? undefined);
+
     getNotificationsData({ data: { activeRole } })
       .then((data) => {
         try {

@@ -27,6 +27,8 @@ import { Route as InviteTokenRouteImport } from './routes/invite.$token'
 import { Route as ApiRateRouteImport } from './routes/api.rate'
 import { Route as AdminUsersRouteImport } from './routes/admin/users'
 import { Route as AdminSettingsRouteImport } from './routes/admin/settings'
+import { Route as AdminInboxRouteImport } from './routes/admin/inbox'
+import { Route as AdminDemoRequestsRouteImport } from './routes/admin/demo-requests'
 import { Route as AdminBuildersRouteImport } from './routes/admin/builders'
 import { Route as AdminBillingRouteImport } from './routes/admin/billing'
 import { Route as ApiLeadsInboundRouteImport } from './routes/api.leads.inbound'
@@ -123,6 +125,16 @@ const AdminSettingsRoute = AdminSettingsRouteImport.update({
   path: '/admin/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminInboxRoute = AdminInboxRouteImport.update({
+  id: '/admin/inbox',
+  path: '/admin/inbox',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminDemoRequestsRoute = AdminDemoRequestsRouteImport.update({
+  id: '/admin/demo-requests',
+  path: '/admin/demo-requests',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminBuildersRoute = AdminBuildersRouteImport.update({
   id: '/admin/builders',
   path: '/admin/builders',
@@ -164,6 +176,8 @@ export interface FileRoutesByFullPath {
   '/welcome': typeof WelcomeRoute
   '/admin/billing': typeof AdminBillingRoute
   '/admin/builders': typeof AdminBuildersRoute
+  '/admin/demo-requests': typeof AdminDemoRequestsRoute
+  '/admin/inbox': typeof AdminInboxRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
   '/api/rate': typeof ApiRateRoute
@@ -189,6 +203,8 @@ export interface FileRoutesByTo {
   '/welcome': typeof WelcomeRoute
   '/admin/billing': typeof AdminBillingRoute
   '/admin/builders': typeof AdminBuildersRoute
+  '/admin/demo-requests': typeof AdminDemoRequestsRoute
+  '/admin/inbox': typeof AdminInboxRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
   '/api/rate': typeof ApiRateRoute
@@ -215,6 +231,8 @@ export interface FileRoutesById {
   '/welcome': typeof WelcomeRoute
   '/admin/billing': typeof AdminBillingRoute
   '/admin/builders': typeof AdminBuildersRoute
+  '/admin/demo-requests': typeof AdminDemoRequestsRoute
+  '/admin/inbox': typeof AdminInboxRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
   '/api/rate': typeof ApiRateRoute
@@ -242,6 +260,8 @@ export interface FileRouteTypes {
     | '/welcome'
     | '/admin/billing'
     | '/admin/builders'
+    | '/admin/demo-requests'
+    | '/admin/inbox'
     | '/admin/settings'
     | '/admin/users'
     | '/api/rate'
@@ -267,6 +287,8 @@ export interface FileRouteTypes {
     | '/welcome'
     | '/admin/billing'
     | '/admin/builders'
+    | '/admin/demo-requests'
+    | '/admin/inbox'
     | '/admin/settings'
     | '/admin/users'
     | '/api/rate'
@@ -292,6 +314,8 @@ export interface FileRouteTypes {
     | '/welcome'
     | '/admin/billing'
     | '/admin/builders'
+    | '/admin/demo-requests'
+    | '/admin/inbox'
     | '/admin/settings'
     | '/admin/users'
     | '/api/rate'
@@ -318,6 +342,8 @@ export interface RootRouteChildren {
   WelcomeRoute: typeof WelcomeRoute
   AdminBillingRoute: typeof AdminBillingRoute
   AdminBuildersRoute: typeof AdminBuildersRoute
+  AdminDemoRequestsRoute: typeof AdminDemoRequestsRoute
+  AdminInboxRoute: typeof AdminInboxRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
   AdminUsersRoute: typeof AdminUsersRoute
   ApiRateRoute: typeof ApiRateRoute
@@ -457,6 +483,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminSettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/inbox': {
+      id: '/admin/inbox'
+      path: '/admin/inbox'
+      fullPath: '/admin/inbox'
+      preLoaderRoute: typeof AdminInboxRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/demo-requests': {
+      id: '/admin/demo-requests'
+      path: '/admin/demo-requests'
+      fullPath: '/admin/demo-requests'
+      preLoaderRoute: typeof AdminDemoRequestsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/builders': {
       id: '/admin/builders'
       path: '/admin/builders'
@@ -510,6 +550,8 @@ const rootRouteChildren: RootRouteChildren = {
   WelcomeRoute: WelcomeRoute,
   AdminBillingRoute: AdminBillingRoute,
   AdminBuildersRoute: AdminBuildersRoute,
+  AdminDemoRequestsRoute: AdminDemoRequestsRoute,
+  AdminInboxRoute: AdminInboxRoute,
   AdminSettingsRoute: AdminSettingsRoute,
   AdminUsersRoute: AdminUsersRoute,
   ApiRateRoute: ApiRateRoute,

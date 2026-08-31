@@ -320,8 +320,8 @@ export const requireAuth = async (activeRole?: string): Promise<AuthSession> => 
   return session
 }
 
-export const requireAdmin = async (): Promise<AuthSession> => {
-  const session = await requireAuth()
+export const requireAdmin = async (activeRole?: string): Promise<AuthSession> => {
+  const session = await requireAuth(activeRole || 'admin')
   if (session.role !== 'admin') throw new Error('FORBIDDEN')
   return session
 }
@@ -432,7 +432,9 @@ export const getTenantDb = async (preResolvedSession?: AuthSession) => {
           // models via getTenantDb() MUST manually add its own `where: { builderId: tenantId }`
           // filter to prevent cross-tenant data leakage. Do NOT add new unscoped queries
           // on User or Builder without an explicit WHERE clause.
-          if (['User', 'Builder', 'SystemSync', 'PlatformSettings'].includes(model as string)) return query(args)
+          // SAFETY NOTE: Platform-level models (User, Builder, SystemSync, PlatformSettings, DemoRequest)
+          // are isolated from tenant-scoping middleware.
+          if (['User', 'Builder', 'SystemSync', 'PlatformSettings', 'DemoRequest'].includes(model as string)) return query(args)
 
           args = args || {}
 
@@ -444,8 +446,36 @@ export const getTenantDb = async (preResolvedSession?: AuthSession) => {
                 args.data.builderId = tenantId
               }
             }
-          } else if (['findUnique', 'findFirst', 'findMany', 'update', 'updateMany', 'delete', 'deleteMany', 'count', 'aggregate', 'groupBy'].includes(operation)) {
-            args.where = { ...args.where, builderId: tenantId }
+          } else if (operation === 'findUnique') {
+            // Prisma findUnique only accepts unique keys. We use findFirst to enforce builderId and NOT filters.
+            return (rawDb as any)[model].findFirst({
+              where: {
+                ...args.where,
+                builderId: tenantId,
+                ...(model === 'Lead' ? {
+                  NOT: [
+                    { source: { contains: 'Demo Request' } },
+                    { source: { contains: 'Website Landing Page' } }
+                  ]
+                } : {})
+              },
+              ...(args.select ? { select: args.select } : {}),
+              ...(args.include ? { include: args.include } : {}),
+            })
+          } else if (['findFirst', 'findMany', 'update', 'updateMany', 'delete', 'deleteMany', 'count', 'aggregate', 'groupBy'].includes(operation)) {
+            // Defense-in-depth: Never allow tenant builders to read or touch Demo Requests
+            if (model === 'Lead') {
+              args.where = {
+                ...args.where,
+                builderId: tenantId,
+                NOT: [
+                  { source: { contains: 'Demo Request' } },
+                  { source: { contains: 'Website Landing Page' } }
+                ]
+              }
+            } else {
+              args.where = { ...args.where, builderId: tenantId }
+            }
           }
 
           return query(args)

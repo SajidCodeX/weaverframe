@@ -22,8 +22,13 @@ export const getBuildersData = createServerFn({ method: 'GET' }).handler(async (
 
 export const getAdminStats = createServerFn({ method: 'GET' }).handler(async () => {
   const { requireAdmin } = await import('./server-utils.server');
-  await requireAdmin()
-  const db = await getDb()
+  const session = await requireAdmin();
+  const db = await getDb();
+
+  const adminUser = await db.user.findUnique({
+    where: { id: session.userId },
+    select: { builderId: true }
+  });
 
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -38,7 +43,9 @@ export const getAdminStats = createServerFn({ method: 'GET' }).handler(async () 
     recentBuildersCount,
     previousBuildersCount,
     recentLeadsCount,
-    previousLeadsCount
+    previousLeadsCount,
+    demoRequests,
+    demoRequestsCount
   ] = await Promise.all([
     db.builder.count({ where: { isActive: true, deletedAt: null } }),
     db.lead.count(),
@@ -46,8 +53,35 @@ export const getAdminStats = createServerFn({ method: 'GET' }).handler(async () 
     db.builder.count({ where: { createdAt: { gte: thirtyDaysAgo }, deletedAt: null } }),
     db.builder.count({ where: { createdAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo }, deletedAt: null } }),
     db.lead.count({ where: { createdAt: { gte: thirtyDaysAgo } } }),
-    db.lead.count({ where: { createdAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo } } })
+    db.lead.count({ where: { createdAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo } } }),
+    db.demoRequest.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        company: true,
+        buildVolume: true,
+        status: true,
+        notes: true,
+        createdAt: true,
+      }
+    }),
+    db.demoRequest.count()
   ])
+
+  let unreadInboxCount = 0;
+  if (adminUser?.builderId) {
+    unreadInboxCount = await db.message.count({
+      where: {
+        isRead: false,
+        sender: 'lead',
+        lead: { builderId: adminUser.builderId }
+      }
+    });
+  }
 
   // Calculate MRR (Starter: $149, Growth: $349)
   const getPlanPrice = (plan?: string | null) => {
@@ -76,7 +110,15 @@ export const getAdminStats = createServerFn({ method: 'GET' }).handler(async () 
     leads: calcTrend(recentLeadsCount, previousLeadsCount)
   }
 
-  return { activeBuilders, totalLeads, totalMRR, trends }
+  return { 
+    activeBuilders, 
+    totalLeads, 
+    totalMRR, 
+    trends,
+    demoRequests: demoRequests || [],
+    demoRequestsCount: demoRequestsCount || 0,
+    unreadInboxCount
+  }
 })
 
 export const createBuilderInvite = createServerFn({ method: 'POST' })
@@ -343,3 +385,424 @@ export const stopBuilderPreview = createServerFn({ method: 'POST' })
     } as any)
     return { success: true }
   })
+export const getAdminDemoRequests = createServerFn({ method: 'GET' })
+  .handler(async () => {
+    const { requireAdmin } = await import('./server-utils.server');
+    await requireAdmin();
+    const db = await getDb();
+
+    const requests = await db.demoRequest.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+
+    return requests.map(r => ({
+      id: r.id,
+      name: r.name,
+      email: r.email,
+      phone: r.phone,
+      company: r.company,
+      buildVolume: r.buildVolume,
+      status: r.status,
+      notes: r.notes,
+      portalToken: r.portalToken,
+      portalVisitedAt: r.portalVisitedAt ? r.portalVisitedAt.toISOString() : null,
+      createdAt: r.createdAt.toISOString(),
+      updatedAt: r.updatedAt.toISOString(),
+    }));
+  });
+
+export const updateDemoRequestStatus = createServerFn({ method: 'POST' })
+  .inputValidator((data: { id: string; status: string; notes?: string }) => data)
+  .handler(async ({ data }) => {
+    const { requireAdmin } = await import('./server-utils.server');
+    await requireAdmin();
+    const db = await getDb();
+
+    const updated = await db.demoRequest.update({
+      where: { id: data.id },
+      data: {
+        status: data.status,
+        ...(data.notes !== undefined ? { notes: data.notes } : {}),
+      },
+    });
+
+    return updated;
+  });
+
+export const deleteDemoRequest = createServerFn({ method: 'POST' })
+  .inputValidator((data: { id: string }) => data)
+  .handler(async ({ data }) => {
+    const { requireAdmin } = await import('./server-utils.server');
+    await requireAdmin();
+    const db = await getDb();
+
+    await db.demoRequest.delete({
+      where: { id: data.id },
+    });
+
+    return { success: true };
+  });
+
+export const sendAdminDemoDirectEmail = createServerFn({ method: 'POST' })
+  .inputValidator((data: { demoRequestId: string; recipientEmail: string; recipientName: string; subject: string; message: string }) => data)
+  .handler(async ({ data }) => {
+    const { requireAdmin } = await import('./server-utils.server');
+    await requireAdmin();
+    const db = await getDb();
+
+    const demo = await db.demoRequest.findUnique({
+      where: { id: data.demoRequestId },
+    });
+    if (!demo) throw new Error("Demo request not found");
+
+    // Pure human email dispatch via Resend / SMTP - ZERO AI
+    const { sendOutboundEmail } = await import('./email.server');
+    await sendOutboundEmail({
+      to: data.recipientEmail,
+      subject: data.subject || "WeaverFrame — Executive Demonstration Follow-up",
+      html: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #111; max-width: 600px; margin: 0 auto; padding: 24px; background: #ffffff; border-radius: 8px; border: 1px solid #eaeaea;">
+        <p style="font-size: 15px; color: #222; margin-bottom: 20px;">${data.message.replace(/\n/g, '<br/>')}</p>
+        <hr style="border: none; border-top: 1px solid #eaeaea; margin: 30px 0 20px 0;" />
+        <p style="font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1px; font-weight: 600;">WeaverFrame Executive Advisory · Private AI Infrastructure</p>
+      </div>`,
+      text: data.message,
+      from: 'WeaverFrame Executive Advisory <advisory@weaverframe.com>',
+      replyTo: 'admin@weaverframe.com',
+    });
+
+    // Update status to contacted and record notes
+    const updatedNotes = (demo.notes ? demo.notes + '\n\n' : '') + `[${new Date().toLocaleString()} ADMIN EMAIL DISPATCHED]:\n${data.message}`;
+    await db.demoRequest.update({
+      where: { id: demo.id },
+      data: { status: 'contacted', notes: updatedNotes }
+    });
+
+    return { success: true };
+  });
+
+async function getOrEnsureAdminBuilderId(db: any, session: any) {
+  const adminUser = await db.user.findUnique({
+    where: { id: session.userId },
+    select: { id: true, builderId: true, email: true, displayName: true }
+  });
+
+  if (adminUser?.builderId) {
+    return adminUser.builderId;
+  }
+
+  // Find or create WeaverFrame HQ builder
+  let hqBuilder = await db.builder.findFirst({
+    where: {
+      OR: [
+        { companyName: 'WeaverFrame HQ' },
+        { companyName: 'WeaverFrame' }
+      ],
+      deletedAt: null
+    }
+  });
+
+  if (!hqBuilder) {
+    hqBuilder = await db.builder.create({
+      data: {
+        companyName: 'WeaverFrame HQ',
+        contactName: 'Executive Team',
+        email: 'admin@weaverframe.com',
+        plan: 'enterprise',
+        isActive: true,
+      }
+    });
+  }
+
+  if (adminUser) {
+    await db.user.update({
+      where: { id: adminUser.id },
+      data: { builderId: hqBuilder.id }
+    });
+  }
+
+  // Seed test clients if empty
+  const leadCount = await db.lead.count({ where: { builderId: hqBuilder.id } });
+  if (leadCount === 0) {
+    const lead1 = await db.lead.create({
+      data: {
+        builderId: hqBuilder.id,
+        name: "Alexander Wright",
+        email: "alexander.wright@luxuryestates.com",
+        phone: "(512) 890-4421",
+        status: "engaged",
+        source: "WeaverFrame Private Concierge",
+        scoreTier: "Hot",
+        estimatedBudget: 3500000,
+        county: "Austin Custom Homes",
+      }
+    });
+
+    await db.message.create({
+      data: {
+        builderId: hqBuilder.id,
+        leadId: lead1.id,
+        sender: "lead",
+        content: "Hello WeaverFrame HQ, we are interested in architectural AI infrastructure for our custom home operations. Could we discuss deployment options?",
+        channel: "portal",
+        isRead: false,
+      }
+    });
+
+    const lead2 = await db.lead.create({
+      data: {
+        builderId: hqBuilder.id,
+        name: "Elena Rostova",
+        email: "elena@rostovadesign.com",
+        phone: "(415) 620-7734",
+        status: "contacted",
+        source: "Executive Inbound",
+        scoreTier: "Warm",
+        estimatedBudget: 2200000,
+        county: "Rostova Design Group",
+      }
+    });
+
+    await db.message.create({
+      data: {
+        builderId: hqBuilder.id,
+        leadId: lead2.id,
+        sender: "lead",
+        content: "Hi, following up on our private demonstration discussion. We would like to review the security architecture and custom model training specifications.",
+        channel: "portal",
+        isRead: true,
+      }
+    });
+  }
+
+  return hqBuilder.id;
+}
+
+export const getAdminConversations = createServerFn({ method: 'GET' })
+  .handler(async () => {
+    const { requireAdmin } = await import('./server-utils.server');
+    const session = await requireAdmin();
+    const db = await getDb();
+
+    const builderId = await getOrEnsureAdminBuilderId(db, session);
+
+    const leads = await db.lead.findMany({
+      where: {
+        builderId
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      include: {
+        messages: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+        _count: {
+          select: {
+            messages: {
+              where: {
+                sender: 'lead',
+                isRead: false,
+              }
+            }
+          }
+        },
+        builder: {
+          select: { companyName: true }
+        }
+      }
+    });
+
+    const conversations = leads.map((l) => {
+      const lastMsg = l.messages[0];
+      const unreadCount = l._count.messages;
+      const isRecentlyActive = l.portalVisitedAt &&
+        (new Date().getTime() - new Date(l.portalVisitedAt).getTime()) < 1000 * 30;
+
+      return {
+        leadId: l.id,
+        leadName: l.name,
+        phone: l.phone,
+        email: l.email,
+        status: l.status,
+        scoreTier: l.scoreTier,
+        estimatedBudget: l.estimatedBudget,
+        lastMessage: lastMsg ? lastMsg.content : "No messages yet",
+        lastMessageTime: lastMsg ? lastMsg.createdAt.toISOString() : l.createdAt.toISOString(),
+        unreadCount,
+        isOnline: !!isRecentlyActive,
+        portalToken: l.portalToken,
+        county: l.county || "Architectural Client",
+        isDemoRequest: false,
+        source: l.source,
+        createdAt: l.createdAt.toISOString(),
+      };
+    });
+
+    conversations.sort((a, b) => new Date(b.lastMessageTime).getTime() - new Date(a.lastMessageTime).getTime());
+    return conversations;
+  });
+
+export const getAdminMessagesForLead = createServerFn({ method: 'POST' })
+  .inputValidator((data: { leadId: string }) => data)
+  .handler(async ({ data }) => {
+    const { requireAdmin } = await import('./server-utils.server');
+    const session = await requireAdmin();
+    const db = await getDb();
+    const { leadId } = data;
+
+    const builderId = await getOrEnsureAdminBuilderId(db, session);
+
+    const lead = await db.lead.findUnique({
+      where: { id: leadId },
+      include: {
+        builder: {
+          select: { companyName: true }
+        }
+      }
+    });
+
+    if (!lead) throw new Error("Lead not found");
+
+    if (lead.builderId !== builderId) {
+      throw new Error('FORBIDDEN: Access denied to this lead.');
+    }
+
+    const messages = await db.message.findMany({
+      where: { leadId },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    await db.message.updateMany({
+      where: { leadId, sender: 'lead', isRead: false },
+      data: { isRead: true }
+    });
+
+    return {
+      lead: {
+        ...lead,
+        county: lead.county || "Architectural Client",
+        isDemoRequest: false,
+      },
+      messages: messages.map(m => ({
+        id: m.id,
+        sender: m.sender,
+        content: m.content,
+        createdAt: m.createdAt.toISOString(),
+        isRead: m.isRead,
+      }))
+    };
+  });
+
+export const sendAdminMessage = createServerFn({ method: 'POST' })
+  .inputValidator((data: { leadId: string; content: string }) => data)
+  .handler(async ({ data }) => {
+    const { requireAdmin } = await import('./server-utils.server');
+    const session = await requireAdmin();
+    const db = await getDb();
+
+    const builderId = await getOrEnsureAdminBuilderId(db, session);
+
+    const lead = await db.lead.findUnique({
+      where: { id: data.leadId },
+      select: { id: true, email: true, name: true, builderId: true, source: true }
+    });
+
+    if (!lead) throw new Error("Lead not found");
+
+    if (lead.builderId !== builderId) {
+      throw new Error('FORBIDDEN: Access denied to this lead.');
+    }
+
+    const userMsg = await db.message.create({
+      data: {
+        builderId: lead.builderId,
+        leadId: lead.id,
+        sender: "user",
+        content: data.content.trim(),
+        channel: "portal",
+        isRead: true,
+      }
+    });
+
+    if (lead.email) {
+      try {
+        const { sendOutboundEmail } = await import('./email.server');
+        await sendOutboundEmail({
+          to: lead.email,
+          subject: "WeaverFrame — Executive Communications",
+          html: `<div style="font-family: Arial, sans-serif; line-height: 1.6; color: #111;">
+            <p>${data.content.replace(/\n/g, '<br/>')}</p>
+            <hr style="border: none; border-top: 1px solid #eaeaea; margin: 24px 0;" />
+            <p style="font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1px;">WeaverFrame Executive Advisory · Private AI Infrastructure</p>
+          </div>`,
+          text: data.content,
+          from: 'WeaverFrame Executive Advisory <advisory@weaverframe.com>',
+          replyTo: 'admin@weaverframe.com',
+        });
+      } catch (err) {
+        console.warn("Could not dispatch lead email:", err);
+      }
+    }
+
+    return { success: true, userMessage: userMsg };
+  });
+
+export const createAdminConversation = createServerFn({ method: 'POST' })
+  .inputValidator((data: { name: string; email?: string; phone?: string; company?: string; initialMessage?: string }) => data)
+  .handler(async ({ data }) => {
+    const { requireAdmin } = await import('./server-utils.server');
+    const session = await requireAdmin();
+    const db = await getDb();
+
+    const builderId = await getOrEnsureAdminBuilderId(db, session);
+
+    const lead = await db.lead.create({
+      data: {
+        builderId,
+        name: data.name.trim(),
+        email: data.email?.trim() || null,
+        phone: data.phone?.trim() || null,
+        status: 'contacted',
+        source: 'WeaverFrame HQ Direct Message',
+        scoreTier: 'Hot',
+        estimatedBudget: 2500000,
+        county: data.company?.trim() || 'Architectural Client',
+      }
+    });
+
+    if (data.initialMessage && data.initialMessage.trim()) {
+      await db.message.create({
+        data: {
+          builderId,
+          leadId: lead.id,
+          sender: 'user',
+          content: data.initialMessage.trim(),
+          channel: 'portal',
+          isRead: true,
+        }
+      });
+
+      if (lead.email) {
+        try {
+          const { sendOutboundEmail } = await import('./email.server');
+          await sendOutboundEmail({
+            to: lead.email,
+            subject: "WeaverFrame — Executive Communications",
+            html: `<div style="font-family: Arial, sans-serif; line-height: 1.6; color: #111;">
+              <p>${data.initialMessage.trim().replace(/\n/g, '<br/>')}</p>
+              <hr style="border: none; border-top: 1px solid #eaeaea; margin: 24px 0;" />
+              <p style="font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1px;">WeaverFrame Executive Advisory · Private AI Infrastructure</p>
+            </div>`,
+            text: data.initialMessage.trim(),
+            from: 'WeaverFrame Executive Advisory <advisory@weaverframe.com>',
+            replyTo: 'admin@weaverframe.com',
+          });
+        } catch (err) {
+          console.warn("Could not dispatch email:", err);
+        }
+      }
+    }
+
+    return { success: true, leadId: lead.id };
+  });

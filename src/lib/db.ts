@@ -7,14 +7,12 @@ const globalForPrisma = globalThis as unknown as {
 }
 
 export const getDb = async (): Promise<any> => {
-  if (globalForPrisma.prisma && (globalForPrisma.prisma as any).appointment) return globalForPrisma.prisma
-
   const dbUrlRaw =
     (typeof process !== 'undefined' ? process.env.DATABASE_URL : undefined) ||
     (import.meta as any).env?.DATABASE_URL
 
   if (!dbUrlRaw) throw new Error('DATABASE_URL is not set')
-  const dbUrl = String(dbUrlRaw).trim().replace(/^['"]|['"]$/g, '')
+  const dbUrl = String(dbUrlRaw).trim().replace(/^['\"]|['\"]$/g, '')
 
   let parsed: URL
   try {
@@ -35,23 +33,44 @@ export const getDb = async (): Promise<any> => {
   const { PrismaPg } = await import('@prisma/adapter-pg')
   const pg = await import('pg')
 
+  // Recover from stale/ended pool after HMR reloads or unexpected terminations
+  if (globalForPrisma.pgPool) {
+    const existingPool = globalForPrisma.pgPool
+    if (existingPool._ended || existingPool._clients?.length === 0 && existingPool._pendingQueue?.length === 0 && existingPool.totalCount === 0) {
+      console.warn('[DB] Stale pg pool detected — destroying and recreating...')
+      try { await existingPool.end() } catch {}
+      globalForPrisma.pgPool = undefined
+      globalForPrisma.prisma = undefined
+    }
+  }
+
+  // Return existing healthy prisma instance
+  if (globalForPrisma.prisma && (globalForPrisma.prisma as any).lead) return globalForPrisma.prisma
+
   let pool = globalForPrisma.pgPool
   if (!pool) {
     const maxPoolSize = typeof process !== 'undefined' && process.env.DATABASE_POOL_MAX
       ? parseInt(process.env.DATABASE_POOL_MAX, 10)
-      : 10 // Increased from 5 to 10 to handle parallel router fetches without severe queueing
+      : 10
 
     pool = new pg.default.Pool({
       connectionString: dbUrl,
       max: maxPoolSize,
-      min: 0, // Don't keep idle connections open (Neon auto-suspends)
-      idleTimeoutMillis: 10000,  // Release idle connections quickly
-      connectionTimeoutMillis: 10000, // Match Neon's connect_timeout=10
+      min: 1,               // Keep 1 warm connection to avoid cold-start on every request
+      idleTimeoutMillis: 60000,    // 60s idle before releasing (allows time between user actions)
+      connectionTimeoutMillis: 60000, // 60s — matches connect_timeout=60 in DATABASE_URL
+      keepAlive: true,
+      keepAliveInitialDelayMillis: 10000,
     })
 
-    // Handle unexpected errors on idle pool clients to prevent process crash
+    // Handle unexpected errors on idle pool clients — destroy and reset so next call reconnects cleanly
     pool.on('error', (err: any) => {
-      console.error('Unexpected error on idle PostgreSQL client:', err)
+      console.error('[DB] Unexpected error on idle pg client:', err?.message || err)
+      // Signal pool reset on next getDb() call
+      if (err?.message?.includes('terminated')) {
+        globalForPrisma.pgPool = undefined
+        globalForPrisma.prisma = undefined
+      }
     })
 
     globalForPrisma.pgPool = pool
@@ -63,3 +82,13 @@ export const getDb = async (): Promise<any> => {
   globalForPrisma.prisma = prisma
   return prisma
 }
+
+export const warmDb = async (): Promise<void> => {
+  try {
+    const db = await getDb()
+    await db.$queryRaw`SELECT 1`
+  } catch (err) {
+    console.warn('[DB WARMUP WARNING]:', err)
+  }
+}
+

@@ -75,7 +75,9 @@ export async function sendOutboundEmail(options: SendEmailOptions): Promise<Emai
           user: smtpUser.trim(),
           pass: cleanSmtpPass,
         },
-        connectionTimeout: 10000,
+        connectionTimeout: 8000,   // TCP connection must open within 8s
+        socketTimeout: 10000,       // Socket read must complete within 10s
+        greetingTimeout: 8000,      // SMTP EHLO greeting must arrive within 8s
       });
 
       // Extract sender display name if present
@@ -96,7 +98,19 @@ export async function sendOutboundEmail(options: SendEmailOptions): Promise<Emai
         replyTo: options.replyTo || smtpUser.trim(),
       };
 
-      const info = await transporter.sendMail(mailOptions);
+      // Absolute 12s timeout — prevents indefinite hang when SMTP server is reachable but unresponsive
+      const sendWithTimeout = new Promise<any>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('SMTP sendMail timeout after 12s')), 12000);
+        transporter.sendMail(mailOptions).then((info) => {
+          clearTimeout(timer);
+          resolve(info);
+        }).catch((err) => {
+          clearTimeout(timer);
+          reject(err);
+        });
+      });
+
+      const info = await sendWithTimeout;
       console.log(`[SMTP EMAIL SUCCESS] Dispatched to ${recipient.join(', ')} via SMTP (${smtpUser}) | MessageId: ${info.messageId}`);
       return {
         success: true,

@@ -53,7 +53,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";
-import { submitDemoRequest } from "@/lib/dashboard";
+import { submitDemoRequest, prewarmConnection } from "@/lib/dashboard";
 
 import { CustomCursor } from "../components/CustomCursor";
 import { MagneticButton } from "../components/MagneticButton";
@@ -169,6 +169,7 @@ function WelcomePage() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     setMounted(true);
+    prewarmConnection().catch(() => {});
   }, []);
 
   const lenisRef = useRef<Lenis | null>(null);

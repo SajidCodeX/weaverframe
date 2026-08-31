@@ -48,13 +48,6 @@ export async function syncInboundMailbox(builderId?: string, force = false): Pro
         select: { builderId: true }
       });
       targetBuilderId = mailboxIntegration?.builderId;
-      if (!targetBuilderId) {
-        const activeBuilder = await db.builder.findFirst({
-          where: { isActive: true },
-          select: { id: true }
-        });
-        targetBuilderId = activeBuilder?.id;
-      }
     }
 
     if (!targetBuilderId) {

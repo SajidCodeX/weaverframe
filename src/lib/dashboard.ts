@@ -276,41 +276,102 @@ export const getLastSyncTime = createServerFn({ method: 'POST' })
 export const getNotificationsData = createServerFn({ method: 'POST' })
   .inputValidator((data: { activeRole?: string | null } | undefined) => data)
   .handler(async ({ data }) => {
-  const { getTenantDb, requireAuth } = await import('./server-utils.server');
-  const session = await requireAuth(data?.activeRole ?? undefined)
-  const db = await getTenantDb(session)
-  try {
-    const activities = await db.activity.findMany({
-      take: 5,
-      orderBy: { createdAt: 'desc' },
-      include: { lead: true }
-    })
-    return activities.map(act => {
-      let title = "Lead Activity"
-      if (act.action.includes("🚨 High Alert")) {
-        title = "🚨 High Priority Alert"
-      } else if (act.action.toLowerCase().includes("schedule") || act.action.toLowerCase().includes("appointment") || act.action.toLowerCase().includes("site visit")) {
-        title = "📅 Meeting Scheduled"
-      } else if (act.action.toLowerCase().includes("hot lead") || act.action.toLowerCase().includes("qualif")) {
-        title = "🔥 Hot Lead"
-      } else if (act.action.toLowerCase().includes("added") || act.action.toLowerCase().includes("manually")) {
-        title = "👤 New Lead Added"
-      } else if (act.action.toLowerCase().includes("replied") || act.action.toLowerCase().includes("response")) {
-        title = "💬 Lead Replied"
+    const { getTenantDb, requireAuth } = await import('./server-utils.server');
+    const session = await requireAuth(data?.activeRole ?? undefined);
+    
+    // Super Admin Notifications Handler
+    if (session.role === 'admin' && !session.actingAsBuilderId) {
+      try {
+        const { getDb } = await import('./db');
+        const db = await getDb();
+        
+        const [demoLeads, recentBuilders] = await Promise.all([
+          db.lead.findMany({
+            where: {
+              OR: [
+                { source: { contains: 'Demo Request' } },
+                { source: { contains: 'Website Landing Page' } }
+              ]
+            },
+            take: 8,
+            orderBy: { createdAt: 'desc' },
+          }),
+          db.builder.findMany({
+            take: 4,
+            orderBy: { createdAt: 'desc' },
+          })
+        ]);
+
+        const notifs: any[] = [];
+
+        for (const lead of demoLeads) {
+          let comp = lead.county || '';
+          try {
+            const mem = JSON.parse(lead.leadMemory || '{}');
+            if (mem.company) comp = mem.company;
+          } catch {}
+          notifs.push({
+            id: `demo_${lead.id}`,
+            title: '🚀 Inbound Demo Request',
+            desc: `${lead.name}${comp ? ` (${comp})` : ''} requested a private OS walkthrough.`,
+            time: lead.createdAt.toISOString(),
+            unread: new Date().getTime() - lead.createdAt.getTime() < 86400000,
+          });
+        }
+
+        for (const b of recentBuilders) {
+          notifs.push({
+            id: `builder_${b.id}`,
+            title: '🏢 Builder Account',
+            desc: `${b.companyName} is registered on the platform.`,
+            time: b.createdAt.toISOString(),
+            unread: new Date().getTime() - b.createdAt.getTime() < 86400000,
+          });
+        }
+
+        notifs.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+        return notifs.slice(0, 10);
+      } catch (adminNotifErr) {
+        console.error('Error fetching admin notifications:', adminNotifErr);
+        return [];
       }
-      return {
-        id: act.id,
-        title,
-        desc: `${act.lead?.name || 'Lead'}: ${act.action}`,
-        time: act.createdAt.toISOString(),
-        unread: new Date().getTime() - act.createdAt.getTime() < 3600000
-      }
-    })
-  } catch (error) {
-    console.error("Error fetching notifications:", error)
-    return []
-  }
-})
+    }
+
+    try {
+      const db = await getTenantDb(session);
+      const activities = await db.activity.findMany({
+        take: 5,
+        orderBy: { createdAt: 'desc' },
+        include: { lead: true }
+      });
+      return activities.map(act => {
+        let title = "Lead Activity";
+        if (act.action.includes("🚨 High Alert")) {
+          title = "🚨 High Priority Alert";
+        } else if (act.action.toLowerCase().includes("schedule") || act.action.toLowerCase().includes("appointment") || act.action.toLowerCase().includes("site visit")) {
+          title = "📅 Meeting Scheduled";
+        } else if (act.action.toLowerCase().includes("demo") || act.action.toLowerCase().includes("walkthrough")) {
+          title = "🚀 Inbound Demo Request";
+        } else if (act.action.toLowerCase().includes("hot lead") || act.action.toLowerCase().includes("qualif")) {
+          title = "🔥 Hot Lead";
+        } else if (act.action.toLowerCase().includes("added") || act.action.toLowerCase().includes("manually")) {
+          title = "👤 New Lead Added";
+        } else if (act.action.toLowerCase().includes("replied") || act.action.toLowerCase().includes("response")) {
+          title = "💬 Lead Replied";
+        }
+        return {
+          id: act.id,
+          title,
+          desc: `${act.lead?.name || 'Lead'}: ${act.action}`,
+          time: act.createdAt.toISOString(),
+          unread: new Date().getTime() - act.createdAt.getTime() < 3600000
+        };
+      });
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+      return [];
+    }
+  });
 
 export async function createHighAlertNotification({
   builderId,
@@ -3756,7 +3817,6 @@ export const createStripeCustomerPortalSession = createServerFn({ method: 'POST'
       throw error;
     }
   });
-
 export const submitDemoRequest = createServerFn({ method: 'POST' })
   .inputValidator((data: {
     name: string;
@@ -3786,152 +3846,77 @@ export const submitDemoRequest = createServerFn({ method: 'POST' })
     const crypto = await import('crypto');
 
     try {
-      // 2. Resolve primary active builder to assign lead
-      const activeBuilder = await db.builder.findFirst({
-        where: { isActive: true },
-        orderBy: { createdAt: 'asc' }
-      });
+      // 2. Resolve platform settings (support email) if available
+      const platformSettings = await db.platformSettings.findFirst({ select: { supportEmail: true } }).catch(() => null);
 
-      if (!activeBuilder) {
-        console.warn('[DEMO REQUEST] No active builder found in database.');
-      }
-
-      // 3. Parse build volume to numeric budget
-      let estimatedBudget = 2000000;
-      const vol = data.buildVolume || '';
-      if (vol.includes('500k')) estimatedBudget = 750000;
-      else if (vol.includes('1M') && vol.includes('3M')) estimatedBudget = 2000000;
-      else if (vol.includes('3M') || vol.includes('5M')) estimatedBudget = 4000000;
-
-      // 4. Create portal token
+      // 3. Create portal token
       const portalToken = crypto.randomBytes(16).toString('hex');
 
-      // 5. Create Lead in DB if builder exists
-      let leadId = '';
-      if (activeBuilder) {
-        const newLead = await db.lead.create({
-          data: {
-            builderId: activeBuilder.id,
-            name: data.name.trim(),
-            email: data.email.trim().toLowerCase(),
-            phone: data.phone.trim(),
-            source: 'Website Landing Page / Demo Request',
-            status: 'New',
-            scoreTier: 'Hot',
-            dealScore: 90,
-            estimatedBudget,
-            landPrice: 0,
-            county: data.company.trim(),
-            state: 'US',
-            purchaseDate: new Date(),
-            portalToken,
-            leadMemory: JSON.stringify({
-              company: data.company.trim(),
-              buildVolume: data.buildVolume,
-              requestType: 'Private Architecture Demonstration Walkthrough',
-              submittedAt: new Date().toISOString(),
-            }),
-            qualificationData: JSON.stringify({
-              intent: 'High Intent (Website Demo Request)',
-              company: data.company.trim(),
-              buildVolume: data.buildVolume,
-              stage: 'Scheduled for Discovery Walkthrough',
-            }),
-          }
-        });
-        leadId = newLead.id;
-
-        // Log Activity
-        await db.activity.create({
-          data: {
-            builderId: activeBuilder.id,
-            leadId: newLead.id,
-            action: `🚀 Private Demo Walkthrough requested by ${data.name.trim()} (${data.company.trim()}) — Volume: ${data.buildVolume}`,
-          }
-        });
-
-        // Add Initial Inbound Message
-        await db.message.create({
-          data: {
-            builderId: activeBuilder.id,
-            leadId: newLead.id,
-            sender: 'lead',
-            content: `Hello, I requested a private WeaverFrame demonstration for ${data.company.trim()}. (Typical build volume: ${data.buildVolume})`,
-            channel: 'portal',
-          }
-        });
-      }
-
-      // 6. Resolve Platform Admin Email for Notification
-      let adminEmail = (typeof process !== 'undefined' ? (process.env.ADMIN_EMAIL || process.env.SMTP_USER || process.env.GMAIL_USER) : '') || '';
-      if (!adminEmail) {
-        // Try platform settings or super admin user
-        const platformSettings = await db.platformSettings.findFirst().catch(() => null);
-        if (platformSettings?.supportEmail) {
-          adminEmail = platformSettings.supportEmail;
-        } else {
-          const adminUser = await db.user.findFirst({ where: { role: 'admin' } }).catch(() => null);
-          if (adminUser?.email) adminEmail = adminUser.email;
+      // 4. Create isolated DemoRequest in DB (Zero builder association, zero AI auto-reply)
+      const demoRequest = await db.demoRequest.create({
+        data: {
+          name: data.name.trim(),
+          email: data.email.trim().toLowerCase(),
+          phone: data.phone.trim(),
+          company: data.company.trim(),
+          buildVolume: data.buildVolume || 'Custom Build Inquiry',
+          status: 'new',
+          portalToken,
+          metadata: JSON.stringify({
+            requestType: 'Private Architecture Demonstration Walkthrough',
+            submittedAt: new Date().toISOString(),
+            buildVolume: data.buildVolume,
+          }),
         }
+      });
+
+      const demoId = demoRequest.id;
+
+      // 5. Resolve Platform Admin Email for Notification
+      let adminEmail = (typeof process !== 'undefined' ? (process.env.ADMIN_EMAIL || process.env.SMTP_USER || process.env.GMAIL_USER) : '') || '';
+      if (!adminEmail && platformSettings?.supportEmail) {
+        adminEmail = platformSettings.supportEmail;
       }
-      if (!adminEmail && activeBuilder?.email) {
-        adminEmail = activeBuilder.email;
+      if (!adminEmail) {
+        adminEmail = 'admin@weaverframe.com';
       }
 
       const baseUrl = (typeof process !== 'undefined' ? process.env.APP_BASE_URL : '') || 'https://weaverframe.in';
-      const dashboardLeadUrl = leadId ? `${baseUrl}/leads` : `${baseUrl}/login`;
+      const dashboardUrl = `${baseUrl}/admin/demo-requests`;
 
-      // 7. Dispatch Email 1: Notification to Admin (Parallel)
-      const emailPromises: Promise<any>[] = [];
-
+      // 6. Dispatch Email 1: Notification to Admin — fire-and-forget (non-blocking)
       if (adminEmail) {
-        emailPromises.push(
-          sendOutboundEmail({
-            to: adminEmail,
-            subject: `🚀 [Demo Request] ${data.name.trim()} from ${data.company.trim()} (${data.buildVolume})`,
-            html: buildAdminDemoNotificationHtml({
-              name: data.name.trim(),
-              company: data.company.trim(),
-              email: data.email.trim(),
-              phone: data.phone.trim(),
-              buildVolume: data.buildVolume,
-              dashboardUrl: dashboardLeadUrl,
-            }),
-            from: 'WeaverFrame Concierge <onboarding@resend.dev>',
-          }).catch((err) => {
-            console.error('[DEMO REQUEST ADMIN EMAIL ERROR]:', err);
-          })
-        );
-      }
-
-      // 8. Dispatch Email 2: Confirmation Receipt to Prospect User
-      emailPromises.push(
         sendOutboundEmail({
-          to: data.email.trim(),
-          subject: `WeaverFrame — Private OS Demonstration Request Received`,
-          html: buildUserDemoConfirmationHtml({
-            recipientName: data.name.trim(),
+          to: adminEmail,
+          subject: `🚀 [Demo Request] ${data.name.trim()} from ${data.company.trim()} (${data.buildVolume})`,
+          html: buildAdminDemoNotificationHtml({
+            name: data.name.trim(),
             company: data.company.trim(),
+            email: data.email.trim(),
+            phone: data.phone.trim(),
             buildVolume: data.buildVolume,
+            dashboardUrl,
           }),
-          from: 'WeaverFrame Executive Advisory <onboarding@resend.dev>',
+          from: 'WeaverFrame Concierge <onboarding@resend.dev>',
         }).catch((err) => {
-          console.error('[DEMO REQUEST USER CONFIRMATION ERROR]:', err);
-        })
-      );
-
-      await Promise.all(emailPromises);
-
-      // 9. Sync to Connected CRMs in Background (HubSpot & GoHighLevel)
-      if (leadId && activeBuilder) {
-        import('./crm.server').then(({ syncLeadToConnectedCrms }) => {
-          syncLeadToConnectedCrms(leadId, activeBuilder.id).catch((e) => {
-            console.warn('[DEMO REQUEST CRM SYNC ERROR]:', e);
-          });
-        }).catch(() => {});
+          console.error('[DEMO REQUEST ADMIN EMAIL ERROR]:', err);
+        });
       }
 
-      // 10. Invalidate Cache
+      // 7. Dispatch Email 2: Confirmation Receipt to Prospect — fire-and-forget (non-blocking)
+      sendOutboundEmail({
+        to: data.email.trim(),
+        subject: `WeaverFrame — Private OS Demonstration Request Received`,
+        html: buildUserDemoConfirmationHtml({
+          recipientName: data.name.trim(),
+          company: data.company.trim(),
+          buildVolume: data.buildVolume,
+        }),
+        from: 'WeaverFrame Executive Advisory <onboarding@resend.dev>',
+      }).catch((err) => {
+        console.error('[DEMO REQUEST USER CONFIRMATION ERROR]:', err);
+      });
+
       const { invalidateCache } = await import('./cache');
       invalidateCache('dashboard_');
 
@@ -3944,6 +3929,13 @@ export const submitDemoRequest = createServerFn({ method: 'POST' })
       console.error('[DEMO REQUEST ERROR]:', error);
       throw new Error(error?.message || 'Failed to submit demonstration request. Please try again.');
     }
+  });
+
+export const prewarmConnection = createServerFn({ method: 'GET' })
+  .handler(async () => {
+    const { warmDb } = await import('./db');
+    await warmDb();
+    return { status: 'warm' };
   });
 
 
