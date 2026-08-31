@@ -7,6 +7,7 @@ import { useTheme } from "@/components/ThemeProvider";
 import { RoutePending } from "@/components/dashboard/RoutePending";
 import { useState } from "react";
 import { Shield, Mail, Clock, Palette, AlertTriangle, UserCheck, Check, Save } from "lucide-react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/admin/settings")({
   head: () => ({
@@ -52,9 +53,10 @@ function AdminSettingsRoute() {
         } 
       });
       await router.invalidate();
-      alert('Platform settings saved successfully!');
-    } catch (err) {
-      alert('Failed to save settings');
+      toast.success('Platform settings saved successfully!');
+    } catch (err: any) {
+      console.error('Failed to save settings:', err);
+      toast.error(err?.message || 'Failed to save settings');
     } finally {
       setIsSaving(false);
     }
@@ -64,8 +66,10 @@ function AdminSettingsRoute() {
     try {
       await toggleUserStatus({ data: id });
       await router.invalidate();
-    } catch (err) {
-      alert('Failed to unblock user');
+      toast.success('User status updated');
+    } catch (err: any) {
+      console.error('Failed to unblock user:', err);
+      toast.error(err?.message || 'Failed to unblock user');
     }
   };
 

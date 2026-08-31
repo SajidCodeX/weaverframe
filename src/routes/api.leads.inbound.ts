@@ -118,14 +118,6 @@ export const handleInboundLead = createServerFn({ method: 'POST' })
       }
 
       if (!targetBuilderId) {
-        const firstActiveBuilder = await db.builder.findFirst({
-          where: { isActive: true },
-          select: { id: true }
-        });
-        targetBuilderId = firstActiveBuilder?.id;
-      }
-
-      if (!targetBuilderId) {
         return {
           isResponse: true,
           status: 400,

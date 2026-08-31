@@ -47,10 +47,13 @@ import {
   Car,
   LandPlot,
   Layers3,
-  Crosshair,
   Quote,
   Menu,
+  Loader2,
+  AlertCircle,
 } from "lucide-react";
+import { toast } from "sonner";
+import { submitDemoRequest, prewarmConnection } from "@/lib/dashboard";
 
 import { CustomCursor } from "../components/CustomCursor";
 import { MagneticButton } from "../components/MagneticButton";
@@ -166,6 +169,7 @@ function WelcomePage() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     setMounted(true);
+    prewarmConnection().catch(() => {});
   }, []);
 
   const lenisRef = useRef<Lenis | null>(null);
@@ -249,6 +253,8 @@ function WelcomePage() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [demoForm, setDemoForm] = useState({ name: "", company: "", email: "", phone: "", buildVolume: "$1M - $3M" });
   const [demoSubmitted, setDemoSubmitted] = useState(false);
+  const [isSubmittingDemo, setIsSubmittingDemo] = useState(false);
+  const [demoError, setDemoError] = useState("");
 
   // Live Radar Interactive Simulator State
   const [activeScenario, setActiveScenario] = useState<"travis" | "aspen" | "palm">("travis");
@@ -422,13 +428,27 @@ function WelcomePage() {
     [pipelineValueAnnual, monthlyLeads, avgPrice]
   );
 
-  const handleDemoSubmit = (e: React.FormEvent) => {
+  const handleDemoSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setDemoSubmitted(true);
-    setTimeout(() => {
-      setIsDemoModalOpen(false);
-      setDemoSubmitted(false);
-    }, 3000);
+    setIsSubmittingDemo(true);
+    setDemoError("");
+    try {
+      await submitDemoRequest({ data: demoForm });
+      setDemoSubmitted(true);
+      toast.success("Demonstration requested! Check your inbox for confirmation.");
+      setTimeout(() => {
+        setIsDemoModalOpen(false);
+        setDemoSubmitted(false);
+        setDemoForm({ name: "", company: "", email: "", phone: "", buildVolume: "$1M - $3M" });
+      }, 3500);
+    } catch (err: any) {
+      console.error("Failed to submit demo request:", err);
+      const msg = err?.message || "Failed to submit demo request. Please check your details and try again.";
+      setDemoError(msg);
+      toast.error(msg);
+    } finally {
+      setIsSubmittingDemo(false);
+    }
   };
 
   return (
@@ -1580,7 +1600,10 @@ function WelcomePage() {
               className="w-full max-w-lg bg-[#0e0f14] border border-white/[0.15] rounded-2xl p-8 shadow-2xl relative"
             >
               <button
-                onClick={() => setIsDemoModalOpen(false)}
+                onClick={() => {
+                  setIsDemoModalOpen(false);
+                  setDemoError("");
+                }}
                 className="absolute top-6 right-6 text-white/40 hover:text-white transition-colors"
               >
                 <X className="size-5" />
@@ -1611,6 +1634,13 @@ function WelcomePage() {
                   </div>
 
                   <form onSubmit={handleDemoSubmit} className="space-y-4">
+                    {demoError && (
+                      <div className="p-3 bg-rose-500/10 border border-rose-500/25 rounded-lg flex items-center gap-2.5 text-rose-400 text-xs animate-in fade-in duration-200">
+                        <AlertCircle className="size-4 shrink-0" />
+                        <span className="flex-1 leading-snug">{demoError}</span>
+                      </div>
+                    )}
+
                     <div>
                       <label className="text-[10px] uppercase font-mono tracking-wider text-white/60 block mb-1.5">
                         Your Full Name *
@@ -1618,10 +1648,11 @@ function WelcomePage() {
                       <input
                         required
                         type="text"
+                        disabled={isSubmittingDemo}
                         value={demoForm.name}
                         onChange={(e) => setDemoForm((p) => ({ ...p, name: e.target.value }))}
                         placeholder="e.g. Marcus Vance"
-                        className="w-full bg-[#16171e] border border-white/[0.1] rounded-md px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-[#e5d9c5] font-sans"
+                        className="w-full bg-[#16171e] border border-white/[0.1] rounded-md px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-[#e5d9c5] font-sans disabled:opacity-50"
                       />
                     </div>
 
@@ -1633,10 +1664,11 @@ function WelcomePage() {
                         <input
                           required
                           type="text"
+                          disabled={isSubmittingDemo}
                           value={demoForm.company}
                           onChange={(e) => setDemoForm((p) => ({ ...p, company: e.target.value }))}
                           placeholder="e.g. Apex Luxury Estates"
-                          className="w-full bg-[#16171e] border border-white/[0.1] rounded-md px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-[#e5d9c5] font-sans"
+                          className="w-full bg-[#16171e] border border-white/[0.1] rounded-md px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-[#e5d9c5] font-sans disabled:opacity-50"
                         />
                       </div>
                       <div>
@@ -1644,9 +1676,10 @@ function WelcomePage() {
                           Typical Home Price
                         </label>
                         <select
+                          disabled={isSubmittingDemo}
                           value={demoForm.buildVolume}
                           onChange={(e) => setDemoForm((p) => ({ ...p, buildVolume: e.target.value }))}
-                          className="w-full bg-[#16171e] border border-white/[0.1] rounded-md px-3 py-2.5 text-xs text-white focus:outline-none focus:border-[#e5d9c5] font-sans"
+                          className="w-full bg-[#16171e] border border-white/[0.1] rounded-md px-3 py-2.5 text-xs text-white focus:outline-none focus:border-[#e5d9c5] font-sans disabled:opacity-50"
                         >
                           <option>$500k - $1M</option>
                           <option>$1M - $3M</option>
@@ -1663,10 +1696,11 @@ function WelcomePage() {
                         <input
                           required
                           type="email"
+                          disabled={isSubmittingDemo}
                           value={demoForm.email}
                           onChange={(e) => setDemoForm((p) => ({ ...p, email: e.target.value }))}
                           placeholder="marcus@apexestates.com"
-                          className="w-full bg-[#16171e] border border-white/[0.1] rounded-md px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-[#e5d9c5] font-sans"
+                          className="w-full bg-[#16171e] border border-white/[0.1] rounded-md px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-[#e5d9c5] font-sans disabled:opacity-50"
                         />
                       </div>
                       <div>
@@ -1676,20 +1710,31 @@ function WelcomePage() {
                         <input
                           required
                           type="tel"
+                          disabled={isSubmittingDemo}
                           value={demoForm.phone}
                           onChange={(e) => setDemoForm((p) => ({ ...p, phone: e.target.value }))}
                           placeholder="+1 (512) 555-0199"
-                          className="w-full bg-[#16171e] border border-white/[0.1] rounded-md px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-[#e5d9c5] font-sans"
+                          className="w-full bg-[#16171e] border border-white/[0.1] rounded-md px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-[#e5d9c5] font-sans disabled:opacity-50"
                         />
                       </div>
                     </div>
 
                     <button
                       type="submit"
-                      className="w-full mt-4 py-4 bg-[#e5d9c5] text-black text-xs font-bold uppercase tracking-widest hover:bg-white transition-all flex items-center justify-center gap-2 rounded-xs shadow-xl shadow-[#e5d9c5]/20"
+                      disabled={isSubmittingDemo}
+                      className="w-full mt-4 py-4 bg-[#e5d9c5] text-black text-xs font-bold uppercase tracking-widest hover:bg-white transition-all flex items-center justify-center gap-2 rounded-xs shadow-xl shadow-[#e5d9c5]/20 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
                     >
-                      <Send className="size-3.5" />
-                      Request Private Demonstration
+                      {isSubmittingDemo ? (
+                        <>
+                          <Loader2 className="size-3.5 animate-spin" />
+                          Transmitting Request...
+                        </>
+                      ) : (
+                        <>
+                          <Send className="size-3.5" />
+                          Request Private Demonstration
+                        </>
+                      )}
                     </button>
                     <p className="text-[10px] text-white/40 text-center mt-2">
                       Strict confidentiality. Your data is never shared.

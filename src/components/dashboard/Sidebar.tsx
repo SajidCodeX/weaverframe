@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useRouterState, useRouteContext } from "@tanstack/react-router";
 import {
   Home,
@@ -17,9 +17,9 @@ import {
   Layers,
   EyeOff,
   UserPlus,
+  Sparkles,
 } from "lucide-react";
 import { logoutFn } from "@/lib/auth";
-import { stopBuilderPreview } from "@/lib/admin";
 
 const builderItems = [
   { to: "/",             label: "Overview",     icon: Home,          exact: true },
@@ -34,11 +34,13 @@ const builderItems = [
 ];
 
 const adminItems = [
-  { to: '/admin/',             label: 'Global Stats', icon: BarChart3, exact: true },
-  { to: '/admin/builders',    label: 'Builders',     icon: Building2 },
-  { to: '/admin/billing',     label: 'Billing',      icon: DollarSign },
-  { to: '/admin/users',       label: 'Users',        icon: Users },
-  { to: '/admin/settings',    label: 'Settings',     icon: Shield },
+  { to: '/admin/',              label: 'Global Stats',   icon: BarChart3, exact: true },
+  { to: '/admin/demo-requests', label: 'Demo Requests',  icon: Sparkles },
+  { to: '/admin/inbox',         label: 'Inbox',          icon: MessageSquare },
+  { to: '/admin/builders',      label: 'Builders',       icon: Building2 },
+  { to: '/admin/billing',       label: 'Billing',        icon: DollarSign },
+  { to: '/admin/users',         label: 'Users',          icon: Users },
+  { to: '/admin/settings',      label: 'Settings',       icon: Shield },
 ];
 
 export function Sidebar({
@@ -52,6 +54,30 @@ export function Sidebar({
   const { session } = useRouteContext({ strict: false }) as any;
   const isAdminView = pathname.startsWith('/admin');
   const isAdminPreviewingBuilder = session?.role === 'admin' && !!session?.actingAsBuilderId;
+  const [unreadDemoCount, setUnreadDemoCount] = useState(0);
+  const [unreadInboxCount, setUnreadInboxCount] = useState(0);
+
+  const refreshUnreadCounts = async () => {
+    if (!isAdminView || typeof window === 'undefined') return;
+    try {
+      const { getAdminStats } = await import('@/lib/admin');
+      const stats = await getAdminStats();
+      
+      const seen = JSON.parse(localStorage.getItem('weaver_seen_demo_requests') || '[]');
+      const demoUnread = (stats.demoRequests || []).filter((r: any) => !seen.includes(r.id)).length;
+      setUnreadDemoCount(demoUnread);
+      
+      setUnreadInboxCount(stats.unreadInboxCount || 0);
+    } catch {}
+  };
+
+  useEffect(() => {
+    if (isAdminView) {
+      refreshUnreadCounts();
+      window.addEventListener('weaver_requests_updated', refreshUnreadCounts);
+      return () => window.removeEventListener('weaver_requests_updated', refreshUnreadCounts);
+    }
+  }, [isAdminView, pathname]);
   
   const builderRole = session?.builderRole || 'sales';
   const filteredBuilderItems = builderItems.filter(item => {
@@ -84,6 +110,7 @@ export function Sidebar({
         localStorage.setItem(`role_${tabId}`, 'admin');
       }
     }
+    const { stopBuilderPreview } = await import('@/lib/admin');
     await stopBuilderPreview();
     window.location.href = '/admin/builders';
   };
@@ -123,7 +150,7 @@ export function Sidebar({
           <span className="font-nevera text-sm tracking-[0.14em] uppercase text-foreground font-semibold block leading-none">
             WeaverFrame
           </span>
-          <span className="text-[8.5px] font-mono tracking-widest text-[#c9a84c] dark:text-[#e5d9c5]/70 uppercase block mt-1">
+          <span className="text-[8.5px] font-mono tracking-widest text-[#e5d9c5]/80 uppercase block mt-1">
             AI Sales Concierge
           </span>
         </div>
@@ -150,12 +177,12 @@ export function Sidebar({
             >
               {/* Active left indicator */}
               {active && (
-                <span className="absolute left-0 top-[6px] bottom-[6px] w-[3px] rounded-r-full bg-[#c9a84c] dark:bg-[#e5d9c5] shadow-[0_0_10px_rgba(201,168,76,0.6)]" />
+                <span className="absolute left-0 top-[6px] bottom-[6px] w-[3px] rounded-r-full bg-[#e5d9c5] shadow-[0_0_10px_rgba(229,217,197,0.4)]" />
               )}
 
               <Icon
                 className={`size-4 shrink-0 transition-colors duration-200 ${
-                  active ? "text-[#c9a84c] dark:text-[#e5d9c5]" : "text-muted-foreground group-hover:text-foreground"
+                  active ? "text-[#e5d9c5]" : "text-muted-foreground group-hover:text-foreground"
                 }`}
               />
 
@@ -166,6 +193,24 @@ export function Sidebar({
               >
                 {item.label}
               </span>
+
+              {/* Demo Requests unread counter badge */}
+              {item.to === '/admin/demo-requests' && unreadDemoCount > 0 && (
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-[#e5d9c5] text-black shadow-sm transition-all duration-300 ${
+                  actuallyCollapsed ? "absolute top-1.5 right-1.5 size-4 p-0 flex items-center justify-center text-[9px]" : "ml-auto"
+                }`}>
+                  {unreadDemoCount}
+                </span>
+              )}
+
+              {/* Inbox unread counter badge */}
+              {item.to === '/admin/inbox' && unreadInboxCount > 0 && (
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-[#e5d9c5] text-black shadow-sm transition-all duration-300 ${
+                  actuallyCollapsed ? "absolute top-1.5 right-1.5 size-4 p-0 flex items-center justify-center text-[9px]" : "ml-auto"
+                }`}>
+                  {unreadInboxCount}
+                </span>
+              )}
 
               {/* AI Activity live badge */}
               {item.badge && (
@@ -189,7 +234,7 @@ export function Sidebar({
         >
           <div className="text-[9px] font-mono text-muted-foreground uppercase tracking-widest flex items-center justify-between">
             <span>{isAdminView ? 'Administration' : 'Estate Builder OS'}</span>
-            <span className="size-1 rounded-full bg-[#c9a84c] dark:bg-[#e5d9c5]" />
+            <span className="size-1 rounded-full bg-[#e5d9c5]" />
           </div>
           <div className="text-xs text-foreground font-semibold mt-0.5 truncate tracking-wide">
             {isAdminView ? "WeaverFrame HQ" : (session?.companyName || 'Company Name')}
@@ -233,7 +278,7 @@ export function Sidebar({
             <div className="text-xs text-foreground truncate font-medium">
               {isAdminView ? 'SajidAli Ansari' : (session?.displayName || 'User')}
             </div>
-            <div className="text-[10px] text-[#c9a84c] dark:text-[#e5d9c5]/80 capitalize font-mono tracking-wider">
+            <div className="text-[10px] text-[#e5d9c5]/80 capitalize font-mono tracking-wider">
               {isAdminView ? 'Superuser' : (session?.builderRole === 'sales' ? 'Sales Exec' : session?.builderRole || 'Owner')}
             </div>
           </div>

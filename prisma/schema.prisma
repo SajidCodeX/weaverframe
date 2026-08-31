@@ -273,3 +273,25 @@ model SystemSync {
   status           String   @default("Success") // "Success" | "Failed"
   errorMessage     String?
 }
+
+// ─── DEMO REQUESTS (PLATFORM / SUPER ADMIN ONLY - ZERO BUILDER COUPLING) ─────
+model DemoRequest {
+  id              String    @id @default(uuid())
+  name            String
+  email           String
+  phone           String
+  company         String    // Architectural firm / builder company requesting demo
+  buildVolume     String    // e.g. "$1M - $3M", "5+ Custom Homes / Year"
+  status          String    @default("new") // "new" | "contacted" | "scheduled" | "completed" | "archived"
+  notes           String?   @db.Text
+  portalToken     String?   @unique
+  portalVisitedAt DateTime?
+  metadata        String?   @db.Text // JSON structured extra data
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([email])
+}
+
