@@ -531,7 +531,7 @@ function AIPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <Target className="size-4 text-[#c9a84c] dark:text-[#e5d9c5]" />
-                <h3 className="font-nevera text-base text-foreground font-normal tracking-wide">
+                <h3 className="font-mono text-sm sm:text-base text-foreground font-semibold tracking-wide">
                   1. Primary Conversational Goal
                 </h3>
               </div>
@@ -562,7 +562,7 @@ function AIPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <Volume2 className="size-4 text-[#c9a84c] dark:text-[#e5d9c5]" />
-                <h3 className="font-nevera text-base text-foreground font-normal tracking-wide">
+                <h3 className="font-mono text-sm sm:text-base text-foreground font-semibold tracking-wide">
                   2. Brand Voice, Persona & Tone
                 </h3>
               </div>
@@ -629,7 +629,7 @@ function AIPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <Sliders className="size-4 text-[#c9a84c] dark:text-[#e5d9c5]" />
-                <h3 className="font-nevera text-base text-foreground font-normal tracking-wide">
+                <h3 className="font-mono text-sm sm:text-base text-foreground font-semibold tracking-wide">
                   3. Lead Qualification Rules & Strictness
                 </h3>
               </div>
@@ -766,7 +766,7 @@ function AIPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <FileText className="size-4 text-[#c9a84c] dark:text-[#e5d9c5]" />
-                <h3 className="font-nevera text-base text-foreground font-normal tracking-wide">
+                <h3 className="font-mono text-sm sm:text-base text-foreground font-semibold tracking-wide">
                   4. Custom Business Directives & Policies
                 </h3>
               </div>
@@ -862,7 +862,7 @@ function AIPage() {
             <div className="rounded-2xl border border-border bg-card p-5 shadow-sm space-y-4">
               <div className="flex items-center gap-2">
                 <BrainCircuit className="size-4 text-[#c9a84c] dark:text-[#e5d9c5]" />
-                <h3 className="font-nevera text-sm text-foreground font-normal tracking-wide">
+                <h3 className="font-mono text-sm text-foreground font-semibold tracking-wide">
                   Active AI Brain Rules
                 </h3>
               </div>
@@ -933,7 +933,7 @@ function AIPage() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Sparkles className="size-4 text-[#c9a84c] dark:text-[#e5d9c5]" />
-                  <h3 className="font-nevera text-sm text-foreground font-normal tracking-wide">
+                  <h3 className="font-mono text-sm text-foreground font-semibold tracking-wide">
                     Live Deal Intelligence & Memory
                   </h3>
                 </div>
@@ -1176,7 +1176,7 @@ function AIPage() {
         <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
           <div className="p-5 border-b border-border flex items-center justify-between">
             <div>
-              <h3 className="font-nevera text-base text-foreground font-normal tracking-wide">
+              <h3 className="font-mono text-sm sm:text-base text-foreground font-semibold tracking-wide">
                 Live AI Conversation Audit History
               </h3>
               <p className="text-xs text-muted-foreground mt-0.5">
