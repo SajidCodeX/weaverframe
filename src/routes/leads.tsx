@@ -1653,7 +1653,7 @@ const KANBAN_COLUMNS = [
   {
     id: 'new',
     label: 'New Leads',
-    stages: ['New'],
+    stages: ['New', 'new', 'Unassigned', 'pending'],
     icon: '📥',
     accent: 'border-t-slate-500',
     headerBg: 'bg-slate-500/10',
@@ -1664,7 +1664,7 @@ const KANBAN_COLUMNS = [
   {
     id: 'outreach',
     label: 'Outreach Sent',
-    stages: ['Emailed'],
+    stages: ['Emailed', 'Outreach', 'contacted', 'Builder Notified', 'Sent'],
     icon: '📧',
     accent: 'border-t-blue-500',
     headerBg: 'bg-blue-500/10',
@@ -1675,7 +1675,7 @@ const KANBAN_COLUMNS = [
   {
     id: 'engaged',
     label: 'Engaged',
-    stages: ['Opened', 'Replied'],
+    stages: ['Opened', 'Replied', 'engaged', 'Nurturing', 'In Progress'],
     icon: '💬',
     accent: 'border-t-amber-500',
     headerBg: 'bg-amber-500/10',
@@ -1686,7 +1686,7 @@ const KANBAN_COLUMNS = [
   {
     id: 'qualified',
     label: 'Qualified (Hot)',
-    stages: ['Qualified', 'Closed Won'],
+    stages: ['Qualified', 'Appointment', 'Scheduled', 'Closed Won', 'Hot', 'Won'],
     icon: '⭐',
     accent: 'border-t-green-500',
     headerBg: 'bg-green-500/10',

@@ -461,8 +461,12 @@ export const sendAdminDemoDirectEmail = createServerFn({ method: 'POST' })
     await sendOutboundEmail({
       to: data.recipientEmail,
       subject: data.subject || "WeaverFrame — Executive Demonstration Follow-up",
-      html: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #111; max-width: 600px; margin: 0 auto; padding: 24px; background: #ffffff; border-radius: 8px; border: 1px solid #eaeaea;">
-        <p style="font-size: 15px; color: #222; margin-bottom: 20px;">${data.message.replace(/\n/g, '<br/>')}</p>
+      html: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #111; max-width: 600px; margin: 0 auto; padding: 24px; background: #ffffff; border-radius: 12px; border: 1px solid #eaeaea; box-shadow: 0 4px 16px rgba(0,0,0,0.04);">
+        <div style="padding-bottom: 16px; margin-bottom: 20px; border-bottom: 1px solid #eaeaea; display: flex; align-items: center; gap: 12px;">
+          <img src="cid:weaverframe-logo" alt="WeaverFrame" width="36" height="36" style="border-radius: 8px; border: 1px solid #eaeaea; background: #0a0a0c; vertical-align: middle;" />
+          <span style="font-size: 15px; font-weight: 700; color: #111; vertical-align: middle; margin-left: 10px;">WeaverFrame Executive Advisory</span>
+        </div>
+        <p style="font-size: 15px; color: #222; margin-bottom: 20px; line-height: 1.65;">${data.message.replace(/\n/g, '<br/>')}</p>
         <hr style="border: none; border-top: 1px solid #eaeaea; margin: 30px 0 20px 0;" />
         <p style="font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1px; font-weight: 600;">WeaverFrame Executive Advisory · Private AI Infrastructure</p>
       </div>`,
@@ -731,10 +735,14 @@ export const sendAdminMessage = createServerFn({ method: 'POST' })
         await sendOutboundEmail({
           to: lead.email,
           subject: "WeaverFrame — Executive Communications",
-          html: `<div style="font-family: Arial, sans-serif; line-height: 1.6; color: #111;">
-            <p>${data.content.replace(/\n/g, '<br/>')}</p>
+          html: `<div style="font-family: Arial, sans-serif; line-height: 1.6; color: #111; max-width: 600px; padding: 24px; background: #ffffff; border-radius: 12px; border: 1px solid #eaeaea; box-shadow: 0 4px 16px rgba(0,0,0,0.04);">
+            <div style="padding-bottom: 14px; margin-bottom: 18px; border-bottom: 1px solid #eaeaea; display: flex; align-items: center; gap: 10px;">
+              <img src="cid:weaverframe-logo" alt="WeaverFrame" width="32" height="32" style="border-radius: 6px; border: 1px solid #eaeaea; background: #0a0a0c; vertical-align: middle;" />
+              <span style="font-size: 14px; font-weight: 700; color: #111; vertical-align: middle; margin-left: 8px;">WeaverFrame Executive Advisory</span>
+            </div>
+            <p style="font-size: 15px; color: #222; margin-bottom: 20px; line-height: 1.65;">${data.content.replace(/\n/g, '<br/>')}</p>
             <hr style="border: none; border-top: 1px solid #eaeaea; margin: 24px 0;" />
-            <p style="font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1px;">WeaverFrame Executive Advisory · Private AI Infrastructure</p>
+            <p style="font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1px; font-weight: 600;">WeaverFrame Executive Advisory · Private AI Infrastructure</p>
           </div>`,
           text: data.content,
           from: 'WeaverFrame Executive Advisory <advisory@weaverframe.com>',
@@ -789,10 +797,14 @@ export const createAdminConversation = createServerFn({ method: 'POST' })
           await sendOutboundEmail({
             to: lead.email,
             subject: "WeaverFrame — Executive Communications",
-            html: `<div style="font-family: Arial, sans-serif; line-height: 1.6; color: #111;">
-              <p>${data.initialMessage.trim().replace(/\n/g, '<br/>')}</p>
+            html: `<div style="font-family: Arial, sans-serif; line-height: 1.6; color: #111; max-width: 600px; padding: 24px; background: #ffffff; border-radius: 12px; border: 1px solid #eaeaea; box-shadow: 0 4px 16px rgba(0,0,0,0.04);">
+              <div style="padding-bottom: 14px; margin-bottom: 18px; border-bottom: 1px solid #eaeaea; display: flex; align-items: center; gap: 10px;">
+                <img src="cid:weaverframe-logo" alt="WeaverFrame" width="32" height="32" style="border-radius: 6px; border: 1px solid #eaeaea; background: #0a0a0c; vertical-align: middle;" />
+                <span style="font-size: 14px; font-weight: 700; color: #111; vertical-align: middle; margin-left: 8px;">WeaverFrame Executive Advisory</span>
+              </div>
+              <p style="font-size: 15px; color: #222; margin-bottom: 20px; line-height: 1.65;">${data.initialMessage.trim().replace(/\n/g, '<br/>')}</p>
               <hr style="border: none; border-top: 1px solid #eaeaea; margin: 24px 0;" />
-              <p style="font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1px;">WeaverFrame Executive Advisory · Private AI Infrastructure</p>
+              <p style="font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1px; font-weight: 600;">WeaverFrame Executive Advisory · Private AI Infrastructure</p>
             </div>`,
             text: data.initialMessage.trim(),
             from: 'WeaverFrame Executive Advisory <advisory@weaverframe.com>',

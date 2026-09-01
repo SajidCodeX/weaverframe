@@ -1709,11 +1709,15 @@ Do not output any markdown formatting or text outside the raw JSON object.`;
   };
 
   // Determine DB status & tier
-  let dbStatus = "Replied";
+  let dbStatus = "Emailed";
   let dbScoreTier = "Warm";
   let activityText = "";
 
-  if (intent === 'HOT') {
+  if (bookingDetails && bookingDetails.isoDateTime) {
+    dbStatus = "Appointment";
+    dbScoreTier = "Hot";
+    activityText = `📅 AI Concierge scheduled an appointment with ${leadName}.`;
+  } else if (intent === 'HOT') {
     dbStatus = "Qualified";
     dbScoreTier = "Hot";
     activityText = `🟢 AI Sales Engine marked Lead as Hot (${dealScore}/100) — High buyer readiness.`;
@@ -1722,9 +1726,10 @@ Do not output any markdown formatting or text outside the raw JSON object.`;
     dbScoreTier = "Cold";
     activityText = `🔴 AI Sales Engine marked Lead as Cold (${dealScore}/100) — Disqualified or competitor chosen.`;
   } else {
-    dbStatus = "Appointment";
+    const hasLeadReplied = chatHistory && chatHistory.some(m => m.role === 'user' && m.content && m.content !== userMessage);
+    dbStatus = hasLeadReplied ? "Replied" : "Emailed";
     dbScoreTier = "Warm";
-    activityText = `🟡 AI Sales Engine marked Lead as Warm (${dealScore}/100) — Nurturing in progress.`;
+    activityText = `🟡 AI Sales Engine marked Lead as Warm (${dealScore}/100) — ${hasLeadReplied ? 'Engaged' : 'Outreach sent'}.`;
   }
 
   // Save changes to database

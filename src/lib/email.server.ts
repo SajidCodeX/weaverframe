@@ -89,13 +89,33 @@ export async function sendOutboundEmail(options: SendEmailOptions): Promise<Emai
         }
       }
 
-      const mailOptions = {
+      // Automatically attach brand logo as CID inline attachment if referenced in HTML
+      const attachments: any[] = [];
+      if (options.html && options.html.includes('cid:weaverframe-logo')) {
+        try {
+          const path = await import('path');
+          const fs = await import('fs');
+          const logoPath = path.join(process.cwd(), 'public', 'weaverframe-mark-transparent.png');
+          if (fs.existsSync(logoPath)) {
+            attachments.push({
+              filename: 'weaverframe-mark-transparent.png',
+              path: logoPath,
+              cid: 'weaverframe-logo',
+            });
+          }
+        } catch (e) {
+          console.warn('[EMAIL ATTACHMENT WARNING]:', e);
+        }
+      }
+
+      const mailOptions: any = {
         from: `"${senderDisplayName}" <${smtpUser.trim()}>`,
         to: recipient.join(', '),
         subject: options.subject,
         html: options.html,
         text: options.text,
         replyTo: options.replyTo || smtpUser.trim(),
+        attachments: attachments.length > 0 ? attachments : undefined,
       };
 
       // Absolute 12s timeout — prevents indefinite hang when SMTP server is reachable but unresponsive
@@ -236,12 +256,15 @@ export function buildArchitecturalEmailHtml({
           
           <!-- Header Banner -->
           <tr>
-            <td style="padding: 26px 32px; background-color: #0f172a; border-bottom: 2px solid #c9a84c;">
+            <td style="padding: 24px 32px; background-color: #0f172a; border-bottom: 2px solid #e5d9c5;">
               <table width="100%" border="0" cellspacing="0" cellpadding="0">
                 <tr>
-                  <td>
-                    <h1 style="margin: 0; color: #ffffff; font-size: 19px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;">${companyName}</h1>
-                    <p style="margin: 4px 0 0 0; color: #94a3b8; font-size: 11px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; text-transform: uppercase; letter-spacing: 1.2px;">Architectural Consultation & Custom Builds</p>
+                  <td width="48" valign="middle" style="padding-right: 14px;">
+                    <img src="cid:weaverframe-logo" alt="${companyName}" width="40" height="40" style="display: block; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); background-color: rgba(255,255,255,0.05);" />
+                  </td>
+                  <td valign="middle">
+                    <h1 style="margin: 0; color: #ffffff; font-size: 18px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;">${companyName}</h1>
+                    <p style="margin: 3px 0 0 0; color: #94a3b8; font-size: 11px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; text-transform: uppercase; letter-spacing: 1.2px;">Architectural Consultation & Custom Builds</p>
                   </td>
                 </tr>
               </table>
@@ -335,12 +358,15 @@ export function buildAdminDemoNotificationHtml({
           
           <!-- Header Banner -->
           <tr>
-            <td style="padding: 28px 36px; background-color: #12131a; border-bottom: 2px solid #c9a84c;">
+            <td style="padding: 26px 36px; background-color: #12131a; border-bottom: 2px solid #e5d9c5;">
               <table width="100%" border="0" cellspacing="0" cellpadding="0">
                 <tr>
-                  <td>
-                    <span style="display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: #c9a84c; font-family: monospace;">NEW PROSPECT INQUIRY</span>
-                    <h1 style="margin: 6px 0 0 0; color: #ffffff; font-size: 20px; font-weight: 700; letter-spacing: 0.5px;">🚀 Private Demo Walkthrough Requested</h1>
+                  <td width="48" valign="middle" style="padding-right: 14px;">
+                    <img src="cid:weaverframe-logo" alt="WeaverFrame" width="40" height="40" style="display: block; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); background-color: rgba(255,255,255,0.05);" />
+                  </td>
+                  <td valign="middle">
+                    <span style="display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: #e5d9c5; font-family: monospace;">NEW PROSPECT INQUIRY</span>
+                    <h1 style="margin: 4px 0 0 0; color: #ffffff; font-size: 19px; font-weight: 700; letter-spacing: 0.5px;">🚀 Private Demo Walkthrough Requested</h1>
                   </td>
                 </tr>
               </table>
@@ -440,12 +466,15 @@ export function buildUserDemoConfirmationHtml({
           
           <!-- Header Banner -->
           <tr>
-            <td style="padding: 32px 36px; background-color: #12131a; border-bottom: 2px solid #e5d9c5;">
+            <td style="padding: 28px 36px; background-color: #12131a; border-bottom: 2px solid #e5d9c5;">
               <table width="100%" border="0" cellspacing="0" cellpadding="0">
                 <tr>
-                  <td>
+                  <td width="52" valign="middle" style="padding-right: 16px;">
+                    <img src="cid:weaverframe-logo" alt="WeaverFrame" width="44" height="44" style="display: block; border-radius: 10px; border: 1px solid rgba(255,255,255,0.15); background-color: rgba(255,255,255,0.05);" />
+                  </td>
+                  <td valign="middle">
                     <span style="display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase; color: #e5d9c5; font-family: monospace;">WHITE-GLOVE ONBOARDING</span>
-                    <h1 style="margin: 6px 0 0 0; color: #ffffff; font-size: 22px; font-weight: 600; letter-spacing: 0.5px;">WeaverFrame Demonstration Request</h1>
+                    <h1 style="margin: 4px 0 0 0; color: #ffffff; font-size: 21px; font-weight: 600; letter-spacing: 0.5px;">WeaverFrame Demonstration Request</h1>
                   </td>
                 </tr>
               </table>
