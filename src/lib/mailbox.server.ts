@@ -163,8 +163,9 @@ export async function syncInboundMailbox(builderId?: string, force = false): Pro
           }
 
           const matchedLead = leadEmailMap.get(fromAddress)!;
-          const parsed = await simpleParser(message.source);
-          const rawBody = parsed.text || '';
+          if (!message.source) continue;
+          const parsed = (await simpleParser(message.source as any)) as any;
+          const rawBody = parsed?.text || '';
           const cleanBody = stripEmailQuotedHistory(rawBody);
 
           if (!cleanBody || cleanBody.length === 0) {

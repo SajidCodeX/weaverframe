@@ -389,7 +389,8 @@ export async function createHighAlertNotification({
   type?: 'hot_lead' | 'booking' | 'urgent_inquiry';
 }) {
   try {
-    const { db } = await import('./db');
+    const { getDb } = await import('./db');
+    const db = await getDb();
     await db.activity.create({
       data: {
         builderId,
@@ -3923,7 +3924,8 @@ export const submitDemoRequest = createServerFn({ method: 'POST' })
       return {
         success: true,
         message: 'Your demonstration request has been received. Our executive advisor will reach out shortly.',
-        leadId,
+        demoId,
+        leadId: demoId,
       };
     } catch (error: any) {
       console.error('[DEMO REQUEST ERROR]:', error);

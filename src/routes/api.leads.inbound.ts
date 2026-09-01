@@ -87,8 +87,10 @@ export const handleInboundLead = createServerFn({ method: 'POST' })
       }
     }
 
-    const { db } = await import('@/lib/db');
-    const { invalidateCache, triggerAutonomousAiOutreach } = await import('@/lib/dashboard');
+    const { getDb } = await import('@/lib/db');
+    const db = await getDb();
+    const { invalidateCache } = await import('@/lib/cache');
+    const { triggerAutonomousAiOutreach } = await import('@/lib/dashboard');
 
     try {
       // 1. Determine target builder

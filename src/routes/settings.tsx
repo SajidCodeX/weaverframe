@@ -84,6 +84,7 @@ const sections = [
   "Integrations",
   "Billing",
   "Appearance",
+  "About",
   // "Blocked Users"
 ] as const;
 
@@ -2136,6 +2137,131 @@ function SettingsPage() {
                       )}
                     </tbody>
                   </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {active === "About" && (
+            <div className="space-y-6">
+              <div>
+                <H>About WeaverFrame</H>
+                <p className="text-xs text-muted-foreground mt-2">
+                  System architecture, telemetry, and platform specifications.
+                </p>
+              </div>
+
+              {/* Brand & Version Hero Card */}
+              <div className="relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-[#121214] via-[#09090b] to-[#040405] p-6 shadow-xl">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3.5">
+                    <div className="size-12 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center p-2 shadow-inner">
+                      <img src="/weaverframe-mark-transparent.png" alt="WeaverFrame" className="size-full object-contain" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-nevera text-lg text-white font-normal tracking-wide">
+                          WeaverFrame™
+                        </h3>
+                        <span className="px-2 py-0.5 text-[10px] font-mono font-semibold tracking-wider uppercase rounded-full bg-[#e5d9c5]/15 border border-[#e5d9c5]/30 text-[#e5d9c5]">
+                          v1.0.0.0 Stable
+                        </span>
+                      </div>
+                      <p className="text-xs text-white/50 mt-0.5">
+                        Autonomous AI Sales OS for Custom Builders & Architectural Firms
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 self-start sm:self-center">
+                    <span className="flex size-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className="text-[11px] font-mono uppercase tracking-wider text-emerald-400 font-semibold">
+                      Production Live
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-5 border-t border-white/10 text-center">
+                  <div className="p-2.5 rounded-lg bg-white/[0.02] border border-white/5">
+                    <div className="text-[10px] font-mono text-white/40 uppercase tracking-wider">Release Version</div>
+                    <div className="text-xs font-mono font-bold text-white mt-1">1.0.0.0</div>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-white/[0.02] border border-white/5">
+                    <div className="text-[10px] font-mono text-white/40 uppercase tracking-wider">Channel</div>
+                    <div className="text-xs font-mono font-bold text-[#e5d9c5] mt-1">Initial Release</div>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-white/[0.02] border border-white/5">
+                    <div className="text-[10px] font-mono text-white/40 uppercase tracking-wider">Environment</div>
+                    <div className="text-xs font-mono font-bold text-white mt-1">Enterprise Cloud</div>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-white/[0.02] border border-white/5">
+                    <div className="text-[10px] font-mono text-white/40 uppercase tracking-wider">Security Engine</div>
+                    <div className="text-xs font-mono font-bold text-white mt-1">AES-256-GCM</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Core System Capabilities */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-mono uppercase tracking-wider text-white/60">
+                  Core Platform Capabilities
+                </h4>
+                <div className="grid gap-2.5">
+                  <div className="p-3.5 rounded-lg bg-secondary/30 border border-border flex items-start gap-3">
+                    <Sparkles className="size-4 text-[#e5d9c5] shrink-0 mt-0.5" />
+                    <div>
+                      <div className="text-xs font-semibold text-foreground">24/7 Autonomous AI Lead Concierge</div>
+                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                        Instant qualification of inbound prospects, real-time 0–100 buyer readiness scoring, and automated personalized architectural email engagement.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 rounded-lg bg-secondary/30 border border-border flex items-start gap-3">
+                    <Zap className="size-4 text-[#e5d9c5] shrink-0 mt-0.5" />
+                    <div>
+                      <div className="text-xs font-semibold text-foreground">Persistent Structured Memory Graph</div>
+                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                        Continuous contextual extraction of construction budget, timeline, lot acquisition status, and custom home style requirements.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 rounded-lg bg-secondary/30 border border-border flex items-start gap-3">
+                    <Mail className="size-4 text-[#e5d9c5] shrink-0 mt-0.5" />
+                    <div>
+                      <div className="text-xs font-semibold text-foreground">2-Way Mailbox Synchronization & Dispatch</div>
+                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                        Direct SMTP outbound email transmission paired with IMAP inbound listener, stripping quote headers and keeping threads fully synchronized.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 rounded-lg bg-secondary/30 border border-border flex items-start gap-3">
+                    <ShieldCheck className="size-4 text-[#e5d9c5] shrink-0 mt-0.5" />
+                    <div>
+                      <div className="text-xs font-semibold text-foreground">Enterprise Multi-Tenant Data Isolation</div>
+                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                        Row-level security enforcement with strict tenant query scoping, preventing any cross-tenant data access or lead leakage.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Official Licensing & Support */}
+              <div className="pt-3 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-muted-foreground">
+                <div>
+                  © 2026 WeaverFrame Technologies. All rights reserved.
+                </div>
+                <div className="flex items-center gap-4">
+                  <a href="mailto:support@weaverframe.in" className="hover:text-[#e5d9c5] transition-colors">
+                    support@weaverframe.in
+                  </a>
+                  <span>·</span>
+                  <a href="https://weaverframe.in" target="_blank" rel="noopener noreferrer" className="hover:text-[#e5d9c5] transition-colors flex items-center gap-1">
+                    weaverframe.in <ExternalLink className="size-3" />
+                  </a>
                 </div>
               </div>
             </div>

@@ -92,3 +92,21 @@ export const warmDb = async (): Promise<void> => {
   }
 }
 
+// Transparent safety proxy so any legacy or dynamic `import { db }` continues to work
+export const db: any = new Proxy({} as any, {
+  get(_target, prop) {
+    if (globalForPrisma.prisma) {
+      return (globalForPrisma.prisma as any)[prop];
+    }
+    return new Proxy(() => {}, {
+      get(_subTarget, subProp) {
+        return async (...args: any[]) => {
+          const client = await getDb();
+          return client[prop][subProp](...args);
+        };
+      }
+    });
+  }
+});
+
+

@@ -6,7 +6,8 @@ const handleCronLogic = createServerFn({ method: 'GET' })
     // Basic security: require a Bearer token matching RENCAST_API_KEY
     const request = (ctx as any).request as Request;
     const authHeader = request?.headers?.get('Authorization');
-    if (authHeader !== `Bearer ${process.env.RENCAST_API_KEY}`) {
+    const apiKey = process.env.RENCAST_API_KEY;
+    if (!apiKey || authHeader !== `Bearer ${apiKey}`) {
       return { isResponse: true, status: 401, body: 'Unauthorized' };
     }
 

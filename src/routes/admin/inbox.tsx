@@ -227,7 +227,7 @@ function AdminInboxPage() {
   }, [conversations, searchQuery, activeTab]);
 
   return (
-    <Shell noPadding>
+    <Shell title="Super Admin Inbox" noPadding>
       <div className="flex h-[calc(100vh-3.5rem)] w-full overflow-hidden bg-[#060608]">
         
         {/* ════════════════════════════════════════════════════════════════
