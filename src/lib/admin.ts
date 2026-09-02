@@ -753,7 +753,21 @@ export const sendAdminMessage = createServerFn({ method: 'POST' })
       }
     }
 
-    return { success: true, userMessage: userMsg };
+    // Cancel pending delayed AI reply and auto-mute AI for this lead
+    let aiAutoMuted = false;
+    try {
+      const { cancelPendingAiReply } = await import('./ai-queue.server');
+      cancelPendingAiReply(data.leadId, 'Human admin manual message sent');
+      const { readSettingJson, writeSettingJson } = await import('./dashboard');
+      const toggleMap = await readSettingJson('ai_toggle_map');
+      if (toggleMap && toggleMap[data.leadId] !== false) {
+        aiAutoMuted = true;
+        toggleMap[data.leadId] = false;
+        await writeSettingJson('ai_toggle_map', toggleMap);
+      }
+    } catch {}
+
+    return { success: true, userMessage: userMsg, aiAutoMuted, leadName: lead.name };
   });
 
 export const createAdminConversation = createServerFn({ method: 'POST' })

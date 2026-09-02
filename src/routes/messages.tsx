@@ -1,4 +1,4 @@
-import { createFileRoute, useLoaderData, useRouter, useRouteContext } from "@tanstack/react-router";
+import { createFileRoute, useLoaderData, useRouter, useRouteContext, useLocation } from "@tanstack/react-router";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { Shell } from "@/components/dashboard/Shell";
 import { RoutePending } from "@/components/dashboard/RoutePending";
@@ -167,6 +167,18 @@ function FormattedSummary({ text }: { text: string }) {
 
 function MessagesPage() {
   const router = useRouter();
+  const location = useLocation();
+  const queryLeadId = useMemo(() => {
+    if (typeof window === 'undefined') return undefined;
+    const fromSearchObj = (location.search as any)?.leadId;
+    if (typeof fromSearchObj === 'string' && fromSearchObj) return fromSearchObj;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('leadId') || undefined;
+    } catch {
+      return undefined;
+    }
+  }, [location.search]);
   const loaderData = (useLoaderData({ from: "/messages" }) || {}) as any;
   const initialConversations = loaderData?.conversations || [];
   const initialAiToggleMap = loaderData?.aiToggleMap || {};
@@ -191,8 +203,41 @@ function MessagesPage() {
   }, [router]);
 
   // Track selected lead & active conversation
-  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(queryLeadId || null);
   const [activeChat, setActiveChat] = useState<{ lead: any; messages: any[] } | null>(null);
+
+  // Sync with search param changes (e.g. from Slack notification click)
+  useEffect(() => {
+    if (queryLeadId && queryLeadId !== selectedLeadId) {
+      setSelectedLeadId(queryLeadId);
+      setIsLoadingChat(true);
+    }
+  }, [queryLeadId]);
+
+  // Listen to custom event for instantaneous lead selection
+  useEffect(() => {
+    const handleSelectLead = (e: any) => {
+      const targetId = e.detail?.leadId;
+      if (targetId) {
+        setSelectedLeadId(targetId);
+        setIsLoadingChat(true);
+      }
+    };
+    window.addEventListener('weaver_select_lead', handleSelectLead);
+    return () => window.removeEventListener('weaver_select_lead', handleSelectLead);
+  }, []);
+
+  // Broadcast active lead ID so GlobalMessageNotifier suppresses toasts for the open chat
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent('weaver_active_lead_changed', { detail: { leadId: selectedLeadId } }));
+    }
+    return () => {
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent('weaver_active_lead_changed', { detail: { leadId: null } }));
+      }
+    };
+  }, [selectedLeadId]);
 
   // Active threads: Leads with actual messages or currently selected
   const activeThreadsList = useMemo(() => {
@@ -466,13 +511,13 @@ function MessagesPage() {
     return palette[Math.abs(hash) % palette.length];
   };
 
-  // Auto-select the first active conversation on initial load if none selected
+  // Auto-select the first active conversation on initial load if none selected and no query param
   useEffect(() => {
-    if (activeThreadsList.length > 0 && !selectedLeadId) {
+    if (activeThreadsList.length > 0 && !selectedLeadId && !queryLeadId) {
       setSelectedLeadId(activeThreadsList[0].leadId);
       setIsLoadingChat(true);
     }
-  }, [activeThreadsList, selectedLeadId]);
+  }, [activeThreadsList, selectedLeadId, queryLeadId]);
 
   const conversationsListRef = useRef(conversationsList);
   useEffect(() => {
@@ -505,8 +550,8 @@ function MessagesPage() {
       }
 
       try {
-        const lead = conversationsListRef.current.find(c => c.leadId === selectedLeadId);
-        const { messages } = await getMessagesForLead({ data: { leadId: selectedLeadId, activeRole } });
+        const { messages, lead: fetchedLead } = await getMessagesForLead({ data: { leadId: selectedLeadId, activeRole } });
+        const lead = conversationsListRef.current.find(c => c.leadId === selectedLeadId) || fetchedLead;
 
         // Update cache
         if (!(window as any)._messagesCache) {
@@ -799,6 +844,18 @@ function MessagesPage() {
           content: originalText
         }
       });
+
+      // If sending a manual message auto-muted the AI, pop up Slack-style card (silent)
+      if ((res as any)?.aiAutoMuted) {
+        window.dispatchEvent(
+          new CustomEvent("weaver_ai_muted", {
+            detail: {
+              leadId: selectedLeadId,
+              leadName: activeChat?.lead?.name || (res as any)?.leadName || "Lead",
+            },
+          })
+        );
+      }
 
       // Update state with actual DB response (replace temp message)
       setActiveChat(prev => {

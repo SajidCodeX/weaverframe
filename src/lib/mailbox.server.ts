@@ -8,15 +8,22 @@ import { simpleParser } from 'mailparser';
 export function stripEmailQuotedHistory(text: string): string {
   if (!text) return '';
 
-  const lines = text.split('\n');
+  // 1. Strip embedded "On <Day>, <Date>..." reply headers anywhere in the body
+  let cleaned = text.replace(/\s*On\s+(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,?\s+[A-Za-z]+\s+\d+[\s\S]*/i, '');
+  cleaned = cleaned.replace(/\s*On\s+[\s\S]+?wrote:[\s\S]*/i, '');
+  cleaned = cleaned.replace(/\s*-{2,}\s*Original Message\s*-{2,}[\s\S]*/i, '');
+  cleaned = cleaned.replace(/\s*_{2,}[\s\S]*/i, '');
+  cleaned = cleaned.replace(/\s*From:\s*.+[\r\n]+Sent:\s*.+[\s\S]*/i, '');
+
+  const lines = cleaned.split('\n');
   const cleanLines: string[] = [];
 
   for (const line of lines) {
     const trimmed = line.trim();
     // Stop at common reply headers
-    if (/^On\s+.+wrote:$/i.test(trimmed)) break;
-    if (/^On\s+.+<.+>\s*wrote:$/i.test(trimmed)) break;
-    if (/^-{2,}\s*Original Message\s*-{2,}/i.test(trimmed)) break;
+    if (/^On\s+.+wrote:?/i.test(trimmed)) break;
+    if (/^On\s+.+<.+>/i.test(trimmed)) break;
+    if (/^-{2,}\s*Original Message/i.test(trimmed)) break;
     if (/^_{2,}/.test(trimmed)) break;
     if (trimmed.startsWith('>')) continue; // skip blockquotes
     cleanLines.push(line);
@@ -25,11 +32,10 @@ export function stripEmailQuotedHistory(text: string): string {
   return cleanLines.join('\n').trim();
 }
 
-// In-memory throttle map: prevents the 2.5s UI poller from hammering IMAP.
-// Minimum 120 seconds (2 min) between real IMAP connections per builder.
-// `force=true` bypasses this (used by the manual "Sync" button only).
+// Fast IMAP sync throttle: checks every 10 seconds (down from 2 minutes)
+// Gives snappy, near real-time email arrival matching Gmail.
 const lastSyncTimeMap = new Map<string, number>();
-const IMAP_THROTTLE_MS = 120_000; // 2 minutes
+const IMAP_THROTTLE_MS = 10_000; // 10 seconds
 
 /**
  * Syncs incoming emails from the Builder's linked Gmail / Google Workspace inbox
@@ -80,34 +86,46 @@ export async function syncInboundMailbox(builderId?: string, force = false): Pro
     if (integration && integration.configSecure) {
       try {
         const { decrypt } = await import('./crypto');
-        const creds = JSON.parse(decrypt(integration.configSecure));
-        emailUser = creds.email || creds.username || '';
-        emailPass = creds.password || '';
-        if (creds.provider === 'custom_smtp' && creds.smtpHost) {
-          emailHost = creds.smtpHost.replace(/^smtp\./i, 'imap.');
+        let raw = integration.configSecure;
+        try {
+          raw = decrypt(integration.configSecure);
+        } catch {
+          // Already plain JSON or raw
         }
+        const config = JSON.parse(raw);
+        emailUser = config.email || config.username || config.user || '';
+        emailPass = config.password || config.pass || '';
+        if (config.provider === 'custom_smtp' && config.smtpHost) {
+          emailHost = config.smtpHost.replace(/^smtp\./i, 'imap.');
+        } else if (config.host) {
+          emailHost = config.host;
+        }
+        if (config.port) emailPort = Number(config.port);
       } catch (e) {
-        console.warn('[IMAP SYNC] Could not decrypt integration credentials, trying fallback:', e);
+        console.warn('[MAILBOX SYNC] Could not parse integration configSecure:', e);
       }
     }
 
-    // Fallback to Environment Variables (SMTP_USER & SMTP_PASS)
-    if (!emailUser || !emailPass || emailPass === '••••••••••••••••') {
-      emailUser = process.env.SMTP_USER || process.env.GMAIL_USER || '';
-      emailPass = process.env.SMTP_PASS || process.env.GMAIL_PASS || '';
+    // Fallback to environment variables if integration table does not have credentials
+    if (!emailUser || !emailPass) {
+      emailUser = process.env.IMAP_USER || process.env.SMTP_USER || '';
+      emailPass = process.env.IMAP_PASS || process.env.SMTP_PASS || '';
+      emailHost = process.env.IMAP_HOST || 'imap.gmail.com';
+      emailPort = Number(process.env.IMAP_PORT) || 993;
     }
 
     if (!emailUser || !emailPass) {
-      return { success: false, synced: 0, error: 'No email credentials configured for mailbox sync.' };
+      return { success: false, synced: 0, error: 'No mailbox credentials configured (IMAP_USER / IMAP_PASS missing).' };
     }
 
-    const cleanPass = emailPass.replace(/\s+/g, '').trim();
+    // Strip any spaces from app password (common copy-paste error with Google 16-character app passwords)
+    const cleanPass = emailPass.replace(/\s+/g, '');
 
-    // 4. Fetch all active Leads for this builder with emails
+    // 4. Fetch all active lead emails for this builder for in-memory O(1) matching
     const leads = await db.lead.findMany({
       where: {
         builderId: targetBuilderId,
-        email: { not: null }
+        email: { not: null },
       },
       select: {
         id: true,
@@ -127,7 +145,7 @@ export async function syncInboundMailbox(builderId?: string, force = false): Pro
       }
     }
 
-    // 5. Connect to IMAP Server
+    // 5. Connect to IMAP Server with fast timeouts
     const client = new ImapFlow({
       host: emailHost,
       port: emailPort,
@@ -137,9 +155,13 @@ export async function syncInboundMailbox(builderId?: string, force = false): Pro
         pass: cleanPass,
       },
       logger: false,
-      connectionTimeout: 30000,
-      greetingTimeout: 30000,
-      socketTimeout: 60000,
+      connectionTimeout: 12000,
+      greetingTimeout: 12000,
+      socketTimeout: 20000,
+    });
+
+    client.on('error', (err: any) => {
+      console.warn('[IMAP CLIENT BACKGROUND ERROR]:', err?.message || err);
     });
 
     await client.connect();
@@ -152,19 +174,30 @@ export async function syncInboundMailbox(builderId?: string, force = false): Pro
       const totalMessages = status.messages || 0;
 
       if (totalMessages > 0) {
-        // Inspect the latest 25 messages in INBOX
-        const startSeq = Math.max(1, totalMessages - 25);
+        // Inspect the latest 15 messages in INBOX
+        const startSeq = Math.max(1, totalMessages - 15);
         const range = `${startSeq}:*`;
 
-        for await (const message of client.fetch(range, { envelope: true, source: true })) {
+        // 1. Ultra-fast header pass: fetch ONLY envelope + uid (0 payload download)
+        const matchedItems: { uid: number; fromAddress: string; matchedLead: any; envelope: any }[] = [];
+        for await (const message of client.fetch(range, { envelope: true, uid: true })) {
           const fromAddress = message.envelope?.from?.[0]?.address?.toLowerCase();
-          if (!fromAddress || !leadEmailMap.has(fromAddress)) {
-            continue;
+          if (fromAddress && leadEmailMap.has(fromAddress)) {
+            matchedItems.push({
+              uid: message.uid,
+              fromAddress,
+              matchedLead: leadEmailMap.get(fromAddress)!,
+              envelope: message.envelope,
+            });
           }
+        }
 
-          const matchedLead = leadEmailMap.get(fromAddress)!;
-          if (!message.source) continue;
-          const parsed = (await simpleParser(message.source as any)) as any;
+        // 2. Fetch full body ONLY for messages from matched leads
+        for (const item of matchedItems) {
+          const fullMsg = await client.fetchOne(String(item.uid), { source: true }, { uid: true });
+          if (!fullMsg || !fullMsg.source) continue;
+
+          const parsed = (await simpleParser(fullMsg.source as any)) as any;
           const rawBody = parsed?.text || '';
           const cleanBody = stripEmailQuotedHistory(rawBody);
 
@@ -172,12 +205,12 @@ export async function syncInboundMailbox(builderId?: string, force = false): Pro
             continue;
           }
 
-          const mailDate = message.envelope?.date || new Date();
+          const mailDate = item.envelope?.date || new Date();
 
           // Deduplication: Check if message content already exists in DB for this lead
           const existing = await db.message.findFirst({
             where: {
-              leadId: matchedLead.id,
+              leadId: item.matchedLead.id,
               sender: 'lead',
               content: cleanBody,
             }
@@ -188,7 +221,7 @@ export async function syncInboundMailbox(builderId?: string, force = false): Pro
             await db.message.create({
               data: {
                 builderId: targetBuilderId,
-                leadId: matchedLead.id,
+                leadId: item.matchedLead.id,
                 sender: 'lead',
                 content: cleanBody,
                 channel: 'portal',
@@ -201,22 +234,29 @@ export async function syncInboundMailbox(builderId?: string, force = false): Pro
             await db.activity.create({
               data: {
                 builderId: targetBuilderId,
-                leadId: matchedLead.id,
-                action: `📬 Inbound Email Reply received from ${matchedLead.name || fromAddress}: "${cleanBody.slice(0, 80)}..."`,
+                leadId: item.matchedLead.id,
+                action: `📬 Inbound Email Reply received from ${item.matchedLead.name || item.fromAddress}: "${cleanBody.slice(0, 80)}..."`,
                 createdAt: mailDate,
               }
             });
 
-            // C. Trigger Autonomous AI Reply
-            const { getAiToggleMap, triggerAutonomousAiOutreach } = await import('./dashboard');
+            // C. Queue Autonomous AI Reply with Human Latency (~3.5 to 4.5 min)
+            const { getAiToggleMap } = await import('./dashboard');
+            const { queueDelayedAiReply } = await import('./ai-queue.server');
             const { invalidateCache } = await import('./cache');
             const aiToggleMap = await getAiToggleMap().catch(() => ({}));
-            const isAiActive = aiToggleMap[matchedLead.id] !== false; // Default active
+            const isAiActive = aiToggleMap[item.matchedLead.id] !== false; // Default active
 
             if (isAiActive) {
-              triggerAutonomousAiOutreach(matchedLead.id, targetBuilderId, cleanBody).catch((err) => {
-                console.error('[IMAP SYNC AI AUTO-REPLY ERROR]:', err);
-              });
+              const queueRes = queueDelayedAiReply(item.matchedLead.id, targetBuilderId, cleanBody);
+              const minutes = (queueRes.delaySeconds / 60).toFixed(1);
+              await db.activity.create({
+                data: {
+                  builderId: targetBuilderId,
+                  leadId: item.matchedLead.id,
+                  action: `⏳ AI response queued (~${minutes} min authentic delay to preserve human trust).`,
+                }
+              }).catch(() => {});
             }
 
             invalidateCache("dashboard_");

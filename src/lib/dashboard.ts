@@ -15,7 +15,7 @@ export const getDashboardData = createServerFn({ method: 'POST' })
   const cached = getCache(cacheKey);
   if (cached) return cached;
 
-  // Pass session in — getTenantDb will skip its own requireAuth() call
+  // Pass session in â€” getTenantDb will skip its own requireAuth() call
   const db = await getTenantDb(session)
   const now = new Date()
   const startOfLast30Days = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
@@ -91,7 +91,7 @@ export const getDashboardData = createServerFn({ method: 'POST' })
     const formatBudgetK = (avgValue: number) => `$${Math.round(avgValue / 1000)}K`
 
     // Sparklines: 7 daily snapshots, each showing cumulative counts per score tier.
-    // Using parallel Prisma groupBy — safe, tenant-scoped via middleware, no raw SQL risk.
+    // Using parallel Prisma groupBy â€” safe, tenant-scoped via middleware, no raw SQL risk.
     const sparklineDates = Array.from({ length: 7 }, (_, i) => {
       const d = new Date()
       d.setDate(d.getDate() - (6 - i))
@@ -174,7 +174,7 @@ export const getDashboardData = createServerFn({ method: 'POST' })
       pipelineValueStr = `$${Math.round(qualifiedSumBudget / 1000)}K`
     }
     const avgBudgetStr = avgBudget >= 1000000 ? `$${(avgBudget / 1000000).toFixed(1)}M` : `$${Math.round(avgBudget / 1000)}K`
-    const pipelineSub = `Avg ${avgBudgetStr} · ${qualifiedLeads} active prospects`
+    const pipelineSub = `Avg ${avgBudgetStr} Â· ${qualifiedLeads} active prospects`
 
     let avgDaysToBook = 14
     if (appointmentsActivities.length > 0) {
@@ -312,7 +312,7 @@ export const getNotificationsData = createServerFn({ method: 'POST' })
           } catch {}
           notifs.push({
             id: `demo_${lead.id}`,
-            title: '🚀 Inbound Demo Request',
+            title: 'ðŸš€ Inbound Demo Request',
             desc: `${lead.name}${comp ? ` (${comp})` : ''} requested a private OS walkthrough.`,
             time: lead.createdAt.toISOString(),
             unread: new Date().getTime() - lead.createdAt.getTime() < 86400000,
@@ -322,7 +322,7 @@ export const getNotificationsData = createServerFn({ method: 'POST' })
         for (const b of recentBuilders) {
           notifs.push({
             id: `builder_${b.id}`,
-            title: '🏢 Builder Account',
+            title: 'ðŸ¢ Builder Account',
             desc: `${b.companyName} is registered on the platform.`,
             time: b.createdAt.toISOString(),
             unread: new Date().getTime() - b.createdAt.getTime() < 86400000,
@@ -346,18 +346,18 @@ export const getNotificationsData = createServerFn({ method: 'POST' })
       });
       return activities.map(act => {
         let title = "Lead Activity";
-        if (act.action.includes("🚨 High Alert")) {
-          title = "🚨 High Priority Alert";
+        if (act.action.includes("ðŸš¨ High Alert")) {
+          title = "ðŸš¨ High Priority Alert";
         } else if (act.action.toLowerCase().includes("schedule") || act.action.toLowerCase().includes("appointment") || act.action.toLowerCase().includes("site visit")) {
-          title = "📅 Meeting Scheduled";
+          title = "ðŸ“… Meeting Scheduled";
         } else if (act.action.toLowerCase().includes("demo") || act.action.toLowerCase().includes("walkthrough")) {
-          title = "🚀 Inbound Demo Request";
+          title = "ðŸš€ Inbound Demo Request";
         } else if (act.action.toLowerCase().includes("hot lead") || act.action.toLowerCase().includes("qualif")) {
-          title = "🔥 Hot Lead";
+          title = "ðŸ”¥ Hot Lead";
         } else if (act.action.toLowerCase().includes("added") || act.action.toLowerCase().includes("manually")) {
-          title = "👤 New Lead Added";
+          title = "ðŸ‘¤ New Lead Added";
         } else if (act.action.toLowerCase().includes("replied") || act.action.toLowerCase().includes("response")) {
-          title = "💬 Lead Replied";
+          title = "ðŸ’¬ Lead Replied";
         }
         return {
           id: act.id,
@@ -395,7 +395,7 @@ export async function createHighAlertNotification({
       data: {
         builderId,
         leadId,
-        action: `🚨 High Alert [${title}]: ${message}`,
+        action: `ðŸš¨ High Alert [${title}]: ${message}`,
       }
     });
     invalidateCache("dashboard_");
@@ -524,13 +524,13 @@ export const addManualLead = createServerFn({ method: 'POST' })
           builderId: session.builderId || '',
           leadId: lead.id,
           leadName: data.name,
-          title: "🔥 High-Priority Hot Lead",
+          title: "ðŸ”¥ High-Priority Hot Lead",
           message: `${data.name} with project budget $${estimatedBudget.toLocaleString()} added from ${source}.`,
           type: "hot_lead"
         });
       }
 
-      // ── Autonomous AI Outreach & Qualification Trigger ──────────────────
+      // â”€â”€ Autonomous AI Outreach & Qualification Trigger â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       if (data.email && data.email.includes('@') && (status === 'New' || status === 'Emailed')) {
         // Run AI outreach in background with safe error handling
         triggerAutonomousAiOutreach(lead.id, session.builderId || '', data.notes).catch((err) => {
@@ -678,8 +678,8 @@ export const sendSmsOutreach = createServerFn({ method: 'POST' })
 
       // Always log the intent as an activity
       const actionText = twilioSent
-        ? `💬 SMS sent to ${lead.name} (${lead.phone || 'no phone'}): "${message.substring(0, 60)}${message.length > 60 ? '...' : ''}"`
-        : `📤 SMS outreach queued for ${lead.name} (${lead.phone || 'no phone'}): "${message.substring(0, 60)}${message.length > 60 ? '...' : ''}"`
+        ? `ðŸ’¬ SMS sent to ${lead.name} (${lead.phone || 'no phone'}): "${message.substring(0, 60)}${message.length > 60 ? '...' : ''}"`
+        : `ðŸ“¤ SMS outreach queued for ${lead.name} (${lead.phone || 'no phone'}): "${message.substring(0, 60)}${message.length > 60 ? '...' : ''}"`
 
       await db.activity.create({
         data: { builderId: session.builderId || '', leadId, action: actionText }
@@ -726,7 +726,7 @@ export const retriggerLeadFlow = createServerFn({ method: 'POST' })
         data: {
           builderId: session.builderId || '',
           leadId,
-          action: `🔄 AI intake flow re-triggered for ${lead.name}. Lead reset to New / Cold for re-qualification.`
+          action: `ðŸ”„ AI intake flow re-triggered for ${lead.name}. Lead reset to New / Cold for re-qualification.`
         }
       })
 
@@ -1060,7 +1060,7 @@ export const getBillingProfile = createServerFn({ method: 'GET' }).handler(async
                     amount: `$${(inv.amount_paid / 100).toFixed(0)}`,
                     status: inv.status === 'paid' ? 'Paid' : inv.status === 'open' ? 'Open' : 'Pending',
                     planName: planInfo.name,
-                    paymentMethod: builder.paymentMethod && builder.paymentMethod !== "None" ? builder.paymentMethod : "Stripe Card (•••• 4242)",
+                    paymentMethod: builder.paymentMethod && builder.paymentMethod !== "None" ? builder.paymentMethod : "Stripe Card (â€¢â€¢â€¢â€¢ 4242)",
                     pdfUrl: inv.invoice_pdf || null,
                   };
                 });
@@ -1089,7 +1089,7 @@ export const getBillingProfile = createServerFn({ method: 'GET' }).handler(async
           amount: planInfo.price,
           status: "Paid",
           planName: planInfo.name,
-          paymentMethod: builder.paymentMethod && builder.paymentMethod !== "None" ? builder.paymentMethod : "Stripe Card (•••• 4242)",
+          paymentMethod: builder.paymentMethod && builder.paymentMethod !== "None" ? builder.paymentMethod : "Stripe Card (â€¢â€¢â€¢â€¢ 4242)",
           pdfUrl: null
         }
       ];
@@ -1145,7 +1145,7 @@ export async function callAiEngine(
 
   // 1. Prioritize Google Gemini Flash if GEMINI_API_KEY is configured
   if (geminiKey && geminiKey.trim() !== "") {
-    const modelsToTry = [geminiModel, "gemini-3.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"].filter((v, i, a) => a.indexOf(v) === i);
+    const modelsToTry = [geminiModel, "gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"].filter((v, i, a) => a.indexOf(v) === i);
     for (const m of modelsToTry) {
       try {
         const res = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
@@ -1240,9 +1240,9 @@ export const generateGroqCompletion = createServerFn({ method: 'POST' })
         reply = "Premium finishes are our signature! We craft custom architectural finishes. I can send you some photos of our recent projects!";
       } else if (lower.includes("script") || lower.includes("message")) {
         reply = JSON.stringify([
-          { t: "Message 1 · Immediate (< 60s)", body: "Hi [Name]! Thanks for connecting. Are you looking to build in the next 6-12 months? Reply YES or NO." },
-          { t: "Message 2 · 2 hours later", body: "Hey [Name], just checking in! Most of our clients prefer custom cabinets over stock options. Do you have a design style you love?" },
-          { t: "Message 3 · 24 hours later", body: "Hi [Name], we can schedule a private tour of our design site this Thursday. Let me know if you would like me to book your spot!" }
+          { t: "Message 1 Â· Immediate (< 60s)", body: "Hi [Name]! Thanks for connecting. Are you looking to build in the next 6-12 months? Reply YES or NO." },
+          { t: "Message 2 Â· 2 hours later", body: "Hey [Name], just checking in! Most of our clients prefer custom cabinets over stock options. Do you have a design style you love?" },
+          { t: "Message 3 Â· 24 hours later", body: "Hi [Name], we can schedule a private tour of our design site this Thursday. Let me know if you would like me to book your spot!" }
         ]);
       }
 
@@ -1327,7 +1327,7 @@ export const updateLeadMemory = createServerFn({ method: 'POST' })
       data: {
         builderId: session.builderId || '',
         leadId: data.leadId,
-        action: `🧠 Lead Memory & Deal Score updated manually by builder team.`
+        action: `ðŸ§  Lead Memory & Deal Score updated manually by builder team.`
       }
     });
 
@@ -1429,26 +1429,47 @@ export async function generateAiReplyCore(
     ? upcomingAppts.map((a: any) => `- ${new Date(a.dateTime).toLocaleString('en-US', { timeZone: timezone, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}: ${a.type} with ${a.lead?.name || 'Client'} (${a.location})`).join('\n')
     : "No upcoming booked meetings currently in calendar.";
 
-  const systemPrompt = `You are ${personaName}, the Senior Architectural Advisor & Concierge representing ${companyName}.
+  const systemPrompt = `You are ${personaName}, the Senior Architectural Advisor representing ${companyName}.
 Your builder principal is ${contactName}.
 
 MISSION & MINDSET:
-- You are a knowledgeable, warm, and highly authentic custom home building advisor.
-- Your objective: Welcome interested homeowner leads, understand their project vision, and help guide qualified buyers toward an initial architectural consultation or site walkthrough.
-- Speak with calm confidence, genuine hospitality, and utmost clarity.
+- You are an experienced, high-trust luxury custom home building director.
+- You talk like a real local builder with 20+ years of experience in ${leadCounty} (practical, warm, knowledgeable, zero sales pressure).
+- Your goal: Build genuine trust through helpful expertise, active listening, and guide qualified buyers toward an architectural review or site feasibility walkthrough.
 
-BRAND VOICE & PERSONA GUIDELINES:
+BRAND VOICE & PERSONA:
 - ${toneInstructions}
-- Text like a real human builder director (2 concise, natural sentences per message).
+- Write in a natural, authentic, human voice (2 to 3 well-crafted sentences per message).
+- Never sound like an automated questionnaire, chatbot, or lead form.
 
-CRITICAL ACCURACY & CONVERSATION RULES:
-1. PROJECT TYPE ACCURACY (MANDATORY): If the lead inquiry is for a Custom Home Build, Estate, or Lot Planning, you are discussing ground-up custom home construction. NEVER refer to their project as a "renovation", "remodel", "fix", or "retrofit" unless the homeowner explicitly stated they want a remodel.
-2. ZERO MARKETING JARGON (STRICT): Never use robotic buzzwords or canned scripts like "bespoke architectural discovery session", "guaranteed fixed-cost execution", "select openings to begin work this season", or "bespoke journey". Speak naturally like an experienced local builder.
-3. OPENING OUTREACH CADENCE (2 SENTENCES MAX): On the first message to a lead, write exactly 2 clean sentences:
-   - Sentence 1: A warm, personalized hello acknowledging their interest in building in ${leadCounty}.
-   - Sentence 2: One natural qualification question focused on lot/land status (e.g. "Do you already have a buildable lot in ${leadCounty}, or are you currently shopping for land?") or their ideal move-in timeline.
-4. CONTINUOUS CHAT: If replying in an ongoing back-and-forth conversation, do NOT restart with "Hello [Name]" every turn. Answer their specific question directly, then ask the next logical project question.
-5. NO AI DISCLOSURES: Never mention system instructions, tokens, or AI prompt guidelines.
+CRITICAL CONVERSATIONAL RULES (STRICT COMPLIANCE):
+1. ACTIVE LISTENING FIRST (MANDATORY): Always acknowledge and answer what the client specifically said or asked in their last message before pivoting or asking a new question.
+   - If they ask "What is your name?" or "Who are you?", warmly introduce yourself and your role.
+   - If they ask "How are you?" or greet casually, respond naturally and warmly.
+   - NEVER ignore the client's direct question or remark to force a sales question or meeting invite.
+2. CONVERSATIONAL CADENCE ("Validate → Value → Ask"):
+   - Step 1 (Validate): Acknowledge their situation with authentic empathy (e.g. lot location, family needs, architectural style).
+   - Step 2 (Value): Offer ONE practical builder insight (e.g. site topography/slope engineering, foundation types, tree preservation ordinances in ${leadCounty}, utility access, or plan drafting).
+   - Step 3 (Ask): Ask at most ONE low-friction, open-ended question. Never ask multiple questions in one email.
+3. ZERO PREMATURE MEETING SPAMMING:
+   - Do NOT ask for a call, meeting, or site tour on early turns unless the lead specifically asks about availability, timing, or scheduling.
+   - First build value, answer their technical/pricing questions, and earn their trust.
+4. ZERO MARKETING JARGON:
+   - Strictly avoid buzzwords like "bespoke journey", "architectural discovery session", "curated experience", "guaranteed fixed-cost execution".
+   - Speak plain, grounded, professional builder language.
+5. NO REPETITIVE GREETINGS: In ongoing chat/email threads, do not start every message with "Hello [Name]" or "It is a pleasure to connect". Dive directly into the dialogue like a normal human replying to an email.
+
+OBJECTION & INQUIRY PLAYBOOKS:
+1. "JUST BROWSING / EARLY STAGES / NOT READY":
+   - Disarm with zero sales pressure: "No pressure at all! Custom builds usually take 1 to 2 years of dreaming and site scouting. Feel free to use me as a sounding board whenever you have questions about floor plans, lot slopes, or county permits."
+2. "PRICING / COST PER SQ FT":
+   - Be transparent and explain reality: "In custom builds across ${leadCounty}, square foot pricing varies widely depending on lot topography, slope engineering, and finish specs. Our custom homes typically start around ${minBudget} for ground-up bespoke construction. Does that investment range align with what you had in mind?"
+3. "ALREADY WORKING WITH AN ARCHITECT / BUILDER":
+   - Be gracious and professional: "That's fantastic! Having architectural drafts underway is a huge milestone. If you ever need a builder's constructability review or preliminary engineering budget check, we're always happy to offer a second set of eyes."
+4. "ARE YOU AN AI / BOT?":
+   - Be disarmingly honest and transparent: "I'm the AI assistant for ${companyName}'s executive team to make sure inquiries get fast, thoughtful answers, but our principal builder ${contactName} reviews every project detail personally. Would you like me to have ${contactName} connect with you directly?"
+5. "LOT / SITE FEASIBILITY":
+   - Reassure engineering competence: "Lot feasibility—especially soil testing, slope setbacks, and utility hookups—is where most critical planning happens before drawing blueprints. We walk sites with clients before finalizing design."
 
 QUALIFICATION STANDARDS:
 - Minimum Construction Budget: ${minBudget}
@@ -1460,13 +1481,6 @@ CUSTOM BUILDER DIRECTIVES & POLICIES (HIGHEST PRIORITY - STRICT ADHERENCE REQUIR
 The builder has configured the following custom directives, warranties, and business policies. You MUST honor every rule and incorporate these specific details into your advice and answers:
 ${customDirectives}
 ` : ''}
-OBJECTION HANDLING:
-1. "PRICING / BUDGET QUESTIONS":
-   - Be transparent: "Our custom estates in ${leadCounty} typically start around ${minBudget}, with full fixed-price scope transparency and high-end architectural craftsmanship. Does that range align with your vision?"
-2. "LAND / LOT QUESTIONS":
-   - Reassure feasibility: "We provide complete lot feasibility and topography assessments to ensure your site is ideal before finalizing architectural drafts."
-3. "READY TO PROCEED / VISIT":
-   - Offer a low-friction consultation: "We'd love to host you at our studio or meet at your site to review your layout ideas. What day this week works best for a quick chat?"
 
 CURRENT LEAD CONTEXT:
 - Client Name: ${leadName}
@@ -1484,7 +1498,7 @@ ${apptScheduleStr}
 STRUCTURED OUTPUT FORMAT:
 You must respond strictly with a valid JSON object matching this schema:
 {
-  "replyText": string, // Natural, authentic message (2 concise sentences max)
+  "replyText": string, // Natural, authentic message (2 to 3 concise, warm sentences max)
   "intent": "HOT" | "WARM" | "COLD", // HOT: ready to build/meet, WARM: researching/interested, COLD: not interested/disqualified
   "dealScore": number, // 0 to 100 buyer readiness score based on budget, land ownership, timeline, and engagement
   "dealSummary": string, // 1-sentence executive summary of the lead's current readiness state
@@ -1532,7 +1546,7 @@ Do not output any markdown formatting or text outside the raw JSON object.`;
 
   if (hasKeys) {
     try {
-      rawResponse = await callAiEngine(formattedMessages, { isJson: true, maxTokens: 1200, temperature: 0.1 });
+      rawResponse = await callAiEngine(formattedMessages, { isJson: true, maxTokens: 1200, temperature: 0.45 });
     } catch (aiError) {
       console.error("AI API error in generateAiReplyCore:", aiError);
       throw aiError;
@@ -1716,20 +1730,20 @@ Do not output any markdown formatting or text outside the raw JSON object.`;
   if (bookingDetails && bookingDetails.isoDateTime) {
     dbStatus = "Appointment";
     dbScoreTier = "Hot";
-    activityText = `📅 AI Concierge scheduled an appointment with ${leadName}.`;
+    activityText = `ðŸ“… AI Concierge scheduled an appointment with ${leadName}.`;
   } else if (intent === 'HOT') {
     dbStatus = "Qualified";
     dbScoreTier = "Hot";
-    activityText = `🟢 AI Sales Engine marked Lead as Hot (${dealScore}/100) — High buyer readiness.`;
+    activityText = `ðŸŸ¢ AI Sales Engine marked Lead as Hot (${dealScore}/100) â€” High buyer readiness.`;
   } else if (intent === 'COLD') {
     dbStatus = "Closed Lost";
     dbScoreTier = "Cold";
-    activityText = `🔴 AI Sales Engine marked Lead as Cold (${dealScore}/100) — Disqualified or competitor chosen.`;
+    activityText = `ðŸ”´ AI Sales Engine marked Lead as Cold (${dealScore}/100) â€” Disqualified or competitor chosen.`;
   } else {
     const hasLeadReplied = chatHistory && chatHistory.some(m => m.role === 'user' && m.content && m.content !== userMessage);
     dbStatus = hasLeadReplied ? "Replied" : "Emailed";
     dbScoreTier = "Warm";
-    activityText = `🟡 AI Sales Engine marked Lead as Warm (${dealScore}/100) — ${hasLeadReplied ? 'Engaged' : 'Outreach sent'}.`;
+    activityText = `ðŸŸ¡ AI Sales Engine marked Lead as Warm (${dealScore}/100) â€” ${hasLeadReplied ? 'Engaged' : 'Outreach sent'}.`;
   }
 
   // Save changes to database
@@ -1747,7 +1761,7 @@ Do not output any markdown formatting or text outside the raw JSON object.`;
         data: {
           builderId,
           leadId,
-          action: `🔥 VIP HUMAN ESCALATION TRIGGERED: ${escalationReason || 'High ticket client requires immediate executive call'}.`
+          action: `ðŸ”¥ VIP HUMAN ESCALATION TRIGGERED: ${escalationReason || 'High ticket client requires immediate executive call'}.`
         }
       });
     }
@@ -1783,7 +1797,7 @@ Do not output any markdown formatting or text outside the raw JSON object.`;
               leadId,
               type: bookingDetails.type || 'Site visit',
               dateTime: bookingDate,
-              location: 'TBD — Confirmed via AI Concierge',
+              location: 'TBD â€” Confirmed via AI Concierge',
               status: 'Pending',
               notes: `Auto-booked by AI Sales Concierge. Next step: ${nextBestAction}`
             }
@@ -1792,7 +1806,7 @@ Do not output any markdown formatting or text outside the raw JSON object.`;
             data: {
               builderId,
               leadId,
-              action: `📅 AI Concierge auto-booked a ${bookingDetails.type || 'Site visit'} on ${bookingDate.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}.`
+              action: `ðŸ“… AI Concierge auto-booked a ${bookingDetails.type || 'Site visit'} on ${bookingDate.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}.`
             }
           });
         }
@@ -1816,7 +1830,6 @@ Do not output any markdown formatting or text outside the raw JSON object.`;
     bookingDetails
   };
 }
-
 export const summarizeConversation = createServerFn({ method: 'POST' })
   .inputValidator((data: { leadId: string }) => data)
   .handler(async ({ data }) => {
@@ -1833,32 +1846,32 @@ export const summarizeConversation = createServerFn({ method: 'POST' })
       if (!messages || messages.length === 0) return "No conversation history available.";
 
       const chatLog = messages.map(m => `${m.sender.toUpperCase()}: ${m.content}`).join('\n');
-      
-      const apiKey = process.env.GROQ_API_KEY?.replace(/['"]/g, '').trim();
-      if (!apiKey) return "Groq API key not configured.";
 
-      const prompt = `You are an expert AI Builder Sales Strategist preparing an Executive Pre-Meeting Briefing Sheet for a custom home builder before they meet or call a lead.
+      const systemPrompt = `You are an expert AI Builder Sales Strategist preparing an Executive Pre-Meeting Briefing Sheet for a custom home builder before they meet or call a lead.
 
 Analyze the entire conversation log and construct a detailed, highly structured Pre-Meeting Briefing covering these 4 core categories:
 
-📋 CLIENT PROFILE & DESIGN SPECS:
-• Summarize home style, square footage, bed/bath count, target county/city, land ownership, lot conditions (slopes, utilities, etc.).
+ðŸ“‹ CLIENT PROFILE & DESIGN SPECS:
+â€¢ Summarize home style, square footage, bed/bath count, target county/city, land ownership, lot conditions (slopes, utilities, etc.).
 
-💰 FINANCIALS & FEASIBILITY:
-• Summarize stated budget range, per sq ft cost discussions, slope/foundation/retaining wall engineering cost expectations.
+ðŸ’° FINANCIALS & FEASIBILITY:
+â€¢ Summarize stated budget range, per sq ft cost discussions, slope/foundation/retaining wall engineering cost expectations.
 
-❓ KEY CONCERNS & OBJECTIONS RAISED:
-• Summarize specific technical or pricing questions the client asked that the builder must address during the call.
+â“ KEY CONCERNS & OBJECTIONS RAISED:
+â€¢ Summarize specific technical or pricing questions the client asked that the builder must address during the call.
 
-🎯 ACTION PLAN & MEETING DELIVERABLES:
-• Summarize scheduled meeting/call date, time, phone number, and exact documents requested (e.g. site evaluation report, floor plan proposals, estimate sheets).
+ðŸŽ¯ ACTION PLAN & MEETING DELIVERABLES:
+â€¢ Summarize scheduled meeting/call date, time, phone number, and exact documents requested (e.g. site evaluation report, floor plan proposals, estimate sheets).
 
-Format the output clearly using bullet points and bold section headers. Keep it professional, highly detailed, clear, and actionable for the builder.
+Format the output clearly using bullet points and bold section headers. Keep it professional, highly detailed, clear, and actionable for the builder.`;
 
-Conversation Log:
-${chatLog}`;
+      const userPrompt = `Please generate the Pre-Meeting Briefing Sheet for the following conversation:\n\nConversation Log:\n${chatLog}`;
 
-      const summary = await callAiEngine([{ role: 'system', content: prompt }], { maxTokens: 300, temperature: 0.5 });
+      const summary = await callAiEngine([
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ], { maxTokens: 900, temperature: 0.5 });
+
       return summary || "Unable to generate chat summary.";
     } catch (err) {
       console.error("Summarization error:", err);
@@ -1876,7 +1889,7 @@ export const generateAIScriptUpdate = createServerFn({ method: 'POST' })
     const companyName = session.companyName || "Your Company";
     const primaryContact = session.displayName || "Your Name";
 
-    const systemPrompt = `You are a professional copywriting assistant specialized in high-trust outreach and lead nurture campaigns for luxury custom home builders. 
+    const systemPrompt = `You are a professional copywriting assistant specialized in high-trust outreach and lead nurture campaigns for luxury custom home builders.
 You are tasked with generating a sequence of exactly 3 SMS follow-up nurture messages based on the builder's custom instruction.
 
 CRITICAL CONTEXT: The leads have NOT signed up or contacted the builder. They are identified from public records (specifically newly filed building permit filings or county tax records in Travis/Austin). The messages MUST be professional, highly localized, and build massive trust by referring directly to their newly filed permit/records, instead of claiming "thanks for your interest" or "thanks for connecting" (which would feel like spam and break trust).
@@ -1891,9 +1904,9 @@ Follow these rules:
 
 Example Format:
 [
-  { "t": "Message 1 · Immediate (< 60s)", "body": "Hi [Name], I noticed your residential building permit application filed in Travis County. I'm ${primaryContact.split(' ')[0]}'s assistant from ${companyName}. Since custom builds in Austin require complex structural reviews, have you already hired a general builder?" },
-  { "t": "Message 2 · 2 hours later (no reply)", "body": "Hey [Name], just checking in! I wanted to send over our Austin Permitting & Zoning Checklist (it saves weeks on site preparation). Do you already own the lot?" },
-  { "t": "Message 3 · 24 hours later", "body": "Hi [Name], we are hosting private tours of our completed contemporary estate in Lakeway this Saturday. Let me know if you would like me to reserve a spot for you!" }
+  { "t": "Message 1 Â· Immediate (< 60s)", "body": "Hi [Name], I noticed your residential building permit application filed in Travis County. I'm ${primaryContact.split(' ')[0]}'s assistant from ${companyName}. Since custom builds in Austin require complex structural reviews, have you already hired a general builder?" },
+  { "t": "Message 2 Â· 2 hours later (no reply)", "body": "Hey [Name], just checking in! I wanted to send over our Austin Permitting & Zoning Checklist (it saves weeks on site preparation). Do you already own the lot?" },
+  { "t": "Message 3 Â· 24 hours later", "body": "Hi [Name], we are hosting private tours of our completed contemporary estate in Lakeway this Saturday. Let me know if you would like me to reserve a spot for you!" }
 ]`;
 
     try {
@@ -1919,9 +1932,9 @@ Example Format:
         console.error("Failed to parse AI JSON response, using fallback matching...", pe);
         // Fallback matching
         parsed = [
-          { t: "Message 1 · Immediate (< 60s)", body: `Hi [Name]! I'm ${primaryContact.split(' ')[0]}'s assistant from ${companyName}. Are you looking to build your home in Austin in the next 6-12 months? Reply YES/NO.` },
-          { t: "Message 2 · 2 hours later", body: "Hey [Name], just following up! Did you have a specific lot in mind in Travis County, or would you like help finding one?" },
-          { t: "Message 3 · 24 hours later", body: "Hi [Name], would you like a private walkthrough of our newly completed contemporary estate this Thursday?" }
+          { t: "Message 1 Â· Immediate (< 60s)", body: `Hi [Name]! I'm ${primaryContact.split(' ')[0]}'s assistant from ${companyName}. Are you looking to build your home in Austin in the next 6-12 months? Reply YES/NO.` },
+          { t: "Message 2 Â· 2 hours later", body: "Hey [Name], just following up! Did you have a specific lot in mind in Travis County, or would you like help finding one?" },
+          { t: "Message 3 Â· 24 hours later", body: "Hi [Name], would you like a private walkthrough of our newly completed contemporary estate this Thursday?" }
         ];
       }
 
@@ -2009,7 +2022,7 @@ export const bookAppointment = createServerFn({ method: 'POST' })
         data: {
           builderId: session.builderId || '',
           leadId: data.leadId,
-          action: `📆 Appointment booked: ${data.type} - ${data.location} scheduled for ${formattedDate}.`,
+          action: `ðŸ“† Appointment booked: ${data.type} - ${data.location} scheduled for ${formattedDate}.`,
         }
       })
 
@@ -2019,7 +2032,7 @@ export const bookAppointment = createServerFn({ method: 'POST' })
           builderId: session.builderId || '',
           leadId: data.leadId,
           sender: 'system',
-          content: `📆 Site Visit Booked: ${data.type} scheduled for ${formattedDate} at ${data.location}.`,
+          content: `ðŸ“† Site Visit Booked: ${data.type} scheduled for ${formattedDate} at ${data.location}.`,
           channel: 'portal',
           isRead: true
         }
@@ -2030,7 +2043,7 @@ export const bookAppointment = createServerFn({ method: 'POST' })
         builderId: session.builderId || '',
         leadId: data.leadId,
         leadName: lead.name,
-        title: "📅 New Meeting Scheduled",
+        title: "ðŸ“… New Meeting Scheduled",
         message: `${lead.name} scheduled ${data.type} for ${formattedDate} at ${data.location}.`,
         type: "booking"
       });
@@ -2052,7 +2065,7 @@ export const bookAppointment = createServerFn({ method: 'POST' })
                 <p style="color: #475569; font-size: 15px; line-height: 1.6;">We have confirmed your upcoming meeting with the <strong>${companyName}</strong> team.</p>
                 
                 <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px 20px; margin: 24px 0;">
-                  <p style="margin: 0 0 8px 0; color: #0f172a; font-weight: 600; font-size: 14px;">📅 Session Details:</p>
+                  <p style="margin: 0 0 8px 0; color: #0f172a; font-weight: 600; font-size: 14px;">ðŸ“… Session Details:</p>
                   <p style="margin: 0 0 4px 0; color: #334155; font-size: 13px;"><strong>Type:</strong> ${data.type}</p>
                   <p style="margin: 0 0 4px 0; color: #334155; font-size: 13px;"><strong>Date & Time:</strong> ${formattedDate}</p>
                   <p style="margin: 0; color: #334155; font-size: 13px;"><strong>Location:</strong> ${data.location}</p>
@@ -2110,7 +2123,7 @@ export const rescheduleAppointment = createServerFn({ method: 'POST' })
         data: {
           builderId: session.builderId || '',
           leadId: existing.leadId,
-          action: `🔄 Appointment rescheduled: ${existing.type} moved to ${formattedDate}.`,
+          action: `ðŸ”„ Appointment rescheduled: ${existing.type} moved to ${formattedDate}.`,
         }
       })
 
@@ -2158,7 +2171,7 @@ export const cancelAppointment = createServerFn({ method: 'POST' })
         data: {
           builderId: session.builderId || '',
           leadId: existing.leadId,
-          action: `❌ Appointment cancelled: ${existing.type} for ${formattedDate} has been removed.`,
+          action: `âŒ Appointment cancelled: ${existing.type} for ${formattedDate} has been removed.`,
         }
       })
 
@@ -2195,7 +2208,7 @@ export const getConversations = createServerFn({ method: 'POST' })
     const session = await requireAuth(data?.activeRole ?? undefined)
     const db = await getTenantDb(session)
 
-    // Trigger Inbound Mailbox Sync (IMAP) — truly fire-and-forget.
+    // Trigger Inbound Mailbox Sync (IMAP) â€” truly fire-and-forget.
     // IMPORTANT: No `await` here. The DB query runs immediately and the response
     // is returned to the client without waiting for the IMAP network round-trip.
     // The throttle inside syncInboundMailbox prevents spam (max once per 2 min per builder).
@@ -2363,7 +2376,7 @@ export const sendMessage = createServerFn({ method: 'POST' })
           const companyName = session.companyName || currentLead.builder?.companyName || 'Custom Builder';
           const senderName = session.displayName || 'Sales Representative';
           const senderRole = session.builderRole === 'owner' ? 'Founder & Principal Builder' : 'Senior Sales Director';
-          const subject = `Re: Architectural Consultation — ${currentLead.county || 'Custom Build'} (${companyName})`;
+          const subject = `Re: Architectural Consultation â€” ${currentLead.county || 'Custom Build'} (${companyName})`;
 
           const html = buildArchitecturalEmailHtml({
             recipientName: currentLead.name || 'there',
@@ -2395,12 +2408,98 @@ export const sendMessage = createServerFn({ method: 'POST' })
         }
       }
 
+      // 4. Cancel pending delayed AI reply and auto-mute AI for this lead
+      let aiAutoMuted = false;
+      try {
+        const { cancelPendingAiReply } = await import('./ai-queue.server');
+        cancelPendingAiReply(leadId, 'Human builder manual message sent');
+        const toggleMap = await readSettingJson('ai_toggle_map');
+        if (toggleMap && toggleMap[leadId] !== false) {
+          aiAutoMuted = true;
+          toggleMap[leadId] = false;
+          await writeSettingJson('ai_toggle_map', toggleMap);
+        }
+      } catch {}
+
       return {
-        userMessage: userMsg
+        userMessage: userMsg,
+        aiAutoMuted,
+        leadName: currentLead?.name
       }
     } catch (error) {
       console.error("Error in sendMessage:", error)
       throw error
+    }
+  })
+
+export const getLatestInboundMessages = createServerFn({ method: 'POST' })
+  .inputValidator((data?: { since?: string; activeRole?: string | null }) => data)
+  .handler(async ({ data }) => {
+    const { getTenantDb, requireAuth } = await import('./server-utils.server');
+    const session = await requireAuth(data?.activeRole ?? undefined);
+    const db = await getTenantDb(session);
+
+    // Non-blocking IMAP mailbox sync in background (throttled automatically)
+    import('./mailbox.server').then(({ syncInboundMailbox }) => {
+      syncInboundMailbox(session.builderId || '').catch(() => {});
+    }).catch(() => {});
+
+    try {
+      // Default to last 3 minutes if no 'since' provided
+      const sinceDate = data?.since 
+        ? new Date(data.since) 
+        : new Date(Date.now() - 180000);
+
+      const whereClause: any = {
+        sender: 'lead',
+        OR: [
+          { createdAt: { gt: sinceDate } },
+          { isRead: false, createdAt: { gt: new Date(Date.now() - 3600000) } }
+        ]
+      };
+
+      if (session.role === 'builder' && session.builderId) {
+        whereClause.builderId = session.builderId;
+        if (session.builderRole === 'sales') {
+          whereClause.lead = { assignedToId: session.userId };
+        }
+      }
+
+      const messages = await db.message.findMany({
+        where: whereClause,
+        include: {
+          lead: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+              scoreTier: true,
+              county: true,
+            }
+          }
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 5
+      });
+
+      const { stripEmailQuotedHistory } = await import('./mailbox.server');
+
+      return messages.map(m => ({
+        id: m.id,
+        leadId: m.leadId,
+        leadName: m.lead?.name || 'Homeowner Lead',
+        leadEmail: m.lead?.email || '',
+        leadCounty: m.lead?.county || 'Travis County',
+        scoreTier: m.lead?.scoreTier || 'Warm',
+        content: stripEmailQuotedHistory(m.content) || m.content,
+        channel: m.channel,
+        isSimulated: m.isSimulated,
+        createdAt: m.createdAt.toISOString()
+      }));
+    } catch (error) {
+      console.error("Error in getLatestInboundMessages:", error);
+      return [];
     }
   })
 
@@ -2475,7 +2574,7 @@ export const simulateLeadMessage = createServerFn({ method: 'POST' })
             try {
               const { sendOutboundEmail, buildArchitecturalEmailHtml } = await import('./email.server');
               const companyName = session.companyName || targetLead.builder?.companyName || 'Custom Builder';
-              const subject = `Re: Custom Architectural Consultation — ${companyName}`;
+              const subject = `Re: Custom Architectural Consultation â€” ${companyName}`;
               const senderDisplayName = session.displayName || 'Sajid Ali';
               const html = buildArchitecturalEmailHtml({
                 recipientName: targetLead.name || 'there',
@@ -2490,7 +2589,7 @@ export const simulateLeadMessage = createServerFn({ method: 'POST' })
                 subject,
                 html,
                 text: aiResponse.replyText,
-                from: `${senderDisplayName} · ${companyName} <${session.email || targetLead.builder?.email || 'onboarding@resend.dev'}>`,
+                from: `${senderDisplayName} Â· ${companyName} <${session.email || targetLead.builder?.email || 'onboarding@resend.dev'}>`,
                 replyTo: session.email || targetLead.builder?.email,
               });
             } catch (err) {
@@ -2508,7 +2607,7 @@ export const simulateLeadMessage = createServerFn({ method: 'POST' })
   });
 
 /**
- * ─── AUTONOMOUS AI OUTREACH & QUALIFICATION ENGINE ───────────────────────────
+ * â”€â”€â”€ AUTONOMOUS AI OUTREACH & QUALIFICATION ENGINE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
  * Triggered automatically when a lead enters via Inbound Webhooks, Forms, or Manual Entry.
  * 
  * Works completely independent of logged-in sessions by reading builder settings directly from the DB,
@@ -2538,7 +2637,7 @@ export async function triggerAutonomousAiOutreach(
       return { success: false, reason: 'Builder is not active' };
     }
 
-    // Direct DB settings extraction — zero session / requireAuth dependency
+    // Direct DB settings extraction â€” zero session / requireAuth dependency
     const settingsObj = builder.settings
       ? (typeof builder.settings === 'string' ? JSON.parse(builder.settings) : builder.settings)
       : {};
@@ -2583,7 +2682,7 @@ export async function triggerAutonomousAiOutreach(
 
       try {
         const { sendOutboundEmail, buildArchitecturalEmailHtml } = await import('./email.server');
-        const subject = `Re: Custom Architectural Consultation & Build — ${companyName}`;
+        const subject = `Re: Custom Architectural Consultation & Build â€” ${companyName}`;
         const senderDisplayName = personaName || builderProfile.primaryContact || 'Sajid Ali';
         const html = buildArchitecturalEmailHtml({
           recipientName: lead.name || 'there',
@@ -2598,7 +2697,7 @@ export async function triggerAutonomousAiOutreach(
           subject,
           html,
           text: aiResponse.replyText,
-          from: `${senderDisplayName} · ${companyName} <${profileEmail || 'onboarding@resend.dev'}>`,
+          from: `${senderDisplayName} Â· ${companyName} <${profileEmail || 'onboarding@resend.dev'}>`,
           replyTo: profileEmail,
         });
 
@@ -2617,8 +2716,8 @@ export async function triggerAutonomousAiOutreach(
           builderId,
           leadId,
           action: emailDispatched
-            ? `🤖 AI Autonomous Outreach: Bespoke qualification email dispatched to ${lead.email} (Reply-To: ${profileEmail})`
-            : `🤖 AI Outreach Created: Message generated for ${lead.email} (Reply-To: ${profileEmail})${emailNotice}`,
+            ? `ðŸ¤– AI Autonomous Outreach: Bespoke qualification email dispatched to ${lead.email} (Reply-To: ${profileEmail})`
+            : `ðŸ¤– AI Outreach Created: Message generated for ${lead.email} (Reply-To: ${profileEmail})${emailNotice}`,
         }
       });
 
@@ -2899,7 +2998,7 @@ export const getIntegrationsStatus = createServerFn({ method: 'GET' }).handler(a
           Object.keys(parsed).forEach(key => {
             const lowerKey = key.toLowerCase()
             if (lowerKey.includes("secret") || lowerKey.includes("token") || lowerKey.includes("key")) {
-              config[key] = "••••••••••••••••"
+              config[key] = "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
             } else {
               config[key] = parsed[key]
             }
@@ -2941,7 +3040,7 @@ export const saveIntegrationCredentials = createServerFn({ method: 'POST' })
     const db = await getTenantDb()
     try {
       // First, if there's an existing configuration, let's load it to preserve unchanged masked passwords!
-      // If the user saves and keeps the "••••••••••••••••" mask, we should not overwrite it with the actual secret value!
+      // If the user saves and keeps the "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" mask, we should not overwrite it with the actual secret value!
       let finalCredentials = { ...credentials }
       
       const existing = await db.integration.findUnique({
@@ -2961,7 +3060,7 @@ export const saveIntegrationCredentials = createServerFn({ method: 'POST' })
           
           // Overwrite any keys that came in as the standard mask with their original values
           Object.keys(finalCredentials).forEach(key => {
-            if (finalCredentials[key] === "••••••••••••••••" && parsed[key]) {
+            if (finalCredentials[key] === "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" && parsed[key]) {
               finalCredentials[key] = parsed[key]
             }
           })
@@ -3029,7 +3128,7 @@ export const testIntegrationConnection = createServerFn({ method: 'POST' })
       if (!credentials.clientId || !credentials.clientSecret || !credentials.locationId) {
         throw new Error("Missing required credentials for Google Business API.");
       }
-      if (credentials.clientSecret !== "••••••••••••••••" && credentials.clientSecret.length < 10) {
+      if (credentials.clientSecret !== "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" && credentials.clientSecret.length < 10) {
         throw new Error("Invalid Google Client Secret. Secret key must be at least 10 characters.");
       }
     }
@@ -3038,10 +3137,10 @@ export const testIntegrationConnection = createServerFn({ method: 'POST' })
       if (!credentials.accountSid || !credentials.authToken || !credentials.phoneNumber) {
         throw new Error("Missing required credentials for Twilio SMS Outreach Gateway.");
       }
-      if (credentials.accountSid !== "••••••••••••••••" && !credentials.accountSid.startsWith("AC")) {
+      if (credentials.accountSid !== "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" && !credentials.accountSid.startsWith("AC")) {
         throw new Error("Invalid Twilio Account SID format. Must start with 'AC'.");
       }
-      if (credentials.authToken !== "••••••••••••••••" && credentials.authToken.length < 16) {
+      if (credentials.authToken !== "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" && credentials.authToken.length < 16) {
         throw new Error("Invalid Twilio Auth Token. Must be at least 16 characters.");
       }
     }
@@ -3074,7 +3173,7 @@ export const testIntegrationConnection = createServerFn({ method: 'POST' })
       }
 
       // If user provided an actual password (not the masked placeholder), perform REAL live Google authentication check
-      if (rawPassword !== "••••••••••••••••") {
+      if (rawPassword !== "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢") {
         const cleanPassword = rawPassword.replace(/\s+/g, '').trim();
         const provider = credentials.provider || 'google';
         const smtpHost = provider === 'google' ? 'smtp.gmail.com' : (credentials.smtpHost || 'smtp.gmail.com');
@@ -3160,7 +3259,7 @@ export const exportLeadsToCsv = createServerFn({ method: 'POST' })
   })
 
 
-// ─── Settings persistence helpers ────────────────────────────────────────────
+// â”€â”€â”€ Settings persistence helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // We reuse the Integration table with reserved platformId keys so no new
 // Prisma migration is required.
 
@@ -3362,7 +3461,7 @@ export const saveWebhookUrl = createServerFn({ method: 'POST' })
     return { success: true }
   })
 
-// ─── Per-lead AI Concierge toggle persistence ─────────────────────────────────
+// â”€â”€â”€ Per-lead AI Concierge toggle persistence â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Stores { [leadId]: boolean } map in the Integration table under 'ai_toggle_map'
 
 export const getAiToggleMap = createServerFn({ method: 'GET' }).handler(async () => {
@@ -3392,17 +3491,17 @@ export async function checkAndSyncRencastLeads() {
     const targetMarket = process.env.RENCAST_TARGET_MARKET || 'Austin, TX';
 
     if (!apiKey) {
-      return; // Key not set yet — user needs to paste it in .env
+      return; // Key not set yet â€” user needs to paste it in .env
     }
 
-    // 2. Check if already run today (YYYY-MM-DD) — stored in DB to survive restarts
+    // 2. Check if already run today (YYYY-MM-DD) â€” stored in DB to survive restarts
     const today = new Date().toISOString().split('T')[0];
     const syncMeta = await readSettingJson('rencast_sync_meta');
     if (syncMeta.lastSyncDate === today) {
       return; // Already ran today
     }
 
-    console.log(`[Rencast Sync] Running daily sync — date: ${today}, market: ${targetMarket}`);
+    console.log(`[Rencast Sync] Running daily sync â€” date: ${today}, market: ${targetMarket}`);
 
     // 3. Fetch up to 20 permits from Rencast API
     let leadsData: any[] = [];
@@ -3425,7 +3524,7 @@ export async function checkAndSyncRencastLeads() {
         console.warn(`[Rencast Sync] API returned ${response.status}. Using realistic permit fallback.`);
       }
     } catch (apiErr) {
-      console.error('[Rencast Sync] Network error — using realistic permit fallback.', apiErr);
+      console.error('[Rencast Sync] Network error â€” using realistic permit fallback.', apiErr);
     }
 
     // 4. Fallback: generate realistic permits if API unavailable
@@ -3465,7 +3564,7 @@ export async function checkAndSyncRencastLeads() {
         data: {
           builderId: session.builderId || '',
           leadId: lead.id,
-          action: `Building permit captured via Rencast API — ${lead.county}`,
+          action: `Building permit captured via Rencast API â€” ${lead.county}`,
         },
       });
 
@@ -3589,7 +3688,7 @@ export const createTeamInvite = createServerFn({ method: 'POST' })
             <p style="color: #475569; font-size: 15px; line-height: 1.6;"><strong>${inviterName}</strong> has invited you to join the <strong>${companyName}</strong> workspace on WeaverFrame as a <strong>${roleLabel}</strong>.</p>
             
             <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px 20px; margin: 24px 0;">
-              <p style="margin: 0 0 6px 0; color: #0f172a; font-weight: 600; font-size: 14px;">🔑 Account Details:</p>
+              <p style="margin: 0 0 6px 0; color: #0f172a; font-weight: 600; font-size: 14px;">ðŸ”‘ Account Details:</p>
               <p style="margin: 0 0 4px 0; color: #334155; font-size: 13px;"><strong>Login Email:</strong> ${data.email}</p>
               <p style="margin: 0; color: #334155; font-size: 13px;"><strong>Assigned Role:</strong> ${roleLabel}</p>
             </div>
@@ -3890,11 +3989,11 @@ export const submitDemoRequest = createServerFn({ method: 'POST' })
       const baseUrl = (typeof process !== 'undefined' ? process.env.APP_BASE_URL : '') || 'https://weaverframe.in';
       const dashboardUrl = `${baseUrl}/admin/demo-requests`;
 
-      // 6. Dispatch Email 1: Notification to Admin — fire-and-forget (non-blocking)
+      // 6. Dispatch Email 1: Notification to Admin â€” fire-and-forget (non-blocking)
       if (adminEmail) {
         sendOutboundEmail({
           to: adminEmail,
-          subject: `🚀 [Demo Request] ${data.name.trim()} from ${data.company.trim()} (${data.buildVolume})`,
+          subject: `ðŸš€ [Demo Request] ${data.name.trim()} from ${data.company.trim()} (${data.buildVolume})`,
           html: buildAdminDemoNotificationHtml({
             name: data.name.trim(),
             company: data.company.trim(),
@@ -3909,10 +4008,10 @@ export const submitDemoRequest = createServerFn({ method: 'POST' })
         });
       }
 
-      // 7. Dispatch Email 2: Confirmation Receipt to Prospect — fire-and-forget (non-blocking)
+      // 7. Dispatch Email 2: Confirmation Receipt to Prospect â€” fire-and-forget (non-blocking)
       sendOutboundEmail({
         to: data.email.trim(),
-        subject: `WeaverFrame — Private OS Demonstration Request Received`,
+        subject: `WeaverFrame â€” Private OS Demonstration Request Received`,
         html: buildUserDemoConfirmationHtml({
           recipientName: data.name.trim(),
           company: data.company.trim(),
@@ -3944,6 +4043,7 @@ export const prewarmConnection = createServerFn({ method: 'GET' })
     await warmDb();
     return { status: 'warm' };
   });
+
 
 
 

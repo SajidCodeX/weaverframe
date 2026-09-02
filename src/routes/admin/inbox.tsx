@@ -87,6 +87,26 @@ function AdminInboxPage() {
     return () => clearInterval(interval);
   }, [router]);
 
+  // Support instant deep-link selection from notifications
+  useEffect(() => {
+    const handleSelect = (e: any) => {
+      const targetId = e.detail?.leadId;
+      if (targetId) {
+        setSelectedLeadId(targetId);
+      }
+    };
+    window.addEventListener('weaver_select_lead', handleSelect);
+    return () => window.removeEventListener('weaver_select_lead', handleSelect);
+  }, []);
+
+  // Broadcast active lead ID to suppress duplicate alerts for the current open chat
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('weaver_active_lead_changed', { detail: { leadId: selectedLeadId } }));
+    return () => {
+      window.dispatchEvent(new CustomEvent('weaver_active_lead_changed', { detail: { leadId: null } }));
+    };
+  }, [selectedLeadId]);
+
   // Load chat when selected
   useEffect(() => {
     if (!selectedLeadId) {
@@ -150,6 +170,19 @@ function AdminInboxPage() {
 
     try {
       const res = await sendAdminMessage({ data: { leadId: activeChat.id, content } });
+      
+      // If sending a manual message auto-muted the AI, pop up Slack-style card (silent)
+      if ((res as any)?.aiAutoMuted) {
+        window.dispatchEvent(
+          new CustomEvent("weaver_ai_muted", {
+            detail: {
+              leadId: activeChat.id,
+              leadName: activeChat.name || (res as any)?.leadName || "Lead",
+            },
+          })
+        );
+      }
+
       setMessages(prev => prev.map(m => m.id === optimisticMsg.id ? res.userMessage : m));
       
       // Update thread list with latest message

@@ -222,6 +222,7 @@ function RootShell({ children }: { children: React.ReactNode }) {
 }
 
 import { Toaster } from "sonner";
+import { GlobalMessageNotifier } from "@/components/dashboard/GlobalMessageNotifier";
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext() as any;
@@ -230,6 +231,7 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <Outlet />
       <Toaster theme="dark" position="bottom-right" />
+      <GlobalMessageNotifier />
     </QueryClientProvider>
   );
 }
