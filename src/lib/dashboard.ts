@@ -1,5 +1,8 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getDb } from './db'
+import { resolveBookingDateTime, checkAppointmentAvailability, bookAppointmentAtomically } from './date-utils'
+import { sanitizeInboundEmail, sanitizeMetadataField } from './sanitizer'
+import { sendAlert } from './alerting'
 
 
 
@@ -1138,76 +1141,131 @@ export async function callAiEngine(
 ): Promise<string> {
   const geminiKey = process.env.GEMINI_API_KEY;
   const groqKey = process.env.GROQ_API_KEY;
-  const geminiModel = process.env.GEMINI_MODEL || "gemini-3.5-flash";
-  const groqModel = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
+  const primaryGeminiModel = process.env.GEMINI_MODEL || "gemini-3.6-flash";
+  const defaultGroqModel = process.env.GROQ_MODEL || "qwen/qwen3.8-27b";
   const maxTokens = options?.maxTokens || 800;
   const temperature = options?.temperature ?? 0.1;
 
-  // 1. Prioritize Google Gemini Flash if GEMINI_API_KEY is configured
+  // 1. PRIMARY ROUTE: Google Gemini (locked to gemini-3.6-flash with 1M+ TPM capacity & transient retry)
   if (geminiKey && geminiKey.trim() !== "") {
-    const modelsToTry = [geminiModel, "gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"].filter((v, i, a) => a.indexOf(v) === i);
+    const modelsToTry = [primaryGeminiModel, "gemini-3.6-flash", "gemini-flash-latest", "gemini-3.7-flash"].filter((v, i, a) => a.indexOf(v) === i);
     for (const m of modelsToTry) {
-      try {
-        const res = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${geminiKey}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            model: m,
-            messages: messages,
-            temperature: temperature,
-            max_tokens: maxTokens,
-            ...(options?.isJson ? { response_format: { type: "json_object" } } : {})
-          })
-        });
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          console.log(`[AI ROUTING] Executing primary model: Google Gemini (${m}) (attempt ${attempt}/2)...`);
+          const res = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${geminiKey}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              model: m,
+              messages: messages,
+              temperature: temperature,
+              max_tokens: maxTokens,
+              ...(options?.isJson ? { response_format: { type: "json_object" } } : {})
+            }),
+            signal: AbortSignal.timeout(15000)
+          });
 
-        if (res.ok) {
-          const data = await res.json();
-          const content = data.choices?.[0]?.message?.content;
-          if (content) return content;
-        } else {
-          const errText = await res.text();
-          console.warn(`Gemini model ${m} returned ${res.status}: ${errText}. Trying fallback...`);
+          if (res.ok) {
+            const data = await res.json();
+            const content = data.choices?.[0]?.message?.content;
+            if (content) {
+              console.log(`[AI ROUTING] Primary provider Gemini (${m}) succeeded.`);
+              return content;
+            }
+          }
+
+          const isTransient = res.status === 429 || res.status >= 500;
+          const errText = await res.text().catch(() => "");
+          console.warn(`[AI ROUTING] Gemini model ${m} returned HTTP ${res.status}: ${errText.slice(0, 160)}`);
+
+          if (isTransient && attempt === 1) {
+            console.log(`[AI ROUTING RETRY] Transient ${res.status} on ${m}. Backing off 1.2s before retry...`);
+            await new Promise(r => setTimeout(r, 1200));
+            continue;
+          }
+          break;
+        } catch (geminiErr: any) {
+          console.warn(`[AI ROUTING] Gemini model ${m} network/timeout error: ${geminiErr?.message || geminiErr}`);
+          if (attempt === 1) {
+            console.log(`[AI ROUTING RETRY] Network glitch on ${m}. Backing off 1.2s before retry...`);
+            await new Promise(r => setTimeout(r, 1200));
+            continue;
+          }
+          break;
         }
-      } catch (geminiErr) {
-        console.warn(`Gemini model ${m} network error:`, geminiErr);
       }
     }
   }
 
-  // 2. Fallback to Groq if GROQ_API_KEY is configured
+  // 2. FALLBACK ROUTE: Groq (with transient retry)
   if (groqKey && groqKey.trim() !== "") {
-    try {
-      const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${groqKey}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          model: groqModel,
-          messages: messages,
-          temperature: temperature,
-          max_tokens: maxTokens,
-          ...(options?.isJson ? { response_format: { type: "json_object" } } : {})
-        })
-      });
+    const groqModelsToTry = [defaultGroqModel, "openai/gpt-oss-20b", "openai/gpt-oss-120b"].filter((v, i, a) => a.indexOf(v) === i);
+    for (const gm of groqModelsToTry) {
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          console.log(`[AI ROUTING FALLBACK] Executing secondary provider: Groq (${gm}) (attempt ${attempt}/2)...`);
+          const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${groqKey}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              model: gm,
+              messages: messages,
+              temperature: temperature,
+              max_tokens: maxTokens,
+              ...(options?.isJson ? { response_format: { type: "json_object" } } : {})
+            }),
+            signal: AbortSignal.timeout(15000)
+          });
 
-      if (groqRes.ok) {
-        const groqData = await groqRes.json();
-        return groqData.choices?.[0]?.message?.content || "";
-      } else {
-        const errText = await groqRes.text();
-        console.error(`Groq API returned ${groqRes.status}: ${errText}`);
+          if (groqRes.ok) {
+            const groqData = await groqRes.json();
+            const content = groqData.choices?.[0]?.message?.content || "";
+            if (content) {
+              console.log(`[AI ROUTING FALLBACK] Secondary provider Groq (${gm}) succeeded.`);
+              return content;
+            }
+          }
+
+          const isTransient = groqRes.status === 429 || groqRes.status >= 500;
+          const errText = await groqRes.text().catch(() => "");
+          console.error(`[AI ROUTING FALLBACK] Groq (${gm}) returned HTTP ${groqRes.status}: ${errText.slice(0, 160)}`);
+
+          if (isTransient && attempt === 1) {
+            console.log(`[AI ROUTING RETRY] Transient ${groqRes.status} on Groq ${gm}. Backing off 1.2s before retry...`);
+            await new Promise(r => setTimeout(r, 1200));
+            continue;
+          }
+          break;
+        } catch (groqErr: any) {
+          console.error(`[AI ROUTING FALLBACK] Groq (${gm}) network/timeout error: ${groqErr?.message || groqErr}`);
+          if (attempt === 1) {
+            console.log(`[AI ROUTING RETRY] Network glitch on Groq ${gm}. Backing off 1.2s before retry...`);
+            await new Promise(r => setTimeout(r, 1200));
+            continue;
+          }
+          break;
+        }
       }
-    } catch (groqErr) {
-      console.error("Groq API fallback encountered network error:", groqErr);
     }
   }
 
-  throw new Error("No AI API keys configured or all AI providers failed.");
+  // Dispatch Operational Alert on critical exhaustion of all providers
+  await sendAlert({
+    type: 'provider_failure',
+    severity: 'critical',
+    title: 'All AI Providers Failed',
+    message: 'Both Gemini and Groq model fallback chains failed across all retry attempts.',
+    metadata: { options }
+  }).catch(() => {});
+
+    throw new Error("No AI API keys configured or all AI providers failed.");
 }
 
 export const generateGroqCompletion = createServerFn({ method: 'POST' })
@@ -1390,14 +1448,14 @@ export async function generateAiReplyCore(
 
   // Fetch lead to personalize prompt and load existing Lead Memory Graph
   const lead = await db.lead.findUnique({ where: { id: leadId } });
-  const leadName = lead ? lead.name : "Client";
-  const leadCounty = lead ? lead.county : "your area";
+  const leadName = lead ? sanitizeMetadataField(lead.name, 60) || "Client" : "Client";
+  const leadCounty = lead ? sanitizeMetadataField(lead.county, 60) || "your area" : "your area";
 
   // Parse existing Lead Memory Graph
   let currentMemory: Record<string, any> = {
     budgetRange: lead?.estimatedBudget ? `$${(lead.estimatedBudget / 1000).toFixed(0)}k` : null,
     timeline: null,
-    lotStatus: lead?.landPrice && lead.landPrice > 0 ? `Owns land in ${lead.county} ($${(lead.landPrice / 1000).toFixed(0)}k)` : null,
+    lotStatus: lead?.landPrice && lead.landPrice > 0 ? `Owns land in ${leadCounty} ($${(lead.landPrice / 1000).toFixed(0)}k)` : null,
     architecturalStyle: null,
     familyLifestyleNeeds: null,
     objectionsRaised: [],
@@ -1470,6 +1528,11 @@ OBJECTION & INQUIRY PLAYBOOKS:
    - Be disarmingly honest and transparent: "I'm the AI assistant for ${companyName}'s executive team to make sure inquiries get fast, thoughtful answers, but our principal builder ${contactName} reviews every project detail personally. Would you like me to have ${contactName} connect with you directly?"
 5. "LOT / SITE FEASIBILITY":
    - Reassure engineering competence: "Lot feasibility—especially soil testing, slope setbacks, and utility hookups—is where most critical planning happens before drawing blueprints. We walk sites with clients before finalizing design."
+6. "ZONING, SETBACKS & IMPERVIOUS COVERAGE (MANDATORY NON-NUMERIC GUARDRAIL)":
+   - NEVER quote, invent, or guess exact municipal impervious-cover percentages, setback footage, or tree preservation numbers (e.g. NEVER state "Austin limits it to 20%" or "5%" or "30%").
+   - Impervious-cover and setback regulations vary drastically parcel-by-parcel based on watershed classification (Barton Springs Recharge vs Contributing Zone, Lake Austin overlays), slope gradient, and local municipality/HOA deed restrictions.
+   - If a client asks for exact code limits or percentages, provide safe qualitative guidance (e.g. "recharge zones are tightly restricted", "steep slopes reduce the buildable footprint") and state clearly that an authoritative civil/topographical survey is required to calculate the exact legal coverage for their specific parcel.
+   - Sample phrasing: "Impervious-cover limits and setbacks in ${leadCounty} vary significantly based on your parcel's watershed classification, slope gradient, and environmental overlay. Rather than estimating a generic percentage, we always review a formal topographic and civil survey to establish your exact buildable footprint. Do you already have a survey or plat map for the property?"
 
 QUALIFICATION STANDARDS:
 - Minimum Construction Budget: ${minBudget}
@@ -1522,7 +1585,13 @@ You must respond strictly with a valid JSON object matching this schema:
   "nextBestAction": string, // Recommended next step for builder team, e.g. "Send 3D elevation lookbook" or "Call within 15 mins"
   "escalationRequired": boolean, // Set to true if lead is ready to sign, has $1.5M+ budget, or requests owner
   "escalationReason": string | null, // e.g. "High ticket $2M lead ready for in-person architectural contract"
-  "bookingDetails": { "isoDateTime": string, "type": string } | null // ONLY set if lead agrees to a specific day/time
+  "bookingDetails": {
+    "relativeDay": string | null, // e.g. "tomorrow", "today", "day after tomorrow", "in 3 days", or null
+    "dayOfWeek": string | null, // e.g. "Monday", "next Tuesday", "this Friday", or null
+    "specificDateStr": string | null, // e.g. "Sep 15", "October 3rd", or null if relative
+    "timeStr": string | null, // e.g. "10:00 AM", "2:30 PM", "noon", or null
+    "type": string // e.g. "Site visit", "Architectural consultation", "Design studio meeting"
+  } | null // ONLY set if lead agrees to a specific day/time. STRICT PROHIBITION: NEVER output an isoDateTime field or full year timestamp. Date calculations are handled deterministically in code.
 }
 
 Lead Context:
@@ -1657,7 +1726,7 @@ Do not output any markdown formatting or text outside the raw JSON object.`;
     overallStatus: "Nurturing"
   };
   let objectionStrategyUsed: string | null = null;
-  let nextBestAction = "Follow up with homeowner.";
+    let nextBestAction = "Follow up with homeowner.";
   let escalationRequired = false;
   let escalationReason: string | null = null;
   let bookingDetails: { isoDateTime: string; type: string } | null = null;
@@ -1676,7 +1745,26 @@ Do not output any markdown formatting or text outside the raw JSON object.`;
       nextBestAction = parsed.nextBestAction || nextBestAction;
       escalationRequired = !!parsed.escalationRequired;
       escalationReason = parsed.escalationReason || null;
-      bookingDetails = parsed.bookingDetails || null;
+
+      // Deterministically resolve appointment date in TypeScript code (LLM cannot set isoDateTime directly)
+      if (parsed.bookingDetails && typeof parsed.bookingDetails === 'object') {
+        const resolution = resolveBookingDateTime(parsed.bookingDetails, {
+          currentDate: new Date(),
+          timeZone: timezone || 'America/Chicago'
+        });
+        if (resolution.valid && resolution.isoDateTime) {
+          bookingDetails = {
+            isoDateTime: resolution.isoDateTime,
+            type: resolution.type || 'Site visit'
+          };
+          console.log(`[BOOKING RESOLVED DETERMINISTICALLY]: ${resolution.isoDateTime} (${bookingDetails.type}) from intent:`, parsed.bookingDetails);
+        } else {
+          console.warn(`[BOOKING DATE RESOLUTION REJECTED]: ${resolution.failureReason}`, parsed.bookingDetails);
+          bookingDetails = null;
+        }
+      } else {
+        bookingDetails = null;
+      }
     }
   } catch (e) {
     console.warn("JSON.parse error, activating regex extractor fallback:", e);
@@ -1786,29 +1874,54 @@ Do not output any markdown formatting or text outside the raw JSON object.`;
       }
     });
 
-    // Auto-Book Appointment if confirmed
+    // Auto-Book Appointment if confirmed with double-booking collision prevention
     if (bookingDetails && bookingDetails.isoDateTime) {
       try {
         const bookingDate = new Date(bookingDetails.isoDateTime);
         if (!isNaN(bookingDate.getTime())) {
-          await db.appointment.create({
-            data: {
+          // Concurrency-safe atomic appointment reservation (Serializable isolation check + create)
+          const reservation = await bookAppointmentAtomically(db, {
+            builderId,
+            leadId,
+            bookingDate,
+            type: bookingDetails.type || 'Site visit',
+            notes: `Auto-booked by AI Sales Concierge. Next step: ${nextBestAction}`,
+            windowMinutes: 45,
+          });
+
+          if (!reservation.success) {
+            console.warn(`[BOOKING COLLISION PREVENTED] Slot ${bookingDate.toISOString()} conflicts with appt ${reservation.conflictingAppointment?.id}`);
+
+            await sendAlert({
+              type: 'booking_failure',
+              severity: 'warning',
+              title: 'Appointment Collision Prevented',
+              message: `Lead requested slot ${bookingDate.toLocaleTimeString()} which conflicts with an existing booking.`,
               builderId,
               leadId,
-              type: bookingDetails.type || 'Site visit',
-              dateTime: bookingDate,
-              location: 'TBD â€” Confirmed via AI Concierge',
-              status: 'Pending',
-              notes: `Auto-booked by AI Sales Concierge. Next step: ${nextBestAction}`
-            }
-          });
-          await db.activity.create({
-            data: {
-              builderId,
-              leadId,
-              action: `ðŸ“… AI Concierge auto-booked a ${bookingDetails.type || 'Site visit'} on ${bookingDate.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}.`
-            }
-          });
+              metadata: { requestedDate: bookingDate.toISOString(), conflictingApptId: reservation.conflictingAppointment?.id }
+            });
+
+            const altTime = reservation.proposedAlternate || new Date(bookingDate.getTime() + 2 * 60 * 60 * 1000);
+            const altTimeStr = altTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+            replyText = `${replyText}\n\n[Note]: It looks like our calendar has a consultation scheduled around that exact time. Would ${altTimeStr} or earlier that morning work better for you?`;
+
+            await db.activity.create({
+              data: {
+                builderId,
+                leadId,
+                action: `⚠️ AI Concierge detected calendar collision for ${bookingDate.toLocaleTimeString()}. Proposed alternate time ${altTimeStr}.`
+              }
+            });
+          } else {
+            await db.activity.create({
+              data: {
+                builderId,
+                leadId,
+                action: `📅 AI Concierge auto-booked a ${bookingDetails.type || 'Site visit'} on ${bookingDate.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}.`
+              }
+            });
+          }
         }
       } catch (bookingErr) {
         console.error('Failed to auto-create appointment from AI confirmation:', bookingErr);
@@ -3115,6 +3228,102 @@ export const disconnectIntegration = createServerFn({ method: 'POST' })
     }
   })
 
+export const getGoogleConnectUrl = createServerFn({ method: 'POST' })
+  .inputValidator((data?: { returnTo?: string }) => data)
+  .handler(async ({ data }) => {
+    const { requireAuth } = await import('./server-utils.server');
+    const session = await requireAuth();
+    const builderId = session.actingAsBuilderId || session.builderId;
+    if (!builderId) throw new Error("No active builder session found. Please sign in.");
+    const { generateGoogleAuthUrl } = await import('./google-oauth.server');
+    const returnTo = data?.returnTo || '/settings?tab=integrations';
+    return generateGoogleAuthUrl(builderId, returnTo);
+  })
+
+export const handleGoogleOAuthCallback = createServerFn({ method: 'GET' })
+  .inputValidator((data: { code: string; state: string; error?: string }) => data)
+  .handler(async ({ data }) => {
+    const { code, state, error } = data;
+    if (error) {
+      return { success: false, redirectUrl: `/settings?tab=integrations&error=google_cancelled` };
+    }
+    if (!code || !state) {
+      return { success: false, redirectUrl: `/settings?tab=integrations&error=missing_oauth_params` };
+    }
+
+    let builderId = '';
+    let returnTo = '/settings?tab=integrations';
+    try {
+      const statePayload = JSON.parse(Buffer.from(state, 'base64url').toString('utf8'));
+      builderId = statePayload.builderId;
+      returnTo = statePayload.returnTo || returnTo;
+    } catch {
+      return { success: false, redirectUrl: `/settings?tab=integrations&error=invalid_oauth_state` };
+    }
+
+    if (!builderId) {
+      return { success: false, redirectUrl: `/settings?tab=integrations&error=unauthorized_builder` };
+    }
+
+    try {
+      const { exchangeGoogleAuthCode, getGoogleUserProfile } = await import('./google-oauth.server');
+      const { getDb } = await import('./db');
+      const { encrypt } = await import('./crypto');
+
+      const { accessToken, refreshToken, expiresIn } = await exchangeGoogleAuthCode(code);
+      const profile = await getGoogleUserProfile(accessToken);
+      const db = await getDb();
+
+      const configData = {
+        provider: 'google_oauth',
+        email: profile.email,
+        name: profile.name,
+        picture: profile.picture,
+        accessToken,
+        refreshToken,
+        expiryDate: Date.now() + (expiresIn * 1000)
+      };
+
+      const encryptedConfig = encrypt(JSON.stringify(configData));
+
+      await db.integration.upsert({
+        where: {
+          builderId_platformId: {
+            builderId,
+            platformId: 'email_mailbox'
+          }
+        },
+        create: {
+          builderId,
+          platformId: 'email_mailbox',
+          configSecure: encryptedConfig,
+          isConnected: true
+        },
+        update: {
+          configSecure: encryptedConfig,
+          isConnected: true
+        }
+      });
+
+      await db.activity.create({
+        data: {
+          builderId,
+          action: `Google Workspace connected via 1-Click OAuth 2.0 (${profile.email}).`
+        }
+      }).catch(() => {});
+
+      const separator = returnTo.includes('?') ? '&' : '?';
+      return {
+        success: true,
+        redirectUrl: `${returnTo}${separator}connected=google&email=${encodeURIComponent(profile.email)}`
+      };
+    } catch (err: any) {
+      console.error('[GOOGLE OAUTH CALLBACK EXCEPTION]:', err);
+      const errMsg = encodeURIComponent(err?.message || 'Failed to complete Google OAuth');
+      return { success: false, redirectUrl: `/settings?tab=integrations&error=${errMsg}` };
+    }
+  })
+
 export const testIntegrationConnection = createServerFn({ method: 'POST' })
   .inputValidator((data: { platformId: string; credentials: Record<string, string> }) => data)
   .handler(async ({ data }) => {
@@ -3162,6 +3371,24 @@ export const testIntegrationConnection = createServerFn({ method: 'POST' })
     }
 
     else if (platformId === "email_mailbox") {
+      const provider = credentials.provider || 'google';
+
+      // If testing a Google OAuth 2.0 connection
+      if (provider === 'google_oauth' || (!credentials.password && credentials.email)) {
+        try {
+          const { requireAuth } = await import('./server-utils.server');
+          const session = await requireAuth();
+          const { getValidGoogleAccessToken, getGoogleUserProfile } = await import('./google-oauth.server');
+          const oauthData = await getValidGoogleAccessToken(session.builderId || '');
+          if (oauthData) {
+            const profile = await getGoogleUserProfile(oauthData.accessToken);
+            return { success: true, email: profile.email };
+          }
+        } catch (oauthTestErr: any) {
+          throw new Error(`Google OAuth verification failed: ${oauthTestErr?.message || oauthTestErr}`);
+        }
+      }
+
       const email = credentials.email || credentials.username || '';
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!email || !emailRegex.test(email.trim())) {
@@ -3169,11 +3396,11 @@ export const testIntegrationConnection = createServerFn({ method: 'POST' })
       }
       const rawPassword = credentials.password || '';
       if (!rawPassword) {
-        throw new Error("Missing App Password. Please enter your 16-character Google App Password.");
+        throw new Error("Missing App Password. Please enter your 16-character Google App Password or connect via 1-Click Google OAuth.");
       }
 
       // If user provided an actual password (not the masked placeholder), perform REAL live Google authentication check
-      if (rawPassword !== "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢") {
+      if (rawPassword !== "••••••••••••••••") {
         const cleanPassword = rawPassword.replace(/\s+/g, '').trim();
         const provider = credentials.provider || 'google';
         const smtpHost = provider === 'google' ? 'smtp.gmail.com' : (credentials.smtpHost || 'smtp.gmail.com');
@@ -3465,19 +3692,63 @@ export const saveWebhookUrl = createServerFn({ method: 'POST' })
 // Stores { [leadId]: boolean } map in the Integration table under 'ai_toggle_map'
 
 export const getAiToggleMap = createServerFn({ method: 'GET' }).handler(async () => {
-    const { getTenantDb } = await import('./server-utils.server');
   const row = await readSettingJson('ai_toggle_map')
   return row as Record<string, boolean>
 })
 
+export async function setLeadAiToggleDirect(leadId: string, active: boolean, callerSession?: any) {
+  if (!callerSession || !callerSession.builderId) {
+    throw new Error('UNAUTHORIZED: Explicit tenant context required for AI toggle modification');
+  }
+
+  const { getDb } = await import('./db');
+  const db = await getDb();
+  
+  // Verify lead exists and strictly belongs to the specified tenant
+  const lead = await db.lead.findUnique({
+    where: { id: leadId },
+    select: { id: true, builderId: true }
+  });
+
+  if (!lead || lead.builderId !== callerSession.builderId) {
+    throw new Error('FORBIDDEN: Lead does not belong to authorized tenant');
+  }
+
+  const current = await readSettingJson('ai_toggle_map', callerSession);
+  current[leadId] = active;
+  await writeSettingJson('ai_toggle_map', current, callerSession);
+  return { success: true };
+}
+
 export const setLeadAiToggle = createServerFn({ method: 'POST' })
   .inputValidator((data: { leadId: string; active: boolean }) => data)
   .handler(async ({ data }) => {
-    const { getTenantDb } = await import('./server-utils.server');
-    const current = await readSettingJson('ai_toggle_map')
-    current[data.leadId] = data.active
-    await writeSettingJson('ai_toggle_map', current)
-    return { success: true }
+    const { requireAuth, getTenantDb } = await import('./server-utils.server');
+    const session = await requireAuth();
+    const db = await getTenantDb(session);
+
+    // Verify ownership through tenant-isolated db
+    const lead = await db.lead.findUnique({
+      where: { id: data.leadId },
+      select: { id: true, builderId: true, name: true }
+    });
+
+    if (!lead) {
+      throw new Error('FORBIDDEN: Lead not found or not owned by your organization');
+    }
+
+    const res = await setLeadAiToggleDirect(data.leadId, data.active, session);
+
+    // Audit trail
+    await db.activity.create({
+      data: {
+        builderId: session.builderId || '',
+        leadId: data.leadId,
+        action: `🤖 AI Concierge manually toggled ${data.active ? 'ON' : 'OFF'} for ${lead.name || 'lead'} by ${session.displayName || session.userId || 'staff'}.`,
+      }
+    }).catch(() => {});
+
+    return res;
   })
 
 export async function checkAndSyncRencastLeads() {

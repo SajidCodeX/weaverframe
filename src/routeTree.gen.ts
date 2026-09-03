@@ -34,6 +34,7 @@ import { Route as AdminBillingRouteImport } from './routes/admin/billing'
 import { Route as ApiLeadsInboundRouteImport } from './routes/api.leads.inbound'
 import { Route as ApiCronSyncLeadsRouteImport } from './routes/api.cron.sync-leads'
 import { Route as ApiBillingWebhookRouteImport } from './routes/api.billing.webhook'
+import { Route as ApiAuthGoogleCallbackRouteImport } from './routes/api.auth.google.callback'
 
 const WelcomeRoute = WelcomeRouteImport.update({
   id: '/welcome',
@@ -160,6 +161,11 @@ const ApiBillingWebhookRoute = ApiBillingWebhookRouteImport.update({
   path: '/api/billing/webhook',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAuthGoogleCallbackRoute = ApiAuthGoogleCallbackRouteImport.update({
+  id: '/api/auth/google/callback',
+  path: '/api/auth/google/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -187,6 +193,7 @@ export interface FileRoutesByFullPath {
   '/api/billing/webhook': typeof ApiBillingWebhookRoute
   '/api/cron/sync-leads': typeof ApiCronSyncLeadsRoute
   '/api/leads/inbound': typeof ApiLeadsInboundRoute
+  '/api/auth/google/callback': typeof ApiAuthGoogleCallbackRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -214,6 +221,7 @@ export interface FileRoutesByTo {
   '/api/billing/webhook': typeof ApiBillingWebhookRoute
   '/api/cron/sync-leads': typeof ApiCronSyncLeadsRoute
   '/api/leads/inbound': typeof ApiLeadsInboundRoute
+  '/api/auth/google/callback': typeof ApiAuthGoogleCallbackRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -242,6 +250,7 @@ export interface FileRoutesById {
   '/api/billing/webhook': typeof ApiBillingWebhookRoute
   '/api/cron/sync-leads': typeof ApiCronSyncLeadsRoute
   '/api/leads/inbound': typeof ApiLeadsInboundRoute
+  '/api/auth/google/callback': typeof ApiAuthGoogleCallbackRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -271,6 +280,7 @@ export interface FileRouteTypes {
     | '/api/billing/webhook'
     | '/api/cron/sync-leads'
     | '/api/leads/inbound'
+    | '/api/auth/google/callback'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -298,6 +308,7 @@ export interface FileRouteTypes {
     | '/api/billing/webhook'
     | '/api/cron/sync-leads'
     | '/api/leads/inbound'
+    | '/api/auth/google/callback'
   id:
     | '__root__'
     | '/'
@@ -325,6 +336,7 @@ export interface FileRouteTypes {
     | '/api/billing/webhook'
     | '/api/cron/sync-leads'
     | '/api/leads/inbound'
+    | '/api/auth/google/callback'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -353,6 +365,7 @@ export interface RootRouteChildren {
   ApiBillingWebhookRoute: typeof ApiBillingWebhookRoute
   ApiCronSyncLeadsRoute: typeof ApiCronSyncLeadsRoute
   ApiLeadsInboundRoute: typeof ApiLeadsInboundRoute
+  ApiAuthGoogleCallbackRoute: typeof ApiAuthGoogleCallbackRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -532,6 +545,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiBillingWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/auth/google/callback': {
+      id: '/api/auth/google/callback'
+      path: '/api/auth/google/callback'
+      fullPath: '/api/auth/google/callback'
+      preLoaderRoute: typeof ApiAuthGoogleCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -561,6 +581,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiBillingWebhookRoute: ApiBillingWebhookRoute,
   ApiCronSyncLeadsRoute: ApiCronSyncLeadsRoute,
   ApiLeadsInboundRoute: ApiLeadsInboundRoute,
+  ApiAuthGoogleCallbackRoute: ApiAuthGoogleCallbackRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

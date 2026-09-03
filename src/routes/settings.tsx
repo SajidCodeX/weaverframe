@@ -24,6 +24,7 @@ import {
   createStripeCustomerPortalSession,
   addManualLead,
   triggerMailboxSync,
+  getGoogleConnectUrl,
 } from "@/lib/dashboard";
 import { Loader2, Check, X, AlertCircle, Download, Mail, Sparkles, RefreshCw, Lock, ShieldCheck, CheckCircle2, Zap, Server, Globe, CreditCard, ExternalLink, Copy, Code, Share2, Send, Terminal, Smartphone, Inbox, ArrowRight, CheckCircle, Eye, EyeOff, ChevronDown, FileText } from "lucide-react";
 
@@ -671,9 +672,32 @@ function SettingsPage() {
   const [smtpHost, setSmtpHost] = useState("");
   const [smtpPort, setSmtpPort] = useState("587");
   const [useSsl, setUseSsl] = useState(false);
+  const [showManualGoogle, setShowManualGoogle] = useState(false);
 
   const [isTestingEmail, setIsTestingEmail] = useState(false);
   const [emailTestSuccess, setEmailTestSuccess] = useState<string | null>(null);
+
+  // Detect Google OAuth callback redirect parameters
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      const connected = url.searchParams.get('connected');
+      const err = url.searchParams.get('error');
+      const connectedEmail = url.searchParams.get('email');
+
+      if (connected === 'google') {
+        setEmailTestSuccess(`🎉 Google Workspace connected successfully via 1-Click OAuth!${connectedEmail ? ` (${connectedEmail})` : ''}`);
+        setExpandedIntegration('email_mailbox');
+        url.searchParams.delete('connected');
+        url.searchParams.delete('email');
+        window.history.replaceState({}, '', url.toString());
+      } else if (err) {
+        alert(`Google Connection Notice: ${err.replace(/_/g, ' ')}`);
+        url.searchParams.delete('error');
+        window.history.replaceState({}, '', url.toString());
+      }
+    }
+  }, []);
 
   useEffect(() => {
     if (loadedStatuses && Object.keys(loadedStatuses).length > 0) {
@@ -733,6 +757,20 @@ function SettingsPage() {
       alert(`Mailbox Verification Failed: ${err?.message || err}`);
     } finally {
       setIsTestingEmail(false);
+    }
+  };
+
+  const [isConnectingGoogle, setIsConnectingGoogle] = useState(false);
+  const handleConnectGoogle = async () => {
+    setIsConnectingGoogle(true);
+    try {
+      const res = await getGoogleConnectUrl({ data: { returnTo: '/settings?tab=integrations' } });
+      if (res?.url) {
+        window.location.href = res.url;
+      }
+    } catch (err: any) {
+      alert("Could not start Google connection: " + (err?.message || err));
+      setIsConnectingGoogle(false);
     }
   };
 
@@ -1508,110 +1546,218 @@ function SettingsPage() {
                         />
                       </div>
 
-                      {/* Form Fields Grid */}
-                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-4">
-                        {/* Connected Email Address */}
-                        <div className="sm:col-span-6 space-y-1.5">
-                          <label className="block text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">
-                            Company Mailbox Email <span className="text-danger">*</span>
-                          </label>
-                          <input
-                            type="email"
-                            value={emailAddress}
-                            onChange={e => setEmailAddress(e.target.value)}
-                            placeholder="e.g. alex@luxuryhomes.com"
-                            className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs text-foreground focus:outline-none focus:border-white/60 font-mono"
-                          />
-                        </div>
+                      {/* ── 1-CLICK GOOGLE OAUTH 2.0 (PREFERRED FOR GOOGLE WORKSPACE) ── */}
+                      {emailProvider === "google" && !showManualGoogle ? (
+                        <div className="space-y-4">
+                          {isEmailConnected && (credentials.email_mailbox?.provider === 'google_oauth' || emailProvider === 'google_oauth') ? (
+                            <div className="p-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in duration-150">
+                              <div className="flex items-center gap-3">
+                                <div className="size-9 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                                  <CheckCircle2 className="size-5" />
+                                </div>
+                                <div>
+                                  <div className="text-xs font-semibold text-foreground flex items-center gap-2">
+                                    <span>Connected via Google Workspace</span>
+                                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-mono font-medium">1-Click OAuth 2.0 Active</span>
+                                  </div>
+                                  <p className="text-[11px] text-muted-foreground font-mono mt-0.5">
+                                    {emailAddress || credentials.email_mailbox?.email || "Google Account Authorized"}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={handleTestEmail}
+                                  disabled={isTestingEmail}
+                                  className="text-xs px-3 py-1.5 rounded border border-border text-foreground hover:bg-secondary transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                                >
+                                  {isTestingEmail ? <RefreshCw className="size-3 animate-spin" /> : <Zap className="size-3 text-[#c9a84c] dark:text-[#e5d9c5]" />}
+                                  <span>{isTestingEmail ? "Verifying..." : "Test Handshake"}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleDisconnectEmail}
+                                  disabled={isSaving.email_mailbox}
+                                  className="text-xs px-3 py-1.5 rounded border border-danger/40 text-danger hover:bg-danger/10 transition-colors cursor-pointer disabled:opacity-50"
+                                >
+                                  Disconnect
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="p-5 rounded-lg border border-border/60 bg-secondary/30 flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in duration-150">
+                              <div className="space-y-1 text-center sm:text-left">
+                                <div className="flex items-center justify-center sm:justify-start gap-2.5">
+                                  <svg className="size-5 shrink-0" viewBox="0 0 24 24">
+                                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                                  </svg>
+                                  <span className="text-sm font-semibold text-foreground">1-Click Google Workspace Authorization</span>
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                  Connect your company Gmail or Google Workspace inbox securely with zero passwords or manual port setups.
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={handleConnectGoogle}
+                                disabled={isConnectingGoogle}
+                                className="inline-flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-md bg-white text-black hover:bg-neutral-100 font-semibold text-xs tracking-wide shadow-md transition-all shrink-0 cursor-pointer disabled:opacity-60"
+                              >
+                                {isConnectingGoogle ? (
+                                  <>
+                                    <RefreshCw className="size-3.5 animate-spin text-black" />
+                                    <span>Connecting...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <svg className="size-4" viewBox="0 0 24 24">
+                                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                                    </svg>
+                                    <span>Connect with Google</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          )}
 
-                        {/* Sender Display Name */}
-                        <div className="sm:col-span-6 space-y-1.5">
-                          <label className="block text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">
-                            Sender Display Name
-                          </label>
-                          <input
-                            type="text"
-                            value={emailSenderName}
-                            onChange={e => setEmailSenderName(e.target.value)}
-                            placeholder="e.g. Alex | Luxury Homes Studio"
-                            className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs text-foreground focus:outline-none focus:border-white/60"
-                          />
-                        </div>
-
-                        {/* App Password / Access Secret */}
-                        {emailProvider !== "custom_smtp" ? (
-                          <div className="sm:col-span-12 space-y-1.5">
-                            <label className="block text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">
-                              {emailProvider === "google" ? "Google Workspace App Password" : "Microsoft 365 App Password / Secret"} <span className="text-danger">*</span>
-                            </label>
-                            <input
-                              type="password"
-                              value={emailPassword}
-                              onChange={e => setEmailPassword(e.target.value)}
-                              placeholder="Enter 16-character App Password (e.g. abcd efgh ijkl mnop)"
-                              className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-white/60"
-                            />
-                            <p className="text-[10px] text-muted-foreground">
-                              {emailProvider === "google"
-                                ? "🔑 Generated in Google Account > Security > 2-Step Verification > App Passwords."
-                                : "🔑 Generated in Microsoft 365 Admin / Azure Security > App Registrations or App Passwords."}
-                            </p>
+                          <div className="flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() => setShowManualGoogle(true)}
+                              className="text-[11px] text-muted-foreground hover:text-foreground underline transition-colors cursor-pointer"
+                            >
+                              Advanced: Configure manually with 16-character App Password →
+                            </button>
                           </div>
-                        ) : (
-                          <>
+                        </div>
+                      ) : (
+                        /* Form Fields Grid (Manual SMTP / IMAP or Microsoft) */
+                        <div className="space-y-4">
+                          {emailProvider === "google" && showManualGoogle && (
+                            <div className="flex justify-between items-center pb-1">
+                              <span className="text-[11px] text-muted-foreground">Configuring Google via manual SMTP/IMAP</span>
+                              <button
+                                type="button"
+                                onClick={() => setShowManualGoogle(false)}
+                                className="text-[11px] text-primary hover:underline transition-colors cursor-pointer"
+                              >
+                                ← Switch back to 1-Click Google OAuth
+                              </button>
+                            </div>
+                          )}
+
+                          <div className="grid grid-cols-1 sm:grid-cols-12 gap-4">
+                            {/* Connected Email Address */}
                             <div className="sm:col-span-6 space-y-1.5">
                               <label className="block text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">
-                                SMTP Server Host <span className="text-danger">*</span>
+                                Company Mailbox Email <span className="text-danger">*</span>
                               </label>
                               <input
-                                type="text"
-                                value={smtpHost}
-                                onChange={e => setSmtpHost(e.target.value)}
-                                placeholder="e.g. smtp.mailgun.org or mail.yourdomain.com"
-                                className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-white/60"
+                                type="email"
+                                value={emailAddress}
+                                onChange={e => setEmailAddress(e.target.value)}
+                                placeholder="e.g. alex@luxuryhomes.com"
+                                className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs text-foreground focus:outline-none focus:border-white/60 font-mono"
                               />
                             </div>
 
-                            <div className="sm:col-span-3 space-y-1.5">
+                            {/* Sender Display Name */}
+                            <div className="sm:col-span-6 space-y-1.5">
                               <label className="block text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">
-                                SMTP Port <span className="text-danger">*</span>
+                                Sender Display Name
                               </label>
                               <input
                                 type="text"
-                                value={smtpPort}
-                                onChange={e => setSmtpPort(e.target.value)}
-                                placeholder="587"
-                                className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-white/60"
+                                value={emailSenderName}
+                                onChange={e => setEmailSenderName(e.target.value)}
+                                placeholder="e.g. Alex | Luxury Homes Studio"
+                                className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs text-foreground focus:outline-none focus:border-white/60"
                               />
                             </div>
 
-                            <div className="sm:col-span-3 space-y-1.5 flex flex-col justify-center pt-3">
-                              <label className="flex items-center gap-2 cursor-pointer text-xs text-foreground">
+                            {/* App Password / Access Secret */}
+                            {emailProvider !== "custom_smtp" ? (
+                              <div className="sm:col-span-12 space-y-1.5">
+                                <label className="block text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">
+                                  {emailProvider === "google" ? "Google Workspace App Password" : "Microsoft 365 App Password / Secret"} <span className="text-danger">*</span>
+                                </label>
                                 <input
-                                  type="checkbox"
-                                  checked={useSsl}
-                                  onChange={e => setUseSsl(e.target.checked)}
-                                  className="size-4 accent-primary rounded"
+                                  type="password"
+                                  value={emailPassword}
+                                  onChange={e => setEmailPassword(e.target.value)}
+                                  placeholder="Enter 16-character App Password (e.g. abcd efgh ijkl mnop)"
+                                  className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-white/60"
                                 />
-                                <span>Use SSL (Port 465)</span>
-                              </label>
-                            </div>
+                                <p className="text-[10px] text-muted-foreground">
+                                  {emailProvider === "google"
+                                    ? "🔑 Generated in Google Account > Security > 2-Step Verification > App Passwords."
+                                    : "🔑 Generated in Microsoft 365 Admin / Azure Security > App Registrations or App Passwords."}
+                                </p>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="sm:col-span-6 space-y-1.5">
+                                  <label className="block text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">
+                                    SMTP Server Host <span className="text-danger">*</span>
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={smtpHost}
+                                    onChange={e => setSmtpHost(e.target.value)}
+                                    placeholder="e.g. smtp.mailgun.org or mail.yourdomain.com"
+                                    className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-white/60"
+                                  />
+                                </div>
 
-                            <div className="sm:col-span-12 space-y-1.5">
-                              <label className="block text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">
-                                SMTP Password <span className="text-danger">*</span>
-                              </label>
-                              <input
-                                type="password"
-                                value={emailPassword}
-                                onChange={e => setEmailPassword(e.target.value)}
-                                placeholder="Enter SMTP password"
-                                className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-white/60"
-                              />
-                            </div>
-                          </>
-                        )}
-                      </div>
+                                <div className="sm:col-span-3 space-y-1.5">
+                                  <label className="block text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">
+                                    SMTP Port <span className="text-danger">*</span>
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={smtpPort}
+                                    onChange={e => setSmtpPort(e.target.value)}
+                                    placeholder="587"
+                                    className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-white/60"
+                                  />
+                                </div>
+
+                                <div className="sm:col-span-3 space-y-1.5 flex flex-col justify-center pt-3">
+                                  <label className="flex items-center gap-2 cursor-pointer text-xs text-foreground">
+                                    <input
+                                      type="checkbox"
+                                      checked={useSsl}
+                                      onChange={e => setUseSsl(e.target.checked)}
+                                      className="size-4 accent-primary rounded"
+                                    />
+                                    <span>Use SSL (Port 465)</span>
+                                  </label>
+                                </div>
+
+                                <div className="sm:col-span-12 space-y-1.5">
+                                  <label className="block text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">
+                                    SMTP Password <span className="text-danger">*</span>
+                                  </label>
+                                  <input
+                                    type="password"
+                                    value={emailPassword}
+                                    onChange={e => setEmailPassword(e.target.value)}
+                                    placeholder="Enter SMTP password"
+                                    className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-white/60"
+                                  />
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      )}
 
                       {/* Test Success Feedback */}
                       {emailTestSuccess && (

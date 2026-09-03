@@ -295,3 +295,24 @@ model DemoRequest {
   @@index([email])
 }
 
+// ─── PERSISTENT AI DELAY QUEUE (DURABLE WORKER JOBS) ──────────────────────────
+model ScheduledAiReply {
+  id             String    @id @default(uuid())
+  builderId      String
+  leadId         String
+  conversationId String?
+  scheduledFor   DateTime
+  status         String    @default("pending") // "pending" | "processing" | "sent" | "cancelled" | "failed"
+  payload        String    @db.Text             // JSON string: { userMessage, senderEmail, attempts }
+  attempts       Int       @default(0)
+  lastError      String?   @db.Text
+  sentAt         DateTime?
+  cancelledAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([status, scheduledFor])
+  @@index([leadId, status])
+  @@index([builderId])
+}
+

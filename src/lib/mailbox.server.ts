@@ -83,6 +83,8 @@ export async function syncInboundMailbox(builderId?: string, force = false): Pro
       }
     });
 
+    let isGoogleOAuth = false;
+
     if (integration && integration.configSecure) {
       try {
         const { decrypt } = await import('./crypto');
@@ -93,33 +95,23 @@ export async function syncInboundMailbox(builderId?: string, force = false): Pro
           // Already plain JSON or raw
         }
         const config = JSON.parse(raw);
-        emailUser = config.email || config.username || config.user || '';
-        emailPass = config.password || config.pass || '';
-        if (config.provider === 'custom_smtp' && config.smtpHost) {
-          emailHost = config.smtpHost.replace(/^smtp\./i, 'imap.');
-        } else if (config.host) {
-          emailHost = config.host;
+        if (config.provider === 'google_oauth') {
+          isGoogleOAuth = true;
+          emailUser = config.email || '';
+        } else {
+          emailUser = config.email || config.username || config.user || '';
+          emailPass = config.password || config.pass || '';
+          if (config.provider === 'custom_smtp' && config.smtpHost) {
+            emailHost = config.smtpHost.replace(/^smtp\./i, 'imap.');
+          } else if (config.host) {
+            emailHost = config.host;
+          }
+          if (config.port) emailPort = Number(config.port);
         }
-        if (config.port) emailPort = Number(config.port);
       } catch (e) {
         console.warn('[MAILBOX SYNC] Could not parse integration configSecure:', e);
       }
     }
-
-    // Fallback to environment variables if integration table does not have credentials
-    if (!emailUser || !emailPass) {
-      emailUser = process.env.IMAP_USER || process.env.SMTP_USER || '';
-      emailPass = process.env.IMAP_PASS || process.env.SMTP_PASS || '';
-      emailHost = process.env.IMAP_HOST || 'imap.gmail.com';
-      emailPort = Number(process.env.IMAP_PORT) || 993;
-    }
-
-    if (!emailUser || !emailPass) {
-      return { success: false, synced: 0, error: 'No mailbox credentials configured (IMAP_USER / IMAP_PASS missing).' };
-    }
-
-    // Strip any spaces from app password (common copy-paste error with Google 16-character app passwords)
-    const cleanPass = emailPass.replace(/\s+/g, '');
 
     // 4. Fetch all active lead emails for this builder for in-memory O(1) matching
     const leads = await db.lead.findMany({
@@ -144,6 +136,79 @@ export async function syncInboundMailbox(builderId?: string, force = false): Pro
         leadEmailMap.set(l.email.trim().toLowerCase(), l);
       }
     }
+
+    // ── GOOGLE OAUTH 2.0 (GMAIL REST API - ZERO SOCKET OVERHEAD ON VERCEL) ──────
+    if (isGoogleOAuth) {
+      try {
+        const { getValidGoogleAccessToken, fetchRecentGmailSentMessages } = await import('./google-oauth.server');
+        const oauthData = await getValidGoogleAccessToken(targetBuilderId);
+        if (oauthData) {
+          const sentEvents = await fetchRecentGmailSentMessages(oauthData.accessToken, leadEmailMap);
+          let takeoverCount = 0;
+
+          for (const ev of sentEvents) {
+            const existingSent = await db.message.findFirst({
+              where: {
+                leadId: ev.leadId,
+                sender: 'user',
+                createdAt: { gte: new Date(ev.date.getTime() - 15000), lte: new Date(ev.date.getTime() + 15000) },
+              },
+            });
+
+            if (!existingSent) {
+              await db.message.create({
+                data: {
+                  builderId: targetBuilderId,
+                  leadId: ev.leadId,
+                  sender: 'user',
+                  content: ev.snippet || 'External reply sent from Google Workspace / Mobile.',
+                  channel: 'portal',
+                  isRead: true,
+                  createdAt: ev.date,
+                },
+              });
+
+              const { cancelPendingAiReply } = await import('./ai-queue.server');
+              await cancelPendingAiReply(ev.leadId, 'Human builder replied via Google Workspace (OAuth)');
+
+              const { setLeadAiToggleDirect } = await import('./dashboard');
+              await setLeadAiToggleDirect(ev.leadId, false, { builderId: targetBuilderId }).catch(() => {});
+
+              await db.activity.create({
+                data: {
+                  builderId: targetBuilderId,
+                  leadId: ev.leadId,
+                  action: `👤 Human takeover detected: Builder replied to ${ev.recipient} via Google Workspace. AI auto-muted.`,
+                  createdAt: ev.date,
+                },
+              }).catch(() => {});
+
+              console.log(`[GOOGLE OAUTH TAKEOVER] Builder replied to lead ${ev.leadId} via Gmail API. AI auto-muted.`);
+              takeoverCount++;
+            }
+          }
+
+          return { success: true, synced: takeoverCount };
+        }
+      } catch (oauthErr) {
+        console.warn('[MAILBOX SYNC] Google OAuth sync error, will attempt IMAP if credentials exist:', oauthErr);
+      }
+    }
+
+    // Fallback to environment variables if integration table does not have credentials
+    if (!emailUser || !emailPass) {
+      emailUser = process.env.IMAP_USER || process.env.SMTP_USER || '';
+      emailPass = process.env.IMAP_PASS || process.env.SMTP_PASS || '';
+      emailHost = process.env.IMAP_HOST || 'imap.gmail.com';
+      emailPort = Number(process.env.IMAP_PORT) || 993;
+    }
+
+    if (!emailUser || !emailPass) {
+      return { success: false, synced: 0, error: 'No mailbox credentials configured (IMAP_USER / IMAP_PASS missing).' };
+    }
+
+    // Strip any spaces from app password (common copy-paste error with Google 16-character app passwords)
+    const cleanPass = emailPass.replace(/\s+/g, '');
 
     // 5. Connect to IMAP Server with fast timeouts
     const client = new ImapFlow({
@@ -199,11 +264,15 @@ export async function syncInboundMailbox(builderId?: string, force = false): Pro
 
           const parsed = (await simpleParser(fullMsg.source as any)) as any;
           const rawBody = parsed?.text || '';
-          const cleanBody = stripEmailQuotedHistory(rawBody);
+          const rawCleanBody = stripEmailQuotedHistory(rawBody);
 
-          if (!cleanBody || cleanBody.length === 0) {
+          if (!rawCleanBody || rawCleanBody.length === 0) {
             continue;
           }
+
+          // Sanitize inbound body to neutralize injection vectors, strip HTML & zero-width characters
+          const { sanitizeInboundEmail } = await import('./sanitizer');
+          const cleanBody = sanitizeInboundEmail(rawCleanBody);
 
           const mailDate = item.envelope?.date || new Date();
 
@@ -248,7 +317,7 @@ export async function syncInboundMailbox(builderId?: string, force = false): Pro
             const isAiActive = aiToggleMap[item.matchedLead.id] !== false; // Default active
 
             if (isAiActive) {
-              const queueRes = queueDelayedAiReply(item.matchedLead.id, targetBuilderId, cleanBody);
+              const queueRes = await queueDelayedAiReply(item.matchedLead.id, targetBuilderId, cleanBody);
               const minutes = (queueRes.delaySeconds / 60).toFixed(1);
               await db.activity.create({
                 data: {
@@ -266,6 +335,97 @@ export async function syncInboundMailbox(builderId?: string, force = false): Pro
       }
     } finally {
       lock.release();
+    }
+
+    // -------------------------------------------------------------
+    // PHASE 2: INSPECT SENT FOLDER FOR HUMAN TAKEOVER (MOBILE / GMAIL / OUTLOOK)
+    // -------------------------------------------------------------
+    try {
+      const mailboxes = await client.list();
+      const sentBox = mailboxes.find(
+        (m: any) =>
+          m.specialUse === '\\Sent' ||
+          /sent/i.test(m.name || '') ||
+          /sent/i.test(m.path || '')
+      );
+
+      if (sentBox) {
+        const sentPath = sentBox.path || sentBox.name;
+        const sentLock = await client.getMailboxLock(sentPath);
+
+        try {
+          const sentStatus = await client.status(sentPath, { messages: true });
+          const totalSent = sentStatus.messages || 0;
+
+          if (totalSent > 0) {
+            const startSeq = Math.max(1, totalSent - 10);
+            const range = `${startSeq}:*`;
+
+            for await (const message of client.fetch(range, { envelope: true, uid: true })) {
+              const toAddress = message.envelope?.to?.[0]?.address?.toLowerCase();
+              if (!toAddress || !leadEmailMap.has(toAddress)) continue;
+
+              const matchedLead = leadEmailMap.get(toAddress)!;
+              const sentDate = message.envelope?.date || new Date();
+
+              // Check if we already recorded this human email in DB
+              const existingSent = await db.message.findFirst({
+                where: {
+                  leadId: matchedLead.id,
+                  sender: 'user',
+                  createdAt: { gte: new Date(sentDate.getTime() - 3000), lte: new Date(sentDate.getTime() + 3000) },
+                },
+              });
+
+              if (!existingSent) {
+                const fullMsg = await client.fetchOne(String(message.uid), { source: true }, { uid: true });
+                let sentContent = 'External message sent from mobile/email client.';
+                if (fullMsg && fullMsg.source) {
+                  const parsed = (await simpleParser(fullMsg.source as any)) as any;
+                  sentContent = stripEmailQuotedHistory(parsed?.text || '') || sentContent;
+                }
+
+                // 1. Record human builder message in DB
+                await db.message.create({
+                  data: {
+                    builderId: targetBuilderId,
+                    leadId: matchedLead.id,
+                    sender: 'user',
+                    content: sentContent,
+                    channel: 'portal',
+                    isRead: true,
+                    createdAt: sentDate,
+                  },
+                });
+
+                // 2. TRIGGER HUMAN TAKEOVER: Cancel pending AI reply
+                const { cancelPendingAiReply } = await import('./ai-queue.server');
+                await cancelPendingAiReply(matchedLead.id, 'Human builder replied via external mail client (IMAP Sent)');
+
+                // 3. Auto-Mute AI in integration settings
+                const { setLeadAiToggleDirect } = await import('./dashboard');
+                await setLeadAiToggleDirect(matchedLead.id, false, { builderId: targetBuilderId }).catch(() => {});
+
+                // 4. Log audit trail
+                await db.activity.create({
+                  data: {
+                    builderId: targetBuilderId,
+                    leadId: matchedLead.id,
+                    action: `👤 Human takeover detected: Builder replied to ${matchedLead.name || toAddress} from external email client (${message.envelope?.from?.[0]?.name || 'Mobile/Mail'}). AI autonomously muted.`,
+                    createdAt: sentDate,
+                  },
+                });
+
+                console.log(`[EXTERNAL TAKEOVER DETECTED] Builder replied to lead ${matchedLead.id} via IMAP Sent. AI auto-muted.`);
+              }
+            }
+          }
+        } finally {
+          sentLock.release();
+        }
+      }
+    } catch (sentErr) {
+      console.warn('[IMAP SENT TAKEOVER SCAN WARNING]:', sentErr);
     }
 
     await client.logout();

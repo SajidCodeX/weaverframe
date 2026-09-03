@@ -38,28 +38,63 @@ export async function sendOutboundEmail(options: SendEmailOptions): Promise<Emai
   let smtpPass = (typeof process !== 'undefined' ? (process.env.SMTP_PASS || process.env.GMAIL_PASS) : undefined) || '';
   let smtpHost = (typeof process !== 'undefined' ? process.env.SMTP_HOST : undefined) || 'smtp.gmail.com';
   let smtpPort = parseInt((typeof process !== 'undefined' ? process.env.SMTP_PORT : undefined) || '465', 10);
+  let googleOAuthToken: { accessToken: string; email: string; name?: string } | null = null;
 
-  // If not in env, check database Integration table
-  if (!smtpUser || !smtpPass) {
-    try {
-      const { getDb } = await import('./db');
-      const db = await getDb();
-      const integration = await db.integration.findFirst({
-        where: { platformId: 'email_mailbox', isConnected: true }
-      });
-      if (integration && integration.configSecure) {
-        const { decrypt } = await import('./crypto');
-        const creds = JSON.parse(decrypt(integration.configSecure));
-        if (creds.email && creds.password && creds.password !== '••••••••••••••••') {
-          smtpUser = creds.email;
-          smtpPass = creds.password;
-          if (creds.provider === 'custom_smtp' && creds.smtpHost) {
-            smtpHost = creds.smtpHost;
-            smtpPort = parseInt(creds.smtpPort || '465', 10);
+  // ── 0. CHECK GOOGLE OAUTH 2.0 (PRIORITY 1 - 1-CLICK CONNECT) ──────────────
+  try {
+    const { getDb } = await import('./db');
+    const db = await getDb();
+    const targetBuilderId = (options as any).builderId;
+    const integrationWhere: any = { platformId: 'email_mailbox', isConnected: true };
+    if (targetBuilderId) integrationWhere.builderId = targetBuilderId;
+
+    const integration = await db.integration.findFirst({ where: integrationWhere });
+    if (integration && integration.configSecure) {
+      const { decrypt } = await import('./crypto');
+      const creds = JSON.parse(decrypt(integration.configSecure));
+
+      if (creds.provider === 'google_oauth' && creds.accessToken) {
+        const { getValidGoogleAccessToken, sendGmailViaRestApi } = await import('./google-oauth.server');
+        googleOAuthToken = await getValidGoogleAccessToken(integration.builderId);
+        if (googleOAuthToken) {
+          let senderHeader = googleOAuthToken.email;
+          if (options.from) {
+            const match = options.from.match(/^([^<]+)/);
+            if (match && match[1]) {
+              senderHeader = `"${match[1].trim()}" <${googleOAuthToken.email}>`;
+            }
+          }
+
+          const oauthResult = await sendGmailViaRestApi(googleOAuthToken.accessToken, {
+            to: recipient,
+            subject: options.subject,
+            html: options.html,
+            text: options.text,
+            from: senderHeader,
+            replyTo: options.replyTo || googleOAuthToken.email
+          });
+
+          if (oauthResult.success) {
+            return {
+              success: true,
+              id: oauthResult.id,
+              engine: 'google_oauth' as any
+            };
+          } else {
+            console.warn('[EMAIL] Google OAuth send failed, falling back to SMTP/Resend:', oauthResult.error);
           }
         }
+      } else if (creds.email && creds.password && creds.password !== '••••••••••••••••') {
+        smtpUser = creds.email;
+        smtpPass = creds.password;
+        if (creds.provider === 'custom_smtp' && creds.smtpHost) {
+          smtpHost = creds.smtpHost;
+          smtpPort = parseInt(creds.smtpPort || '465', 10);
+        }
       }
-    } catch {}
+    }
+  } catch (authInspectErr) {
+    console.warn('[EMAIL] Failed to inspect integration for OAuth:', authInspectErr);
   }
 
   const cleanSmtpPass = smtpPass.replace(/\s+/g, '').trim();
