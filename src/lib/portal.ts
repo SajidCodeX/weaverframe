@@ -1,5 +1,5 @@
 import { createServerFn } from '@tanstack/react-start';
-import { getDb } from './db';
+import { getDb } from './db.server';
 import { sanitizeInboundEmail } from './sanitizer';
 
 // ─── Rate Limiter for Portal Chat (Flood / DoS Protection) ───────────────────

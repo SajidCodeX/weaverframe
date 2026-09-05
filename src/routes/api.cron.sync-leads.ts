@@ -11,7 +11,7 @@ const handleCronLogic = createServerFn({ method: 'GET' })
       return { isResponse: true, status: 401, body: 'Unauthorized' };
     }
 
-    const { getDb } = await import('@/lib/db');
+    const { getDb } = await import('@/lib/db.server');
     const db = await getDb();
     
     try {

@@ -4,7 +4,7 @@ import { createServerFn } from '@tanstack/react-start';
 const handleBillingWebhook = createServerFn({ method: 'POST' })
   .handler(async (ctx) => {
     const request = (ctx as any).request as Request;
-    const { getDb } = await import('@/lib/db');
+    const { getDb } = await import('@/lib/db.server');
     const db = await getDb();
     const { invalidateCache } = await import('@/lib/cache');
     const crypto = await import('crypto');

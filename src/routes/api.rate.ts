@@ -96,7 +96,7 @@ const handleRateLogic = createServerFn({ method: 'GET' })
       };
     }
 
-    const { getDb } = await import('@/lib/db');
+    const { getDb } = await import('@/lib/db.server');
     const db = await getDb();
     try {
       const invite = await db.reviewRequest.findUnique({ where: { id: inviteId } });

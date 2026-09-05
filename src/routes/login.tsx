@@ -1,6 +1,5 @@
 import { createFileRoute, useRouter, Link } from '@tanstack/react-router'
 import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
 import { loginFn } from '@/lib/auth'
 import { toast } from 'sonner'
 import {
@@ -69,19 +68,19 @@ function LoginRoute() {
         sessionStorage.setItem('active_role', result.role)
         localStorage.setItem(`role_${tabId}`, result.role)
 
-        // Fast-path: cache session from login response
+        // Fast-path: cache session from login response in window and sessionStorage
         if (result.session) {
           ;(window as any).__pendingLoginSession = result.session
+          sessionStorage.setItem('pending_session', JSON.stringify(result.session))
         }
 
-        // Client-side navigate
-        if (result.forcePasswordReset) {
-          window.location.href = '/reset-password'
-        } else if (result.role === 'admin') {
-          await router.navigate({ to: '/admin' })
-        } else {
-          await router.navigate({ to: '/' })
-        }
+        const destination = result.forcePasswordReset
+          ? '/reset-password'
+          : result.role === 'admin'
+          ? '/admin'
+          : '/'
+        
+        await router.navigate({ to: destination as any })
       } else {
         setError('Login failed. Please verify your credentials.')
         setLoading(false)
@@ -121,11 +120,8 @@ function LoginRoute() {
         </div>
 
         {/* Form Container */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-          className="my-auto max-w-md w-full mx-auto py-10"
+        <div
+          className="my-auto max-w-md w-full mx-auto py-10 animate-in fade-in slide-in-from-bottom-4 duration-500"
         >
           {/* Brand Mark */}
           <div className="flex items-center gap-3.5 mb-8">
@@ -154,14 +150,12 @@ function LoginRoute() {
 
           {/* Error Alert */}
           {error && (
-            <motion.div
-              initial={{ opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mb-6 p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-400 flex items-center gap-3 font-mono"
+            <div
+              className="mb-6 p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-400 flex items-center gap-3 font-mono animate-in fade-in duration-200"
             >
               <div className="size-2 rounded-full bg-rose-500 shrink-0" />
               <span>{error}</span>
-            </motion.div>
+            </div>
           )}
 
           {/* Login Form */}
@@ -288,7 +282,7 @@ function LoginRoute() {
               </p>
             </div>
           </div>
-        </motion.div>
+        </div>
 
         {/* Security Assurance Footer */}
         <div className="pt-6 border-t border-white/[0.06] flex items-center justify-between text-[10px] font-mono text-white/40 tracking-wider">
@@ -322,11 +316,8 @@ function LoginRoute() {
         {/* Center Showcase: Exploded Villa with Floating Metric Cards */}
         <div className="relative my-auto flex items-center justify-center py-6">
           {/* Villa Graphic */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.94 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
-            className="relative z-10 w-full max-w-[620px] 2xl:max-w-[700px]"
+          <div
+            className="relative z-10 w-full max-w-[620px] 2xl:max-w-[700px] animate-in fade-in zoom-in-95 duration-700"
           >
             <picture className="w-full">
               <source srcSet="/images/exploded-villa.webp" type="image/webp" />
@@ -336,14 +327,11 @@ function LoginRoute() {
                 className="w-full h-auto object-contain drop-shadow-[0_30px_70px_rgba(0,0,0,0.95)] select-none pointer-events-none"
               />
             </picture>
-          </motion.div>
+          </div>
 
           {/* Floating Metric Pill 1: Response Time */}
-          <motion.div
-            initial={{ opacity: 0, x: -25 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.8, delay: 0.3 }}
-            className="absolute top-8 left-4 xl:left-8 z-20 p-4 rounded-2xl border border-white/[0.12] bg-[#0c0d12]/85 backdrop-blur-xl shadow-2xl space-y-1 max-w-[200px]"
+          <div
+            className="absolute top-8 left-4 xl:left-8 z-20 p-4 rounded-2xl border border-white/[0.12] bg-[#0c0d12]/85 backdrop-blur-xl shadow-2xl space-y-1 max-w-[200px] animate-in fade-in slide-in-from-left-4 duration-500"
           >
             <div className="flex items-center gap-2 text-emerald-400 text-[10px] font-mono font-bold uppercase tracking-wider">
               <CheckCircle2 className="size-3.5" />
@@ -352,14 +340,11 @@ function LoginRoute() {
             <p className="text-xs text-white/80 font-medium">
               High-net-worth buyers engaged 24/7/365.
             </p>
-          </motion.div>
+          </div>
 
           {/* Floating Metric Pill 2: Annual Pipeline */}
-          <motion.div
-            initial={{ opacity: 0, x: 25 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.8, delay: 0.45 }}
-            className="absolute bottom-8 right-4 xl:right-8 z-20 p-4 rounded-2xl border border-[#e5d9c5]/30 bg-[#0c0d12]/85 backdrop-blur-xl shadow-2xl space-y-1 text-right max-w-[220px]"
+          <div
+            className="absolute bottom-8 right-4 xl:right-8 z-20 p-4 rounded-2xl border border-[#e5d9c5]/30 bg-[#0c0d12]/85 backdrop-blur-xl shadow-2xl space-y-1 text-right max-w-[220px] animate-in fade-in slide-in-from-right-4 duration-500"
           >
             <span className="font-nevera text-2xl text-[#e5d9c5] font-bold block">
               $180M+
@@ -367,7 +352,7 @@ function LoginRoute() {
             <p className="text-[11px] text-white/70 font-mono uppercase tracking-wider">
               Protected Construction Pipeline
             </p>
-          </motion.div>
+          </div>
         </div>
 
         {/* Bottom Testimonial Banner */}

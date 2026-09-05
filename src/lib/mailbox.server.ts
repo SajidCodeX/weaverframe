@@ -42,7 +42,7 @@ const IMAP_THROTTLE_MS = 10_000; // 10 seconds
  * via IMAP (`imap.gmail.com:993`). Matches sender emails against existing leads in DB.
  */
 export async function syncInboundMailbox(builderId?: string, force = false): Promise<{ success: boolean; synced: number; error?: string }> {
-  const { getDb } = await import('./db');
+  const { getDb } = await import('./db.server');
   const db = await getDb();
 
   try {

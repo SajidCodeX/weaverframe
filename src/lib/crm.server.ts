@@ -387,7 +387,7 @@ export async function syncLeadToConnectedCrms(
   if (!builderId) return results;
 
   try {
-    const { getDb } = await import('@/lib/db');
+    const { getDb } = await import('@/lib/db.server');
     const db = await getDb();
     const integrations = await db.integration.findMany({
       where: {

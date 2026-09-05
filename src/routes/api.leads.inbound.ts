@@ -84,7 +84,7 @@ export async function handleInboundLeadDirect(inputData: any = {}, request?: Req
     }
   }
 
-  const { getDb } = await import('@/lib/db');
+  const { getDb } = await import('@/lib/db.server');
   const db = await getDb();
   const { invalidateCache } = await import('@/lib/cache');
   const { triggerAutonomousAiOutreach } = await import('@/lib/dashboard');

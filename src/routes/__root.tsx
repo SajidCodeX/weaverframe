@@ -139,7 +139,16 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
     // ── Fast-path after login ────────────────────────────────────────────────
     if (typeof window !== 'undefined') {
-      const pending = (window as any).__pendingLoginSession;
+      let pending = (window as any).__pendingLoginSession;
+      if (!pending) {
+        const stored = sessionStorage.getItem('pending_session');
+        if (stored) {
+          try {
+            pending = JSON.parse(stored);
+            sessionStorage.removeItem('pending_session');
+          } catch {}
+        }
+      }
       if (pending) {
         delete (window as any).__pendingLoginSession;
         _clientSession = pending;
@@ -164,7 +173,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     }
 
     // ── Cache miss (Initial Load) — call server ──────────────────────────────
-    const session = await getSessionFn({ data: { activeRole } });
+    // Pass location.pathname as clientPath so the server always knows which
+    // role cookie to read — critical during SSR where getRequestUrl() may
+    // return the internal RPC URL rather than the real page path.
+    const session = await getSessionFn({ data: { activeRole, clientPath: location.pathname } });
     if (!session) {
       _clientSession = null;
       

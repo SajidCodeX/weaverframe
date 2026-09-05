@@ -1,4 +1,4 @@
-import { getDb } from './db';
+import { getDb } from './db.server';
 import { encrypt, decrypt } from './crypto';
 
 export interface GoogleOAuthConfig {

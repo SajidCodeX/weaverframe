@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Centralized Operational Alerting System
  *
  * Captures, buffers, and dispatches critical operational events (provider failures,
@@ -85,7 +85,7 @@ export async function sendAlert(event: AlertEvent): Promise<void> {
   // 4. Record to Database Activity if DB and builderId are present
   if (alert.builderId) {
     try {
-      const { getDb } = await import('./db');
+      const { getDb } = await import('./db.server');
       const db = await getDb();
       await db.activity.create({
         data: {

@@ -42,7 +42,7 @@ export async function sendOutboundEmail(options: SendEmailOptions): Promise<Emai
 
   // ── 0. CHECK GOOGLE OAUTH 2.0 (PRIORITY 1 - 1-CLICK CONNECT) ──────────────
   try {
-    const { getDb } = await import('./db');
+    const { getDb } = await import('./db.server');
     const db = await getDb();
     const targetBuilderId = (options as any).builderId;
     const integrationWhere: any = { platformId: 'email_mailbox', isConnected: true };

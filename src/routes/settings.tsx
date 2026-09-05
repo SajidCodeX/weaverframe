@@ -1549,7 +1549,7 @@ function SettingsPage() {
                       {/* ── 1-CLICK GOOGLE OAUTH 2.0 (PREFERRED FOR GOOGLE WORKSPACE) ── */}
                       {emailProvider === "google" && !showManualGoogle ? (
                         <div className="space-y-4">
-                          {isEmailConnected && (credentials.email_mailbox?.provider === 'google_oauth' || emailProvider === 'google_oauth') ? (
+                          {isEmailConnected && (credentials.email_mailbox?.provider === 'google_oauth' || credentials.email_mailbox?.provider === 'google') ? (
                             <div className="p-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in duration-150">
                               <div className="flex items-center gap-3">
                                 <div className="size-9 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">

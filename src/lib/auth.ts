@@ -54,13 +54,22 @@ export function invalidateSessionCache(userId?: string) {
 }
 
 export const getSessionFn = createServerFn({ method: 'POST' })
-  .inputValidator((data: { activeRole?: string | null } | undefined) => data)
+  .inputValidator((data: { activeRole?: string | null; clientPath?: string | null } | undefined) => data)
   .handler(async ({ data }) => {
     try {
       const { requireAuth, getSessionFromCookie } = await import('./server-utils.server')
+
+      // Resolve active role: explicit role > path-derived role
+      // clientPath is passed from beforeLoad (location.pathname) so the server
+      // always has reliable path context even during SSR where getRequestUrl()
+      // may return the internal RPC endpoint rather than the real page URL.
+      let activeRole = data?.activeRole ?? undefined
+      if (!activeRole && data?.clientPath) {
+        activeRole = data.clientPath.startsWith('/admin') ? 'admin' : 'builder'
+      }
       
       // 1. Verify the JWT unconditionally (no DB queries)
-      const jwtSession = await getSessionFromCookie(data?.activeRole ?? undefined)
+      const jwtSession = await getSessionFromCookie(activeRole)
       if (!jwtSession || !jwtSession.userId) {
         return null
       }
@@ -73,7 +82,7 @@ export const getSessionFn = createServerFn({ method: 'POST' })
       }
 
       // 3. Not cached or expired -> Perform full DB validation
-      const session = await requireAuth(data?.activeRole ?? undefined)
+      const session = await requireAuth(activeRole)
       
       // 4. Cache the result for 30 seconds
       sessionCache.set(session.userId, { session, expiry: now + 30000 })

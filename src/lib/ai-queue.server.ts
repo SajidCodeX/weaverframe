@@ -1,4 +1,4 @@
-import { getDb } from './db';
+import { getDb } from './db.server';
 import { triggerAutonomousAiOutreach, getAiToggleMap } from './dashboard';
 import { sendAlert } from './alerting';
 

@@ -1,5 +1,4 @@
 import { createServerFn } from '@tanstack/react-start'
-import { getDb } from './db'
 import { resolveBookingDateTime, checkAppointmentAvailability, bookAppointmentAtomically } from './date-utils'
 import { sanitizeInboundEmail, sanitizeMetadataField } from './sanitizer'
 import { sendAlert } from './alerting'
@@ -285,7 +284,7 @@ export const getNotificationsData = createServerFn({ method: 'POST' })
     // Super Admin Notifications Handler
     if (session.role === 'admin' && !session.actingAsBuilderId) {
       try {
-        const { getDb } = await import('./db');
+        const { getDb } = await import('./db.server');
         const db = await getDb();
         
         const [demoLeads, recentBuilders] = await Promise.all([
@@ -392,7 +391,7 @@ export async function createHighAlertNotification({
   type?: 'hot_lead' | 'booking' | 'urgent_inquiry';
 }) {
   try {
-    const { getDb } = await import('./db');
+    const { getDb } = await import('./db.server');
     const db = await getDb();
     await db.activity.create({
       data: {
@@ -2732,7 +2731,7 @@ export async function triggerAutonomousAiOutreach(
   builderId: string,
   initialUserMessage?: string
 ) {
-  const { getDb } = await import('./db');
+  const { getDb } = await import('./db.server');
   const db = await getDb();
 
   try {
@@ -3267,7 +3266,7 @@ export const handleGoogleOAuthCallback = createServerFn({ method: 'GET' })
 
     try {
       const { exchangeGoogleAuthCode, getGoogleUserProfile } = await import('./google-oauth.server');
-      const { getDb } = await import('./db');
+      const { getDb } = await import('./db.server');
       const { encrypt } = await import('./crypto');
 
       const { accessToken, refreshToken, expiresIn } = await exchangeGoogleAuthCode(code);
@@ -3492,7 +3491,7 @@ export const exportLeadsToCsv = createServerFn({ method: 'POST' })
 
 export async function readSettingJson(platformId: string, preResolvedSession?: any): Promise<Record<string, any>> {
   const { requireAuth } = await import('./server-utils.server');
-  const { getDb } = await import('./db');
+  const { getDb } = await import('./db.server');
   try {
     const session = preResolvedSession ?? await requireAuth()
     const db = await getDb()
@@ -3511,7 +3510,7 @@ export async function readSettingJson(platformId: string, preResolvedSession?: a
 
 export async function writeSettingJson(platformId: string, value: Record<string, any>, preResolvedSession?: any) {
   const { requireAuth } = await import('./server-utils.server');
-  const { getDb } = await import('./db');
+  const { getDb } = await import('./db.server');
   const session = preResolvedSession ?? await requireAuth()
   const db = await getDb()
   
@@ -3534,7 +3533,7 @@ export async function writeSettingJson(platformId: string, value: Record<string,
 export const getBuilderProfile = createServerFn({ method: 'POST' })
   .inputValidator((data: { activeRole?: string | null } | undefined) => data)
   .handler(async ({ data }) => {
-  const { getDb } = await import('./db');
+  const { getDb } = await import('./db.server');
   const { requireAuth } = await import('./server-utils.server');
   const session = await requireAuth(data?.activeRole ?? undefined);
   const db = await getDb();
@@ -3567,7 +3566,7 @@ export const saveBuilderProfile = createServerFn({ method: 'POST' })
   .inputValidator((data: any) => data)
   .handler(async ({ data }) => {
     try {
-      const { getDb } = await import('./db');
+      const { getDb } = await import('./db.server');
       const { requireAuth, setAuthCookie } = await import('./server-utils.server');
       const session = await requireAuth();
       const db = await getDb();
@@ -3701,7 +3700,7 @@ export async function setLeadAiToggleDirect(leadId: string, active: boolean, cal
     throw new Error('UNAUTHORIZED: Explicit tenant context required for AI toggle modification');
   }
 
-  const { getDb } = await import('./db');
+  const { getDb } = await import('./db.server');
   const db = await getDb();
   
   // Verify lead exists and strictly belongs to the specified tenant
@@ -4216,7 +4215,7 @@ export const submitDemoRequest = createServerFn({ method: 'POST' })
       throw new Error('Please enter a valid phone number.');
     }
 
-    const { getDb } = await import('./db');
+    const { getDb } = await import('./db.server');
     const db = await getDb();
     const { sendOutboundEmail, buildAdminDemoNotificationHtml, buildUserDemoConfirmationHtml } = await import('./email.server');
     const crypto = await import('crypto');
@@ -4310,7 +4309,7 @@ export const submitDemoRequest = createServerFn({ method: 'POST' })
 
 export const prewarmConnection = createServerFn({ method: 'GET' })
   .handler(async () => {
-    const { warmDb } = await import('./db');
+    const { warmDb } = await import('./db.server');
     await warmDb();
     return { status: 'warm' };
   });

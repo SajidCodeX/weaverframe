@@ -1,5 +1,5 @@
 import { createServerFn } from '@tanstack/react-start'
-import { getDb } from './db'
+import { getDb } from './db.server'
 
 export const getBuildersData = createServerFn({ method: 'GET' }).handler(async () => {
   const { requireAdmin } = await import('./server-utils.server');

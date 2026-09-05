@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import React, { useRef, useState, useEffect, useMemo, Suspense } from "react";
-import { AnimatePresence, useInView, m, LazyMotion, domAnimation } from "framer-motion";
+import { AnimatePresence, useInView, motion } from "framer-motion";
 import Lenis from "lenis";
 import useEmblaCarousel from "embla-carousel-react";
 import {
@@ -65,15 +65,9 @@ const LazyRoiProjectionChart = React.lazy(() => import("../components/RoiProject
 // ── KINETIC TEXT REVEAL ───────────────────────────────────────────────────────
 const KineticText = ({ text, className = "" }: { text: string; delay?: number; className?: string }) => {
   return (
-    <m.span
-      initial={{ opacity: 0, y: 16 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
-      className={`inline-block ${className}`}
-    >
+    <span className={`inline-block ${className}`}>
       {text}
-    </m.span>
+    </span>
   );
 };
 
@@ -157,7 +151,7 @@ export const Route = createFileRoute("/welcome")({
       { name: "description", content: "The definitive 24/7 AI Lead Concierge and Pipeline OS engineered exclusively for elite custom home builders." },
     ],
     links: [
-      { rel: "preload", as: "image", href: "/images/exploded-villa.webp", type: "image/webp", fetchpriority: "high" },
+      { rel: "preload", as: "image", href: "/images/exploded-villa.webp", type: "image/webp", fetchPriority: "high" as any },
     ],
   }),
   component: WelcomePage,
@@ -452,9 +446,8 @@ function WelcomePage() {
   };
 
   return (
-    <LazyMotion features={domAnimation}>
     <div className="min-h-screen overflow-x-hidden relative bg-[#060608] text-[#f8f8f8] font-sans selection:bg-[#e5d9c5] selection:text-black">
-      <CustomCursor />
+      {mounted && <CustomCursor />}
 
       {/* Ambient Lighting Orbs */}
       <div className="absolute top-0 left-1/3 w-[600px] h-[600px] bg-radial from-[#c9a84c]/[0.08] to-transparent rounded-full blur-3xl pointer-events-none z-0" />
@@ -520,7 +513,7 @@ function WelcomePage() {
       {/* ── MOBILE NAVIGATION DRAWER ── */}
       <AnimatePresence>
         {isMobileMenuOpen && (
-          <m.div
+          <motion.div
             initial={{ opacity: 0, y: -20, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.96 }}
@@ -596,7 +589,7 @@ function WelcomePage() {
                 Request Private Demo
               </button>
             </div>
-          </m.div>
+          </motion.div>
         )}
       </AnimatePresence>
 
@@ -620,23 +613,20 @@ function WelcomePage() {
         <div className="w-full max-w-[1680px] mx-auto px-6 md:px-12 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center z-10">
           
           {/* LEFT COLUMN: Editorial Typography */}
-          <m.div className="lg:col-span-5 space-y-7 pt-2 z-20">
+          <div className="lg:col-span-6 space-y-7 pt-2 z-20">
             
             {/* Status Pill */}
-            <m.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6 }}
+            <div
               className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full border border-[#e5d9c5]/30 bg-[#e5d9c5]/10 backdrop-blur-md shadow-lg shadow-[#e5d9c5]/5"
             >
               <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
               <span className="text-[10px] font-mono uppercase tracking-[0.24em] text-[#e5d9c5] font-semibold">
                 Autonomous 24/7 AI Lead Concierge
               </span>
-            </m.div>
+            </div>
 
             {/* Main Headline */}
-            <h1 className="font-nevera text-4xl sm:text-5xl lg:text-[62px] leading-[1.18] font-normal text-white tracking-normal">
+            <h1 className="font-nevera text-3xl sm:text-4xl lg:text-[44px] xl:text-[52px] leading-[1.16] font-normal text-white tracking-normal">
               Your{" "}
               <span className="inline-block px-1 bg-gradient-to-r from-[#e5d9c5] via-[#fce6b8] to-[#c9a84c] bg-clip-text text-transparent font-nevera">
                 $2M+ custom builds
@@ -645,20 +635,14 @@ function WelcomePage() {
             </h1>
 
             {/* Subtitle */}
-            <m.p
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.15, ease: [0.4, 0, 0.2, 1] }}
+            <p
               className="text-sm sm:text-base font-light text-white/75 leading-relaxed max-w-lg"
             >
               WeaverFrame engages high-ticket luxury home buyers in <strong className="text-white font-medium">&lt; 45 seconds</strong> via autonomous 2-way Email conversations. It screens seven-figure budgets, qualifies lot readiness, and schedules qualified site consultations directly to your team.
-            </m.p>
+            </p>
 
             {/* Magnetic Action Buttons */}
-            <m.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.25, ease: [0.4, 0, 0.2, 1] }}
+            <div
               className="flex flex-col sm:flex-row gap-3.5 sm:items-center pt-1"
             >
               <MagneticButton>
@@ -677,40 +661,37 @@ function WelcomePage() {
               >
                 Test Live Radar ↓
               </a>
-            </m.div>
+            </div>
 
             {/* Animated Trust Metrics */}
-            <div className="grid grid-cols-3 gap-4 pt-6 border-t border-white/[0.1] max-w-md">
-              <div className="group cursor-default">
-                <div className="font-nevera text-2xl sm:text-3xl text-white font-bold group-hover:text-[#e5d9c5] transition-colors">
+            <div className="grid grid-cols-3 gap-3 sm:gap-4 pt-6 border-t border-white/[0.1] max-w-lg">
+              <div className="group cursor-default min-w-0">
+                <div className="font-nevera text-xl sm:text-2xl xl:text-3xl text-white font-bold group-hover:text-[#e5d9c5] transition-colors whitespace-nowrap">
                   <AnimatedCounter target={45} prefix="< " suffix="s" duration={1.4} />
                 </div>
-                <div className="text-[9px] uppercase font-mono tracking-widest text-white/50 mt-1">Lead Response</div>
+                <div className="text-[9px] uppercase font-mono tracking-wider text-white/50 mt-1 truncate">Lead Response</div>
               </div>
-              <div className="group cursor-default">
-                <div className="font-nevera text-2xl sm:text-3xl text-[#e5d9c5] font-bold group-hover:scale-105 transition-transform origin-left">
+              <div className="group cursor-default min-w-0">
+                <div className="font-nevera text-xl sm:text-2xl xl:text-3xl text-[#e5d9c5] font-bold group-hover:scale-105 transition-transform origin-left whitespace-nowrap">
                   <AnimatedCounter target={100} suffix="%" duration={1.5} />
                 </div>
-                <div className="text-[9px] uppercase font-mono tracking-widest text-white/50 mt-1">24/7 Coverage</div>
+                <div className="text-[9px] uppercase font-mono tracking-wider text-white/50 mt-1 truncate">24/7 Coverage</div>
               </div>
-              <div className="group cursor-default">
-                <div className="font-nevera text-2xl sm:text-3xl text-white font-bold group-hover:text-[#e5d9c5] transition-colors">
+              <div className="group cursor-default min-w-0">
+                <div className="font-nevera text-xl sm:text-2xl xl:text-3xl text-white font-bold group-hover:text-[#e5d9c5] transition-colors whitespace-nowrap">
                   2-Way
                 </div>
-                <div className="text-[9px] uppercase font-mono tracking-widest text-white/50 mt-1">Email AI Concierge</div>
+                <div className="text-[9px] uppercase font-mono tracking-wider text-white/50 mt-1 truncate">Email AI Concierge</div>
               </div>
             </div>
-          </m.div>
+          </div>
 
           {/* RIGHT COLUMN: Massive Frameless Exploded Villa Visual */}
-          <div className="lg:col-span-7 relative flex items-center justify-center">
+          <div className="lg:col-span-6 relative flex items-center justify-center">
             {/* Ambient Lighting Glow Behind Image */}
             <div className="absolute inset-0 bg-radial from-[#c9a84c]/[0.08] via-transparent to-transparent rounded-full blur-3xl pointer-events-none scale-125" />
 
-            <m.div
-              initial={{ opacity: 0, scale: 0.95, y: 15 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
+            <div
               className="relative w-full flex items-center justify-center group"
             >
               {/* Fake GPU-friendly Shadow */}
@@ -728,7 +709,7 @@ function WelcomePage() {
                   className="w-full h-auto object-contain select-none pointer-events-none transition-transform duration-700 group-hover:scale-[1.03]"
                 />
               </picture>
-            </m.div>
+            </div>
           </div>
 
         </div>
@@ -848,12 +829,9 @@ function WelcomePage() {
 
               <div className="space-y-4 pt-2">
                 {currentScenario.transcript.map((msg, i) => (
-                  <m.div
+                  <div
                     key={i}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.4, delay: i * 0.1 }}
-                    className={`flex flex-col ${msg.role === "buyer" ? "items-start" : "items-end"}`}
+                    className={`flex flex-col animate-in fade-in duration-300 ${msg.role === "buyer" ? "items-start" : "items-end"}`}
                   >
                     <span className="text-[9px] font-mono uppercase text-white/40 mb-1 px-1">
                       {msg.role === "buyer" ? currentScenario.buyer : "WeaverFrame AI Concierge"}
@@ -867,7 +845,7 @@ function WelcomePage() {
                     >
                       {msg.text}
                     </div>
-                  </m.div>
+                  </div>
                 ))}
               </div>
             </div>
@@ -937,12 +915,8 @@ function WelcomePage() {
               badge: "Zero-Code Sync"
             },
           ].map((pillar, idx) => (
-            <m.div
+            <div
               key={pillar.num}
-              initial={{ opacity: 0, y: 25 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-40px" }}
-              transition={{ duration: 0.5, delay: idx * 0.05 }}
               className="p-8 rounded-xl border border-white/[0.08] bg-[#0c0d12] flex flex-col justify-between h-full hover:border-[#e5d9c5]/40 transition-all duration-300 group"
             >
               <div>
@@ -968,7 +942,7 @@ function WelcomePage() {
                 <span>Integrated Operating System</span>
                 <ChevronRight className="size-3 text-[#e5d9c5]" />
               </div>
-            </m.div>
+            </div>
           ))}
         </div>
       </section>
@@ -1271,11 +1245,9 @@ function WelcomePage() {
         <div className="overflow-hidden cursor-grab active:cursor-grabbing" ref={emblaRef}>
           <div className="flex gap-6">
             {caseStudies.map((cs) => (
-              <m.div
+              <div
                 key={cs.id}
-                whileHover={{ y: -6, scale: 1.015 }}
-                transition={{ duration: 0.3 }}
-                className={`flex-none w-[90vw] sm:w-[500px] lg:w-[460px] p-8 sm:p-10 rounded-2xl border border-white/[0.12] bg-gradient-to-br ${cs.accent} via-[#0c0d12]/95 to-[#08090c] backdrop-blur-md flex flex-col justify-between min-h-[380px] shadow-2xl hover:border-[#e5d9c5]/50 transition-all group`}
+                className={`flex-none w-[90vw] sm:w-[500px] lg:w-[460px] p-8 sm:p-10 rounded-2xl border border-white/[0.12] bg-gradient-to-br ${cs.accent} via-[#0c0d12]/95 to-[#08090c] backdrop-blur-md flex flex-col justify-between min-h-[380px] shadow-2xl hover:border-[#e5d9c5]/50 hover:-translate-y-1.5 transition-all group`}
               >
                 <div>
                   <div className="flex items-center justify-between mb-8">
@@ -1315,7 +1287,7 @@ function WelcomePage() {
                     </div>
                   </div>
                 </div>
-              </m.div>
+              </div>
             ))}
           </div>
         </div>
@@ -1593,7 +1565,7 @@ function WelcomePage() {
       <AnimatePresence>
         {isDemoModalOpen && (
           <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-            <m.div
+            <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 15 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 15 }}
@@ -1742,11 +1714,10 @@ function WelcomePage() {
                   </form>
                 </>
               )}
-            </m.div>
+            </motion.div>
           </div>
         )}
       </AnimatePresence>
     </div>
-    </LazyMotion>
   );
 }

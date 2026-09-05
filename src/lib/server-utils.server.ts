@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
-import { getDb } from './db'
+import { getDb } from './db.server'
 
 // ─── Login Rate Limiter (In-Memory) ──────────────────────────────────────────
 // Tracks failed login attempts per key (email + IP).
@@ -237,8 +237,6 @@ export const getSessionFromCookie = async (
   }
 
   // x-active-role not present — Contextless check. 
-  // Do NOT guess based on priority if multiple cookies are present, to avoid crossing streams.
-  // We only fallback if exactly ONE cookie is present.
   const adminCookie = getCookie('jwt_admin')
   const builderCookie = getCookie('jwt_builder')
   const userCookie = getCookie('jwt_user')
@@ -260,7 +258,34 @@ export const getSessionFromCookie = async (
     }
   }
 
-  // If multiple cookies are present and NO explicit role was requested, we CANNOT safely guess.
+  // If multiple cookies are present, gracefully check builder then admin rather than locking the user out
+  if (builderCookie) {
+    try {
+      const s = verifyToken(builderCookie) as AuthSession
+      if (s) return s
+    } catch {
+      deleteCookie('jwt_builder', { path: '/' })
+    }
+  }
+
+  if (adminCookie) {
+    try {
+      const s = verifyToken(adminCookie) as AuthSession
+      if (s) return s
+    } catch {
+      deleteCookie('jwt_admin', { path: '/' })
+    }
+  }
+
+  if (fallbackCookie) {
+    try {
+      const s = verifyToken(fallbackCookie) as AuthSession
+      if (s) return s
+    } catch {
+      deleteCookie('jwt', { path: '/' })
+    }
+  }
+
   return null
 }
 
@@ -351,9 +376,17 @@ export const requireManagerOrAbove = async (activeRole?: string): Promise<AuthSe
 }
 
 export const setAuthCookie = async (payload: AuthSession, rememberMe: boolean = false): Promise<void> => {
-  const { setCookie } = await import('@tanstack/react-start/server')
+  const { setCookie, deleteCookie } = await import('@tanstack/react-start/server')
   const token = signToken(payload, rememberMe)
   const cookieName = COOKIE_NAME_MAP[payload.role] ?? 'jwt'
+
+  // Proactively clear conflicting role cookies to prevent multi-cookie deadlocks
+  const allCookieNames = ['jwt_admin', 'jwt_builder', 'jwt_user', 'jwt']
+  for (const name of allCookieNames) {
+    if (name !== cookieName) {
+      deleteCookie(name, { path: '/' })
+    }
+  }
 
   // secure:true only in production (HTTPS). In local dev (http://localhost),
   // most browsers (Firefox, Safari) will NOT send Secure cookies over HTTP,
