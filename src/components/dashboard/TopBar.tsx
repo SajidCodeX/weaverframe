@@ -157,11 +157,17 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
       const saved = sessionStorage.getItem("globalDateRange");
       if (saved) {
         try {
-          return JSON.parse(saved).label;
+          const parsed = JSON.parse(saved);
+          if (parsed.label) {
+            if ((title === "Leads" || title === "Overview") && parsed.label === "Today") {
+              return "All Time";
+            }
+            return parsed.label;
+          }
         } catch (_) {}
       }
     }
-    return title === "Reports" ? "This Month" : "Today";
+    return title === "Reports" ? "This Month" : (title === "Overview" || title === "Leads") ? "All Time" : "Today";
   });
   const [customStart, setCustomStart] = useState(() => {
     if (typeof window !== "undefined") {
@@ -202,19 +208,24 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
 
   // Sync default range with active section on title changes
   useEffect(() => {
+    const initialLabel = title === "Reports" ? "This Month" : (title === "Overview" || title === "Leads") ? "All Time" : "Today";
     if (typeof window !== "undefined") {
       const saved = sessionStorage.getItem("globalDateRange");
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
           if (parsed.label) {
+            // If on Leads or Overview, override stale "Today" default to "All Time" so pipeline cards display
+            if ((title === "Leads" || title === "Overview") && parsed.label === "Today") {
+              changeDateRange("All Time");
+              return;
+            }
             setSelectedRange(parsed.label);
             return;
           }
         } catch (_) {}
       }
     }
-    const initialLabel = title === "Reports" ? "This Month" : title === "Overview" ? "All Time" : "Today";
     changeDateRange(initialLabel);
   }, [title]);
 

@@ -276,6 +276,13 @@ export async function syncInboundMailbox(builderId?: string, force = false): Pro
             }
           }
 
+          // Record live mailbox sync telemetry
+          await db.systemSync.upsert({
+            where: { id: 'mailbox_sync' },
+            update: { lastSyncAt: new Date(), status: 'Success' },
+            create: { id: 'mailbox_sync', lastSyncAt: new Date(), status: 'Success' }
+          }).catch(() => {});
+
           return { success: true, synced: syncedCount + takeoverCount };
         }
       } catch (oauthErr) {
@@ -535,6 +542,14 @@ export async function syncInboundMailbox(builderId?: string, force = false): Pro
     }
 
     await client.logout();
+
+    // Record live mailbox sync telemetry
+    await db.systemSync.upsert({
+      where: { id: 'mailbox_sync' },
+      update: { lastSyncAt: new Date(), status: 'Success' },
+      create: { id: 'mailbox_sync', lastSyncAt: new Date(), status: 'Success' }
+    }).catch(() => {});
+
     return { success: true, synced: newSyncedCount };
   } catch (err: any) {
     console.error('[INBOUND MAILBOX SYNC ERROR]:', err?.message || err);

@@ -258,15 +258,28 @@ export const getLastSyncTime = createServerFn({ method: 'POST' })
     const session = await requireAuth(data?.activeRole ?? undefined);
     const db = await getTenantDb(session);
     try {
-      const syncStatus = await db.systemSync.findUnique({ where: { id: 'rencast_leads' } });
-      if (syncStatus) {
-        return syncStatus.lastSyncAt.toISOString();
+      // Find the most recent sync event across active channels (Mailbox Sync, latest message, or activity)
+      const [mailboxSync, latestMsg, latestActivity] = await Promise.all([
+        db.systemSync.findUnique({ where: { id: 'mailbox_sync' } }).catch(() => null),
+        db.message.findFirst({
+          orderBy: { createdAt: 'desc' },
+          select: { createdAt: true }
+        }).catch(() => null),
+        db.activity.findFirst({
+          orderBy: { createdAt: 'desc' },
+          select: { createdAt: true }
+        }).catch(() => null),
+      ]);
+
+      const timestamps: number[] = [];
+      if (mailboxSync?.lastSyncAt) timestamps.push(new Date(mailboxSync.lastSyncAt).getTime());
+      if (latestMsg?.createdAt) timestamps.push(new Date(latestMsg.createdAt).getTime());
+      if (latestActivity?.createdAt) timestamps.push(new Date(latestActivity.createdAt).getTime());
+
+      if (timestamps.length > 0) {
+        return new Date(Math.max(...timestamps)).toISOString();
       }
-      const latestLead = await db.lead.findFirst({
-        orderBy: { createdAt: 'desc' },
-        select: { createdAt: true }
-      });
-      return latestLead ? latestLead.createdAt.toISOString() : null;
+      return new Date().toISOString();
     } catch (e) {
       return null;
     }
