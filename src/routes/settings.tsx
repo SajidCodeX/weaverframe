@@ -26,7 +26,8 @@ import {
   triggerMailboxSync,
   getGoogleConnectUrl,
 } from "@/lib/dashboard";
-import { Loader2, Check, X, AlertCircle, Download, Mail, Sparkles, RefreshCw, Lock, ShieldCheck, CheckCircle2, Zap, Server, Globe, CreditCard, ExternalLink, Copy, Code, Share2, Send, Terminal, Smartphone, Inbox, ArrowRight, CheckCircle, Eye, EyeOff, ChevronDown, FileText } from "lucide-react";
+import { Loader2, Check, X, AlertCircle, AlertTriangle, Download, Mail, Sparkles, RefreshCw, Lock, ShieldCheck, CheckCircle2, Zap, Server, Globe, CreditCard, ExternalLink, Copy, Code, Share2, Send, Terminal, Smartphone, Inbox, ArrowRight, CheckCircle, Eye, EyeOff, ChevronDown, FileText } from "lucide-react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/settings")({
   beforeLoad: async ({ context }) => {
@@ -769,6 +770,13 @@ function SettingsPage() {
   };
 
   const [isConnectingGoogle, setIsConnectingGoogle] = useState(false);
+  const [isDisconnectModalOpen, setIsDisconnectModalOpen] = useState(false);
+
+  // Ensure isConnectingGoogle is never stuck on status change
+  useEffect(() => {
+    setIsConnectingGoogle(false);
+  }, [connectionStatus.email_mailbox]);
+
   const handleConnectGoogle = async () => {
     setIsConnectingGoogle(true);
     try {
@@ -777,14 +785,16 @@ function SettingsPage() {
         window.location.href = res.url;
       }
     } catch (err: any) {
-      alert("Could not start Google connection: " + (err?.message || err));
+      toast.error("Could not start Google connection: " + (err?.message || err));
       setIsConnectingGoogle(false);
+    } finally {
+      setTimeout(() => setIsConnectingGoogle(false), 5000);
     }
   };
 
   const handleSaveEmail = async () => {
     if (!emailAddress.trim()) {
-      alert("Please enter a company email address.");
+      toast.error("Please enter a company email address.");
       return;
     }
     setIsSaving(prev => ({ ...prev, email_mailbox: true }));
@@ -809,17 +819,18 @@ function SettingsPage() {
       // Immediately trigger initial sync
       triggerMailboxSync().catch((e) => console.warn('[INITIAL MAILBOX SYNC ERROR]:', e));
       await router.invalidate();
-      alert(`Success: Company mailbox linked! Initial sync triggered and AI can now send and receive emails as ${emailAddress}.`);
+      toast.success(`Company mailbox linked! AI can now send and receive emails as ${emailAddress}.`);
     } catch (err: any) {
       console.error(err);
-      alert(`Failed to save mailbox connection: ${err?.message || err}`);
+      toast.error(`Failed to save mailbox connection: ${err?.message || err}`);
     } finally {
       setIsSaving(prev => ({ ...prev, email_mailbox: false }));
     }
   };
 
-  const handleDisconnectEmail = async () => {
+  const confirmDisconnectEmail = async () => {
     setIsSaving(prev => ({ ...prev, email_mailbox: true }));
+    setIsConnectingGoogle(false);
     try {
       await disconnectIntegration({
         data: { platformId: "email_mailbox" }
@@ -827,13 +838,15 @@ function SettingsPage() {
       setConnectionStatus(prev => ({ ...prev, email_mailbox: false }));
       setCredentials(prev => ({ ...prev, email_mailbox: {} }));
       setEmailPassword("");
+      setIsDisconnectModalOpen(false);
       await router.invalidate();
-      alert("Mailbox disconnected.");
-    } catch (err) {
+      toast.success("Company mailbox disconnected successfully.");
+    } catch (err: any) {
       console.error(err);
-      alert("Failed to disconnect mailbox.");
+      toast.error("Failed to disconnect mailbox: " + (err?.message || err));
     } finally {
       setIsSaving(prev => ({ ...prev, email_mailbox: false }));
+      setIsConnectingGoogle(false);
     }
   };
 
@@ -1542,11 +1555,11 @@ function SettingsPage() {
                         /* ── ALREADY CONNECTED: SHOW ONLY HOW IT IS CONNECTED (NO CONFUSING FORM) ── */
                         <div className="space-y-4">
                           {credentials.email_mailbox?.provider === 'google_oauth' || credentials.email_mailbox?.provider === 'google' || (!credentials.email_mailbox?.password && (credentials.email_mailbox?.email || emailAddress)) ? (
-                            <div className="p-5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 space-y-4 animate-in fade-in duration-150">
+                            <div className="p-4 sm:p-5 rounded-xl border border-border/70 bg-secondary/20 dark:bg-neutral-900/40 space-y-4 animate-in fade-in duration-150">
                               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                                 <div className="flex items-center gap-3.5 min-w-0">
-                                  <div className="size-11 rounded-xl bg-white dark:bg-neutral-900 border border-border flex items-center justify-center shrink-0 shadow-sm">
-                                    <svg className="size-6 shrink-0" viewBox="0 0 24 24">
+                                  <div className="size-10 rounded-xl bg-card border border-border flex items-center justify-center shrink-0 shadow-sm">
+                                    <svg className="size-5 shrink-0" viewBox="0 0 24 24">
                                       <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
                                       <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
                                       <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
@@ -1556,11 +1569,12 @@ function SettingsPage() {
                                   <div className="min-w-0">
                                     <div className="flex items-center gap-2 flex-wrap">
                                       <span className="text-sm font-semibold text-foreground">Google Workspace</span>
-                                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-mono font-semibold border border-emerald-500/30 uppercase tracking-wider">
-                                        Connected via OAuth 2.0
+                                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-mono text-emerald-500 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 font-medium">
+                                        <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                        Connected
                                       </span>
                                     </div>
-                                    <p className="text-xs text-muted-foreground font-mono mt-0.5 truncate">
+                                    <p className="text-xs text-muted-foreground font-mono mt-0.5 select-all">
                                       {emailAddress || credentials.email_mailbox?.email || "Google Account Connected"}
                                     </p>
                                   </div>
@@ -1571,7 +1585,7 @@ function SettingsPage() {
                                     type="button"
                                     onClick={handleTestEmail}
                                     disabled={isTestingEmail}
-                                    className="text-xs px-3 py-1.5 rounded-lg border border-border text-foreground hover:bg-secondary transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50 shadow-sm"
+                                    className="text-xs px-3 py-1.5 rounded-lg border border-border bg-card text-foreground hover:bg-secondary transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50 shadow-sm font-medium"
                                     title="Verify handshake with Google"
                                   >
                                     {isTestingEmail ? <RefreshCw className="size-3 animate-spin" /> : <Zap className="size-3 text-[#c9a84c] dark:text-[#e5d9c5]" />}
@@ -1581,42 +1595,50 @@ function SettingsPage() {
                                     type="button"
                                     onClick={handleConnectGoogle}
                                     disabled={isConnectingGoogle}
-                                    className="text-xs px-3 py-1.5 rounded-lg border border-border text-foreground hover:bg-secondary transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50 shadow-sm"
+                                    className="text-xs px-3 py-1.5 rounded-lg border border-border bg-card text-foreground hover:bg-secondary transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50 shadow-sm font-medium"
                                     title="Switch or re-authorize Google account"
                                   >
                                     <span>Switch Account</span>
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={handleDisconnectEmail}
+                                    onClick={() => setIsDisconnectModalOpen(true)}
                                     disabled={isSaving.email_mailbox}
-                                    className="text-xs px-3 py-1.5 rounded-lg border border-danger/30 text-danger hover:bg-danger/10 transition-colors cursor-pointer disabled:opacity-50 shadow-sm"
+                                    className="text-xs px-3 py-1.5 rounded-lg border border-danger/20 text-danger hover:bg-danger/10 transition-colors cursor-pointer disabled:opacity-50 shadow-sm font-medium"
                                   >
                                     Disconnect
                                   </button>
                                 </div>
                               </div>
 
-                              <div className="text-[11px] text-muted-foreground flex items-center gap-2 pt-2 border-t border-emerald-500/20 font-mono">
-                                <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0" />
-                                <span>Active 2-Way REST API Sync • Zero manual passwords required • Autonomous AI replies active</span>
+                              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-[11px] text-muted-foreground font-mono pt-3 border-t border-border/50">
+                                <div className="flex items-center gap-2">
+                                  <CheckCircle2 className="size-3.5 text-emerald-500 shrink-0" />
+                                  <span>Active 2-Way REST API Sync • Zero manual passwords required • Autonomous AI replies active</span>
+                                </div>
                               </div>
                             </div>
                           ) : credentials.email_mailbox?.provider === 'microsoft' ? (
-                            <div className="p-5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 space-y-4 animate-in fade-in duration-150">
+                            <div className="p-4 sm:p-5 rounded-xl border border-border/70 bg-secondary/20 dark:bg-neutral-900/40 space-y-4 animate-in fade-in duration-150">
                               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                                 <div className="flex items-center gap-3.5 min-w-0">
-                                  <div className="size-11 rounded-xl bg-white dark:bg-neutral-900 border border-border flex items-center justify-center shrink-0 shadow-sm text-sky-500">
-                                    <Mail className="size-6" />
+                                  <div className="size-10 rounded-xl bg-card border border-border flex items-center justify-center shrink-0 shadow-sm">
+                                    <svg className="size-5 shrink-0" viewBox="0 0 24 24">
+                                      <path fill="#F25022" d="M1 1h10v10H1z"/>
+                                      <path fill="#7FBA00" d="M13 1h10v10H13z"/>
+                                      <path fill="#00A4EF" d="M1 13h10v10H1z"/>
+                                      <path fill="#FFB900" d="M13 13h10v10H13z"/>
+                                    </svg>
                                   </div>
                                   <div className="min-w-0">
                                     <div className="flex items-center gap-2 flex-wrap">
                                       <span className="text-sm font-semibold text-foreground">Microsoft 365</span>
-                                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-mono font-semibold border border-emerald-500/30 uppercase tracking-wider">
+                                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-mono text-emerald-500 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 font-medium">
+                                        <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
                                         Connected
                                       </span>
                                     </div>
-                                    <p className="text-xs text-muted-foreground font-mono mt-0.5 truncate">
+                                    <p className="text-xs text-muted-foreground font-mono mt-0.5 select-all">
                                       {emailAddress || credentials.email_mailbox?.email}
                                     </p>
                                   </div>
@@ -1627,42 +1649,43 @@ function SettingsPage() {
                                     type="button"
                                     onClick={handleTestEmail}
                                     disabled={isTestingEmail}
-                                    className="text-xs px-3 py-1.5 rounded-lg border border-border text-foreground hover:bg-secondary transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50 shadow-sm"
+                                    className="text-xs px-3 py-1.5 rounded-lg border border-border bg-card text-foreground hover:bg-secondary transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50 shadow-sm font-medium"
                                   >
                                     {isTestingEmail ? <RefreshCw className="size-3 animate-spin" /> : <Zap className="size-3 text-[#c9a84c] dark:text-[#e5d9c5]" />}
                                     <span>{isTestingEmail ? "Verifying..." : "Test Connection"}</span>
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={handleDisconnectEmail}
+                                    onClick={() => setIsDisconnectModalOpen(true)}
                                     disabled={isSaving.email_mailbox}
-                                    className="text-xs px-3 py-1.5 rounded-lg border border-danger/30 text-danger hover:bg-danger/10 transition-colors cursor-pointer disabled:opacity-50 shadow-sm"
+                                    className="text-xs px-3 py-1.5 rounded-lg border border-danger/20 text-danger hover:bg-danger/10 transition-colors cursor-pointer disabled:opacity-50 shadow-sm font-medium"
                                   >
                                     Disconnect
                                   </button>
                                 </div>
                               </div>
 
-                              <div className="text-[11px] text-muted-foreground flex items-center gap-2 pt-2 border-t border-emerald-500/20 font-mono">
-                                <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0" />
+                              <div className="flex items-center gap-2 text-[11px] text-muted-foreground font-mono pt-3 border-t border-border/50">
+                                <CheckCircle2 className="size-3.5 text-emerald-500 shrink-0" />
                                 <span>Active IMAP/SMTP Sync • Autonomous AI replies active</span>
                               </div>
                             </div>
                           ) : (
-                            <div className="p-5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 space-y-4 animate-in fade-in duration-150">
+                            <div className="p-4 sm:p-5 rounded-xl border border-border/70 bg-secondary/20 dark:bg-neutral-900/40 space-y-4 animate-in fade-in duration-150">
                               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                                 <div className="flex items-center gap-3.5 min-w-0">
-                                  <div className="size-11 rounded-xl bg-white dark:bg-neutral-900 border border-border flex items-center justify-center shrink-0 shadow-sm text-primary">
-                                    <Server className="size-6" />
+                                  <div className="size-10 rounded-xl bg-card border border-border flex items-center justify-center shrink-0 shadow-sm text-primary">
+                                    <Server className="size-5" />
                                   </div>
                                   <div className="min-w-0">
                                     <div className="flex items-center gap-2 flex-wrap">
                                       <span className="text-sm font-semibold text-foreground">Custom SMTP / IMAP Server</span>
-                                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-mono font-semibold border border-emerald-500/30 uppercase tracking-wider">
+                                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-mono text-emerald-500 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 font-medium">
+                                        <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
                                         Connected
                                       </span>
                                     </div>
-                                    <p className="text-xs text-muted-foreground font-mono mt-0.5 truncate">
+                                    <p className="text-xs text-muted-foreground font-mono mt-0.5 select-all">
                                       {emailAddress || credentials.email_mailbox?.email} {smtpHost ? `(${smtpHost})` : ''}
                                     </p>
                                   </div>
@@ -1673,24 +1696,24 @@ function SettingsPage() {
                                     type="button"
                                     onClick={handleTestEmail}
                                     disabled={isTestingEmail}
-                                    className="text-xs px-3 py-1.5 rounded-lg border border-border text-foreground hover:bg-secondary transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50 shadow-sm"
+                                    className="text-xs px-3 py-1.5 rounded-lg border border-border bg-card text-foreground hover:bg-secondary transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50 shadow-sm font-medium"
                                   >
                                     {isTestingEmail ? <RefreshCw className="size-3 animate-spin" /> : <Zap className="size-3 text-[#c9a84c] dark:text-[#e5d9c5]" />}
                                     <span>{isTestingEmail ? "Verifying..." : "Test Connection"}</span>
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={handleDisconnectEmail}
+                                    onClick={() => setIsDisconnectModalOpen(true)}
                                     disabled={isSaving.email_mailbox}
-                                    className="text-xs px-3 py-1.5 rounded-lg border border-danger/30 text-danger hover:bg-danger/10 transition-colors cursor-pointer disabled:opacity-50 shadow-sm"
+                                    className="text-xs px-3 py-1.5 rounded-lg border border-danger/20 text-danger hover:bg-danger/10 transition-colors cursor-pointer disabled:opacity-50 shadow-sm font-medium"
                                   >
                                     Disconnect
                                   </button>
                                 </div>
                               </div>
 
-                              <div className="text-[11px] text-muted-foreground flex items-center gap-2 pt-2 border-t border-emerald-500/20 font-mono">
-                                <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0" />
+                              <div className="flex items-center gap-2 text-[11px] text-muted-foreground font-mono pt-3 border-t border-border/50">
+                                <CheckCircle2 className="size-3.5 text-emerald-500 shrink-0" />
                                 <span>Active Custom Server Sync • Autonomous AI replies active</span>
                               </div>
                             </div>
@@ -1715,9 +1738,35 @@ function SettingsPage() {
                               value={emailProvider}
                               onChange={(val) => setEmailProvider(val as any)}
                               options={[
-                                { value: "google", label: "Google Workspace" },
-                                { value: "microsoft", label: "Microsoft 365" },
-                                { value: "custom_smtp", label: "Custom SMTP / IMAP Server" },
+                                {
+                                  value: "google",
+                                  label: "Google Workspace",
+                                  icon: (
+                                    <svg className="size-4 shrink-0" viewBox="0 0 24 24">
+                                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                                    </svg>
+                                  ),
+                                },
+                                {
+                                  value: "microsoft",
+                                  label: "Microsoft 365",
+                                  icon: (
+                                    <svg className="size-4 shrink-0" viewBox="0 0 24 24">
+                                      <path fill="#F25022" d="M1 1h10v10H1z"/>
+                                      <path fill="#7FBA00" d="M13 1h10v10H13z"/>
+                                      <path fill="#00A4EF" d="M1 13h10v10H1z"/>
+                                      <path fill="#FFB900" d="M13 13h10v10H13z"/>
+                                    </svg>
+                                  ),
+                                },
+                                {
+                                  value: "custom_smtp",
+                                  label: "Custom SMTP / IMAP Server",
+                                  icon: <Server className="size-4 shrink-0 text-muted-foreground" />,
+                                },
                               ]}
                             />
                           </div>
@@ -2557,6 +2606,56 @@ function SettingsPage() {
 
         </Card>
       </div>
+
+      {/* Theme-Styled Disconnect Mailbox Confirmation Modal */}
+      {isDisconnectModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="bg-card border border-border/80 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-5 animate-in zoom-in-95 duration-150">
+            <div className="flex items-start gap-3.5">
+              <div className="size-11 rounded-xl bg-danger/10 border border-danger/20 flex items-center justify-center shrink-0 text-danger">
+                <AlertTriangle className="size-5" />
+              </div>
+              <div className="space-y-1 min-w-0">
+                <h3 className="text-base font-semibold text-foreground">
+                  Disconnect Mailbox?
+                </h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Are you sure you want to disconnect <span className="font-mono font-medium text-foreground">{emailAddress || credentials.email_mailbox?.email || "this mailbox"}</span>?
+                </p>
+                <p className="text-xs text-muted-foreground leading-relaxed pt-1">
+                  The AI will no longer be able to autonomously read or reply to incoming emails from leads until reconnected.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-border/50">
+              <button
+                type="button"
+                onClick={() => setIsDisconnectModalOpen(false)}
+                disabled={isSaving.email_mailbox}
+                className="px-4 py-2 rounded-lg border border-border text-xs font-medium text-foreground hover:bg-secondary transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDisconnectEmail}
+                disabled={isSaving.email_mailbox}
+                className="px-4 py-2 rounded-lg bg-danger text-danger-foreground text-xs font-medium hover:bg-danger/90 transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50 shadow-sm"
+              >
+                {isSaving.email_mailbox ? (
+                  <>
+                    <Loader2 className="size-3.5 animate-spin" />
+                    <span>Disconnecting...</span>
+                  </>
+                ) : (
+                  <span>Disconnect Mailbox</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Shell>
   );
 }
