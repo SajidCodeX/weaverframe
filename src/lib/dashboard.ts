@@ -1226,14 +1226,14 @@ export async function callAiEngine(
 ): Promise<string> {
   const geminiKey = process.env.GEMINI_API_KEY;
   const groqKey = process.env.GROQ_API_KEY;
-  const primaryGeminiModel = process.env.GEMINI_MODEL || "gemini-3.6-flash";
-  const defaultGroqModel = process.env.GROQ_MODEL || "qwen/qwen3.8-27b";
+  const primaryGeminiModel = process.env.GEMINI_MODEL || "gemini-3.5-flash";
+  const defaultGroqModel = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
   const maxTokens = options?.maxTokens || 800;
   const temperature = options?.temperature ?? 0.1;
 
-  // 1. PRIMARY ROUTE: Google Gemini (locked to gemini-3.6-flash with 1M+ TPM capacity & transient retry)
+  // 1. PRIMARY ROUTE: Google Gemini Flash (gemini-3.5-flash)
   if (geminiKey && geminiKey.trim() !== "") {
-    const modelsToTry = [primaryGeminiModel, "gemini-3.6-flash", "gemini-flash-latest", "gemini-3.7-flash"].filter((v, i, a) => a.indexOf(v) === i);
+    const modelsToTry = [primaryGeminiModel, "gemini-3.5-flash"].filter((v, i, a) => a.indexOf(v) === i);
     for (const m of modelsToTry) {
       for (let attempt = 1; attempt <= 2; attempt++) {
         try {
@@ -1286,9 +1286,9 @@ export async function callAiEngine(
     }
   }
 
-  // 2. FALLBACK ROUTE: Groq (with transient retry)
+  // 2. FALLBACK ROUTE: Groq Cloud (openai/gpt-oss-120b)
   if (groqKey && groqKey.trim() !== "") {
-    const groqModelsToTry = [defaultGroqModel, "openai/gpt-oss-20b", "openai/gpt-oss-120b"].filter((v, i, a) => a.indexOf(v) === i);
+    const groqModelsToTry = [defaultGroqModel, "openai/gpt-oss-120b", "openai/gpt-oss-20b"].filter((v, i, a) => a.indexOf(v) === i);
     for (const gm of groqModelsToTry) {
       for (let attempt = 1; attempt <= 2; attempt++) {
         try {
