@@ -686,7 +686,7 @@ function SettingsPage() {
       const connectedEmail = url.searchParams.get('email');
 
       if (connected === 'google') {
-        setEmailTestSuccess(`🎉 Google Workspace connected successfully via 1-Click OAuth!${connectedEmail ? ` (${connectedEmail})` : ''}`);
+        setEmailTestSuccess(`🎉 Google Workspace connected successfully!${connectedEmail ? ` (${connectedEmail})` : ''}`);
         setExpandedIntegration('email_mailbox');
         url.searchParams.delete('connected');
         url.searchParams.delete('email');
@@ -1558,7 +1558,7 @@ function SettingsPage() {
                                 <div>
                                   <div className="text-xs font-semibold text-foreground flex items-center gap-2">
                                     <span>Connected via Google Workspace</span>
-                                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-mono font-medium">1-Click OAuth 2.0 Active</span>
+                                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-mono font-medium">OAuth 2.0 Active</span>
                                   </div>
                                   <p className="text-[11px] text-muted-foreground font-mono mt-0.5">
                                     {emailAddress || credentials.email_mailbox?.email || "Google Account Authorized"}
@@ -1595,7 +1595,7 @@ function SettingsPage() {
                                     <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
                                     <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
                                   </svg>
-                                  <span className="text-sm font-semibold text-foreground">1-Click Google Workspace Authorization</span>
+                                  <span className="text-sm font-semibold text-foreground">Google Workspace Authorization</span>
                                 </div>
                                 <p className="text-xs text-muted-foreground">
                                   Connect your company Gmail or Google Workspace inbox securely with zero passwords or manual port setups.
@@ -1648,7 +1648,7 @@ function SettingsPage() {
                                 onClick={() => setShowManualGoogle(false)}
                                 className="text-[11px] text-primary hover:underline transition-colors cursor-pointer"
                               >
-                                ← Switch back to 1-Click Google OAuth
+                                ← Switch back to Google Workspace Authorization
                               </button>
                             </div>
                           )}

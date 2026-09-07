@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, redirect } from '@tanstack/react-router';
 import { handleGoogleOAuthCallback } from '@/lib/dashboard';
 import { z } from 'zod';
 
@@ -20,9 +20,9 @@ export const Route = createFileRoute('/api/auth/google/callback')({
       data: { code, state, error }
     });
 
-    return new Response(null, {
-      status: 302,
-      headers: { Location: res.redirectUrl }
+    throw redirect({
+      href: res.redirectUrl
     });
   }
 });
+

@@ -519,7 +519,7 @@ function LeadsPage() {
             {activeDropdown === "stage" && (
               <div className="absolute left-0 mt-1.5 w-48 rounded-lg bg-card border border-border p-1.5 shadow-none z-30 animate-in fade-in slide-in-from-top-2 duration-150">
                 <div className="text-[10px] font-semibold text-foreground/50 uppercase tracking-widest px-3 py-1.5 border-b border-border/40 mb-1">Filter Stage</div>
-                {["New", "Emailed", "Opened", "Replied", "Appointment"].map(s => (
+                {["New", "Emailed", "Opened", "Replied", "Qualified", "Appointment", "Closed Lost"].map(s => (
                   <button
                     key={s}
                     onClick={() => toggleStageFilter(s)}
@@ -1148,7 +1148,15 @@ function LeadsPage() {
                     <CustomSelect
                       value={modalForm.status}
                       onChange={(val) => setModalForm({ ...modalForm, status: val })}
-                      options={[{label: "New", value: "New"}, {label: "Emailed", value: "Emailed"}, {label: "Opened", value: "Opened"}, {label: "Replied", value: "Replied"}, {label: "Appointment", value: "Appointment"}]}
+                      options={[
+                        { label: "New", value: "New" },
+                        { label: "Emailed", value: "Emailed" },
+                        { label: "Opened", value: "Opened" },
+                        { label: "Replied", value: "Replied" },
+                        { label: "Qualified", value: "Qualified" },
+                        { label: "Appointment", value: "Appointment" },
+                        { label: "Closed Lost", value: "Closed Lost" }
+                      ]}
                     />
                   </div>
                 </div>
@@ -1693,6 +1701,17 @@ const KANBAN_COLUMNS = [
     headerText: 'text-green-300',
     countBg: 'bg-green-500/20 text-green-300',
     dotColor: 'bg-green-400',
+  },
+  {
+    id: 'archived',
+    label: 'Disqualified',
+    stages: ['Closed Lost', 'Disqualified', 'Cold', 'Lost', 'Archived'],
+    icon: '📁',
+    accent: 'border-t-zinc-600',
+    headerBg: 'bg-zinc-600/10',
+    headerText: 'text-zinc-400',
+    countBg: 'bg-zinc-600/20 text-zinc-400',
+    dotColor: 'bg-zinc-500',
   },
 ];
 

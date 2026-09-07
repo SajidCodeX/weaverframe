@@ -1,5 +1,9 @@
 import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
+import { startAiQueuePoller } from './ai-queue.server';
+
+// Ensure background persistent AI reply queue poller is active across serverless/cold starts
+startAiQueuePoller();
 
 /**
  * Strips quoted history and signature noise from reply emails
@@ -140,9 +144,93 @@ export async function syncInboundMailbox(builderId?: string, force = false): Pro
     // ── GOOGLE OAUTH 2.0 (GMAIL REST API - ZERO SOCKET OVERHEAD ON VERCEL) ──────
     if (isGoogleOAuth) {
       try {
-        const { getValidGoogleAccessToken, fetchRecentGmailSentMessages } = await import('./google-oauth.server');
+        const { getValidGoogleAccessToken, fetchRecentGmailSentMessages, fetchRecentGmailInboundMessages } = await import('./google-oauth.server');
         const oauthData = await getValidGoogleAccessToken(targetBuilderId);
         if (oauthData) {
+          let syncedCount = 0;
+
+          // 1. INBOUND LEAD REPLIES VIA GMAIL REST API (INBOX)
+          const inboundMessages = await fetchRecentGmailInboundMessages(oauthData.accessToken, leadEmailMap);
+          for (const msg of inboundMessages) {
+            const rawCleanBody = stripEmailQuotedHistory(msg.body);
+            if (!rawCleanBody || rawCleanBody.length === 0) continue;
+
+            const { sanitizeInboundEmail } = await import('./sanitizer');
+            const cleanBody = sanitizeInboundEmail(rawCleanBody);
+
+            const existing = await db.message.findFirst({
+              where: {
+                leadId: msg.leadId,
+                sender: 'lead',
+                content: cleanBody,
+              }
+            });
+
+            if (!existing) {
+              await db.message.create({
+                data: {
+                  builderId: targetBuilderId,
+                  leadId: msg.leadId,
+                  sender: 'lead',
+                  content: cleanBody,
+                  channel: 'portal',
+                  isRead: false,
+                  createdAt: msg.date,
+                }
+              });
+
+              await db.activity.create({
+                data: {
+                  builderId: targetBuilderId,
+                  leadId: msg.leadId,
+                  action: `📬 Inbound Email Reply received from ${msg.senderEmail}: "${cleanBody.slice(0, 80)}..."`,
+                  createdAt: msg.date,
+                }
+              });
+
+              // Auto-upgrade lead status to Replied -> moves to "Engaged" Kanban pipeline stage
+              await db.lead.updateMany({
+                where: {
+                  id: msg.leadId,
+                  status: { in: ['New', 'Emailed', 'Opened', 'Outreach', 'contacted'] },
+                },
+                data: { status: 'Replied' },
+              }).catch((err) => console.warn('[MAILBOX SYNC] Could not upgrade lead status to Replied:', err));
+
+              // Queue Autonomous AI Reply with Human Latency (~3.5 to 4.5 min)
+              const { getAiToggleMap } = await import('./dashboard');
+              const { queueDelayedAiReply } = await import('./ai-queue.server');
+              const { invalidateCache } = await import('./cache');
+              const aiToggleMap = await getAiToggleMap().catch(() => ({}));
+              const isAiActive = aiToggleMap[msg.leadId] !== false;
+
+              if (isAiActive) {
+                const queueRes = await queueDelayedAiReply(msg.leadId, targetBuilderId, cleanBody);
+                const minutes = (queueRes.delaySeconds / 60).toFixed(1);
+                await db.activity.create({
+                  data: {
+                    builderId: targetBuilderId,
+                    leadId: msg.leadId,
+                    action: `⏳ AI response queued (~${minutes} min authentic delay to preserve human trust).`,
+                  }
+                }).catch(() => {});
+              }
+
+              invalidateCache("dashboard_");
+              syncedCount++;
+            } else {
+              // Self-healing: ensure lead status is at least 'Replied' even for previously ingested messages
+              await db.lead.updateMany({
+                where: {
+                  id: msg.leadId,
+                  status: { in: ['New', 'Emailed', 'Opened', 'Outreach', 'contacted'] },
+                },
+                data: { status: 'Replied' },
+              }).catch(() => {});
+            }
+          }
+
+          // 2. HUMAN TAKEOVER DETECTION VIA SENT MESSAGES
           const sentEvents = await fetchRecentGmailSentMessages(oauthData.accessToken, leadEmailMap);
           let takeoverCount = 0;
 
@@ -188,7 +276,7 @@ export async function syncInboundMailbox(builderId?: string, force = false): Pro
             }
           }
 
-          return { success: true, synced: takeoverCount };
+          return { success: true, synced: syncedCount + takeoverCount };
         }
       } catch (oauthErr) {
         console.warn('[MAILBOX SYNC] Google OAuth sync error, will attempt IMAP if credentials exist:', oauthErr);
@@ -309,6 +397,15 @@ export async function syncInboundMailbox(builderId?: string, force = false): Pro
               }
             });
 
+            // Auto-upgrade lead status to Replied -> moves to "Engaged" Kanban pipeline stage
+            await db.lead.updateMany({
+              where: {
+                id: item.matchedLead.id,
+                status: { in: ['New', 'Emailed', 'Opened', 'Outreach', 'contacted'] },
+              },
+              data: { status: 'Replied' },
+            }).catch((err) => console.warn('[MAILBOX SYNC] Could not upgrade lead status to Replied:', err));
+
             // C. Queue Autonomous AI Reply with Human Latency (~3.5 to 4.5 min)
             const { getAiToggleMap } = await import('./dashboard');
             const { queueDelayedAiReply } = await import('./ai-queue.server');
@@ -330,6 +427,15 @@ export async function syncInboundMailbox(builderId?: string, force = false): Pro
 
             invalidateCache("dashboard_");
             newSyncedCount++;
+          } else {
+            // Self-healing: ensure lead status is at least 'Replied' even for previously ingested messages
+            await db.lead.updateMany({
+              where: {
+                id: item.matchedLead.id,
+                status: { in: ['New', 'Emailed', 'Opened', 'Outreach', 'contacted'] },
+              },
+              data: { status: 'Replied' },
+            }).catch(() => {});
           }
         }
       }

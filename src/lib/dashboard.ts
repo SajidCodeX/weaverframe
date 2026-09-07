@@ -413,6 +413,43 @@ export function determineLeadSource(lead: { source?: string | null; county?: str
   return lead.source || "Website Contact Form";
 }
 
+/**
+ * Self-Healing Pipeline Reconciliation Engine:
+ * Automatically syncs lead statuses if a homeowner reply arrived but status remained 'New' / 'Emailed' / 'Opened'.
+ * Idempotent, non-blocking, and updates in-memory array so the UI renders the correct stage immediately.
+ */
+export async function reconcileLeadReplyStatuses(
+  db: any,
+  leads: Array<{ id: string; status: string; messages?: Array<{ sender: string }> }>
+) {
+  try {
+    const staleLeadIds: string[] = [];
+    for (const lead of leads) {
+      const latestMsg = lead.messages?.[0];
+      if (
+        latestMsg &&
+        latestMsg.sender === 'lead' &&
+        ['New', 'Emailed', 'Opened', 'Outreach', 'contacted'].includes(lead.status)
+      ) {
+        staleLeadIds.push(lead.id);
+      }
+    }
+    if (staleLeadIds.length > 0) {
+      await db.lead.updateMany({
+        where: { id: { in: staleLeadIds } },
+        data: { status: 'Replied' }
+      });
+      for (const lead of leads) {
+        if (staleLeadIds.includes(lead.id)) {
+          lead.status = 'Replied';
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[RECONCILIATION NON-BLOCKING ERROR]:', err);
+  }
+}
+
 export const getLeadsData = createServerFn({ method: 'POST' })
   .inputValidator((data: { activeRole?: string | null } | undefined) => data)
   .handler(async ({ data }) => {
@@ -438,6 +475,10 @@ export const getLeadsData = createServerFn({ method: 'POST' })
         }
       }
     })
+
+    // Self-healing pipeline sync: reconcile any leads with inbound replies
+    await reconcileLeadReplyStatuses(db, leads);
+
     return leads.map(lead => ({
       ...lead,
       source: determineLeadSource(lead)
@@ -1809,7 +1850,8 @@ Do not output any markdown formatting or text outside the raw JSON object.`;
     lastUpdated: new Date().toISOString()
   };
 
-  // Determine DB status & tier
+  // Determine DB status & tier with hierarchy protection (never downgrade advanced leads)
+  const currentStatus = lead?.status || "New";
   let dbStatus = "Emailed";
   let dbScoreTier = "Warm";
   let activityText = "";
@@ -1817,20 +1859,33 @@ Do not output any markdown formatting or text outside the raw JSON object.`;
   if (bookingDetails && bookingDetails.isoDateTime) {
     dbStatus = "Appointment";
     dbScoreTier = "Hot";
-    activityText = `ðŸ“… AI Concierge scheduled an appointment with ${leadName}.`;
+    activityText = `📅 AI Concierge scheduled an appointment with ${leadName}.`;
+  } else if (currentStatus === "Appointment") {
+    // Preserve booked appointment status
+    dbStatus = "Appointment";
+    dbScoreTier = "Hot";
+    activityText = `💬 AI Concierge continued conversation with booked client (${dealScore}/100).`;
   } else if (intent === 'HOT') {
     dbStatus = "Qualified";
     dbScoreTier = "Hot";
-    activityText = `ðŸŸ¢ AI Sales Engine marked Lead as Hot (${dealScore}/100) â€” High buyer readiness.`;
+    activityText = `🟢 AI Sales Engine marked Lead as Hot (${dealScore}/100) — High buyer readiness.`;
   } else if (intent === 'COLD') {
     dbStatus = "Closed Lost";
     dbScoreTier = "Cold";
-    activityText = `ðŸ”´ AI Sales Engine marked Lead as Cold (${dealScore}/100) â€” Disqualified or competitor chosen.`;
+    activityText = `🔴 AI Sales Engine marked Lead as Cold (${dealScore}/100) — Disqualified or competitor chosen.`;
+  } else if (currentStatus === "Qualified") {
+    // Preserve Qualified status unless lead explicitly became COLD or booked
+    dbStatus = "Qualified";
+    dbScoreTier = dealScore >= 70 ? "Hot" : "Warm";
+    activityText = `💬 AI Sales Engine continued conversation with qualified buyer (${dealScore}/100).`;
   } else {
-    const hasLeadReplied = chatHistory && chatHistory.some(m => m.role === 'user' && m.content && m.content !== userMessage);
+    const hasLeadReplied = Boolean(
+      (chatHistory && chatHistory.some(m => m.role === 'user' && m.content && m.content !== userMessage)) ||
+      currentStatus === 'Replied'
+    );
     dbStatus = hasLeadReplied ? "Replied" : "Emailed";
     dbScoreTier = "Warm";
-    activityText = `ðŸŸ¡ AI Sales Engine marked Lead as Warm (${dealScore}/100) â€” ${hasLeadReplied ? 'Engaged' : 'Outreach sent'}.`;
+    activityText = `🟡 AI Sales Engine marked Lead as Warm (${dealScore}/100) — ${hasLeadReplied ? 'Engaged' : 'Outreach sent'}.`;
   }
 
   // Save changes to database
@@ -2353,6 +2408,9 @@ export const getConversations = createServerFn({ method: 'POST' })
         }
       }
     })
+
+    // Self-healing pipeline sync: reconcile any leads with inbound replies
+    await reconcileLeadReplyStatuses(db, leads);
 
     const conversations = leads.map((l) => {
       const lastMsg = l.messages[0]
@@ -3307,7 +3365,7 @@ export const handleGoogleOAuthCallback = createServerFn({ method: 'GET' })
       await db.activity.create({
         data: {
           builderId,
-          action: `Google Workspace connected via 1-Click OAuth 2.0 (${profile.email}).`
+          action: `Google Workspace connected via OAuth 2.0 (${profile.email}).`
         }
       }).catch(() => {});
 
@@ -3395,7 +3453,7 @@ export const testIntegrationConnection = createServerFn({ method: 'POST' })
       }
       const rawPassword = credentials.password || '';
       if (!rawPassword) {
-        throw new Error("Missing App Password. Please enter your 16-character Google App Password or connect via 1-Click Google OAuth.");
+        throw new Error("Missing App Password. Please enter your 16-character Google App Password or connect via Google Workspace Authorization.");
       }
 
       // If user provided an actual password (not the masked placeholder), perform REAL live Google authentication check
@@ -3716,6 +3774,45 @@ export async function setLeadAiToggleDirect(leadId: string, active: boolean, cal
   const current = await readSettingJson('ai_toggle_map', callerSession);
   current[leadId] = active;
   await writeSettingJson('ai_toggle_map', current, callerSession);
+
+  // Smart AI Re-activation Hook:
+  // If toggled ON, check if the latest message is an unreplied homeowner message.
+  // If so, reconcile status to 'Replied' and auto-queue a delayed AI response.
+  if (active) {
+    try {
+      const latestMsg = await db.message.findFirst({
+        where: { leadId },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, sender: true, content: true }
+      });
+
+      if (latestMsg && latestMsg.sender === 'lead') {
+        // 1. Ensure lead status is at least 'Replied'
+        await db.lead.updateMany({
+          where: {
+            id: leadId,
+            status: { in: ['New', 'Emailed', 'Opened', 'Outreach', 'contacted'] }
+          },
+          data: { status: 'Replied' }
+        });
+
+        // 2. Queue authentic delayed reply
+        const { queueDelayedAiReply } = await import('./ai-queue.server');
+        const queueRes = await queueDelayedAiReply(leadId, callerSession.builderId, latestMsg.content);
+        const minutes = (queueRes.delaySeconds / 60).toFixed(1);
+        await db.activity.create({
+          data: {
+            builderId: callerSession.builderId,
+            leadId,
+            action: `⏳ AI Concierge resumed: response queued (~${minutes} min authentic delay to preserve human trust).`,
+          }
+        }).catch(() => {});
+      }
+    } catch (queueErr) {
+      console.warn('[AI TOGGLE RE-ACTIVATION QUEUE WARNING]:', queueErr);
+    }
+  }
+
   return { success: true };
 }
 

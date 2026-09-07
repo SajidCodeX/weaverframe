@@ -365,3 +365,100 @@ export async function fetchRecentGmailSentMessages(
     return [];
   }
 }
+
+/**
+ * Extracts body text from a Gmail REST API message payload.
+ */
+function extractBodyFromGmailPayload(payload: any): string {
+  if (!payload) return '';
+  if (payload.body?.data) {
+    try {
+      return Buffer.from(payload.body.data, 'base64url').toString('utf8');
+    } catch {
+      return '';
+    }
+  }
+  if (payload.parts && Array.isArray(payload.parts)) {
+    const plainPart = payload.parts.find((p: any) => p.mimeType === 'text/plain');
+    if (plainPart?.body?.data) {
+      try {
+        return Buffer.from(plainPart.body.data, 'base64url').toString('utf8');
+      } catch {
+        return '';
+      }
+    }
+    const htmlPart = payload.parts.find((p: any) => p.mimeType === 'text/html');
+    if (htmlPart?.body?.data) {
+      try {
+        const rawHtml = Buffer.from(htmlPart.body.data, 'base64url').toString('utf8');
+        return rawHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      } catch {
+        return '';
+      }
+    }
+    for (const part of payload.parts) {
+      if (part.parts) {
+        const nested = extractBodyFromGmailPayload(part);
+        if (nested) return nested;
+      }
+    }
+  }
+  return '';
+}
+
+/**
+ * Ingests inbound emails from leads via Gmail REST API.
+ * Serverless-friendly, instant, and replaces legacy IMAP on Vercel.
+ */
+export async function fetchRecentGmailInboundMessages(
+  accessToken: string,
+  leadEmailMap: Map<string, any>
+): Promise<Array<{ leadId: string; senderEmail: string; subject: string; body: string; date: Date }>> {
+  try {
+    const listRes = await fetch(
+      'https://gmail.googleapis.com/gmail/v1/users/me/messages?q=in:inbox&maxResults=15',
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+
+    if (!listRes.ok) return [];
+
+    const listData = await listRes.json();
+    const messages = listData.messages || [];
+    const matchedInbound: Array<{ leadId: string; senderEmail: string; subject: string; body: string; date: Date }> = [];
+
+    for (const msg of messages) {
+      const detailRes = await fetch(
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+
+      if (!detailRes.ok) continue;
+
+      const detail = await detailRes.json();
+      const headers = detail.payload?.headers || [];
+      const fromHeader = headers.find((h: any) => h.name.toLowerCase() === 'from')?.value || '';
+      const subjectHeader = headers.find((h: any) => h.name.toLowerCase() === 'subject')?.value || '';
+      const dateHeader = headers.find((h: any) => h.name.toLowerCase() === 'date')?.value || '';
+
+      const cleanFrom = fromHeader.toLowerCase().replace(/.*<([^>]+)>.*/, '$1').trim();
+
+      if (cleanFrom && leadEmailMap.has(cleanFrom)) {
+        const lead = leadEmailMap.get(cleanFrom)!;
+        const bodyText = extractBodyFromGmailPayload(detail.payload) || detail.snippet || '';
+        matchedInbound.push({
+          leadId: lead.id,
+          senderEmail: cleanFrom,
+          subject: subjectHeader,
+          body: bodyText,
+          date: dateHeader ? new Date(dateHeader) : new Date()
+        });
+      }
+    }
+
+    return matchedInbound;
+  } catch (err) {
+    console.warn('[GMAIL API] Failed to fetch inbound messages:', err);
+    return [];
+  }
+}
+
