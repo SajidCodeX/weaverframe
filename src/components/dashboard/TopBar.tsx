@@ -362,20 +362,28 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
               if (isRefreshing) return;
               setIsRefreshing(true);
               try {
-                // 1. Trigger background sync
-                await triggerMailboxSync().catch(() => {});
-                // 2. Refresh active route data
+                // 1. Trigger background sync without blocking page refresh
+                triggerMailboxSync().then(() => {
+                  const activeRole = typeof window !== 'undefined' ? sessionStorage.getItem('active_role') ?? undefined : undefined;
+                  getLastSyncTime({ data: { activeRole } }).then((time) => {
+                    if (time) setRealSyncTime(time);
+                  }).catch(() => {});
+                }).catch(() => {});
+
+                // 2. Immediately refresh active route data
                 await router.invalidate();
+
                 // 3. Update sync time telemetry
                 const activeRole = typeof window !== 'undefined' ? sessionStorage.getItem('active_role') ?? undefined : undefined;
                 getLastSyncTime({ data: { activeRole } }).then((time) => {
                   if (time) setRealSyncTime(time);
                 }).catch(() => {});
+
                 toast.success("Dashboard refreshed successfully");
               } catch {
                 toast.error("Could not refresh dashboard");
               } finally {
-                setTimeout(() => setIsRefreshing(false), 600);
+                setTimeout(() => setIsRefreshing(false), 500);
               }
             }}
             disabled={isRefreshing}
@@ -383,7 +391,7 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
             title="Refresh Page Data"
           >
             <RefreshCw className={`size-3.5 transition-transform duration-300 ${isRefreshing ? 'animate-spin text-[#c9a84c] dark:text-[#e5d9c5]' : 'text-muted-foreground'}`} />
-            <span className="text-xs font-medium">Refresh</span>
+            <span className="text-xs font-medium">{isRefreshing ? 'Refreshing' : 'Refresh'}</span>
           </button>
 
           {/* Cmd+K Search trigger */}
