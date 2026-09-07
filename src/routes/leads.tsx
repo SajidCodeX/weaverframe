@@ -58,7 +58,7 @@ function LeadsPage() {
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const getInitialDateRange = () => {
     if (typeof window === "undefined") {
-      return { range: "All Time", start: "", end: "" };
+      return { range: "Today", start: "", end: "" };
     }
     const saved = sessionStorage.getItem("globalDateRange");
     if (saved) {
@@ -67,13 +67,10 @@ function LeadsPage() {
         if (parsed.label === "Custom Range") {
           return { range: "Custom Range", start: parsed.start || "", end: parsed.end || "" };
         }
-        if (parsed.label === "Today") {
-          return { range: "All Time", start: "", end: "" };
-        }
-        return { range: parsed.label || "All Time", start: "", end: "" };
+        return { range: parsed.label || "Today", start: "", end: "" };
       } catch (_) {}
     }
-    return { range: "All Time", start: "", end: "" };
+    return { range: "Today", start: "", end: "" };
   };
 
   const [initialDate] = useState(() => getInitialDateRange());

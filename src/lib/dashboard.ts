@@ -285,9 +285,30 @@ export const getLastSyncTime = createServerFn({ method: 'POST' })
     }
   });
 
-// FIX-5: Converted to POST so we can accept activeRole and pass it to requireAuth/getTenantDb.
-// A GET server function cannot receive input params. Without activeRole, multi-cookie sessions
-// (jwt_admin + jwt_builder both present) cause getTenantDb to silently fail with UNAUTHORIZED.
+export function cleanMojibake(text: string): string {
+  if (!text) return "";
+  return text
+    .replace(/ðŸš¨/g, "🚨")
+    .replace(/ðŸ“…/g, "📅")
+    .replace(/ðŸ“†/g, "🗓️")
+    .replace(/ðŸš€/g, "🚀")
+    .replace(/ðŸ”¥/g, "🔥")
+    .replace(/ðŸ‘¤/g, "👤")
+    .replace(/ðŸ’¬/g, "💬")
+    .replace(/ðŸ¤–/g, "🤖")
+    .replace(/ðŸ¤—/g, "🤖")
+    .replace(/ðŸ§ /g, "🧠")
+    .replace(/ðŸ”„/g, "🔄")
+    .replace(/ðŸ”‘/g, "🔑")
+    .replace(/ðŸ“‹/g, "📋")
+    .replace(/ðŸ’°/g, "💰")
+    .replace(/ðŸŽ¯/g, "🎯")
+    .replace(/ðŸ“¤/g, "📤")
+    .replace(/ðŸ ¢/g, "🏢")
+    .replace(/â€”/g, "—")
+    .replace(/â€/g, "—");
+}
+
 export const getNotificationsData = createServerFn({ method: 'POST' })
   .inputValidator((data: { activeRole?: string | null } | undefined) => data)
   .handler(async ({ data }) => {
@@ -327,7 +348,7 @@ export const getNotificationsData = createServerFn({ method: 'POST' })
           } catch {}
           notifs.push({
             id: `demo_${lead.id}`,
-            title: 'ðŸš€ Inbound Demo Request',
+            title: '🚀 Inbound Demo Request',
             desc: `${lead.name}${comp ? ` (${comp})` : ''} requested a private OS walkthrough.`,
             time: lead.createdAt.toISOString(),
             unread: new Date().getTime() - lead.createdAt.getTime() < 86400000,
@@ -337,7 +358,7 @@ export const getNotificationsData = createServerFn({ method: 'POST' })
         for (const b of recentBuilders) {
           notifs.push({
             id: `builder_${b.id}`,
-            title: 'ðŸ¢ Builder Account',
+            title: '🏢 Builder Account',
             desc: `${b.companyName} is registered on the platform.`,
             time: b.createdAt.toISOString(),
             unread: new Date().getTime() - b.createdAt.getTime() < 86400000,
@@ -360,24 +381,35 @@ export const getNotificationsData = createServerFn({ method: 'POST' })
         include: { lead: true }
       });
       return activities.map(act => {
-        let title = "Lead Activity";
-        if (act.action.includes("ðŸš¨ High Alert")) {
-          title = "ðŸš¨ High Priority Alert";
-        } else if (act.action.toLowerCase().includes("schedule") || act.action.toLowerCase().includes("appointment") || act.action.toLowerCase().includes("site visit")) {
-          title = "ðŸ“… Meeting Scheduled";
-        } else if (act.action.toLowerCase().includes("demo") || act.action.toLowerCase().includes("walkthrough")) {
-          title = "ðŸš€ Inbound Demo Request";
-        } else if (act.action.toLowerCase().includes("hot lead") || act.action.toLowerCase().includes("qualif")) {
-          title = "ðŸ”¥ Hot Lead";
-        } else if (act.action.toLowerCase().includes("added") || act.action.toLowerCase().includes("manually")) {
-          title = "ðŸ‘¤ New Lead Added";
-        } else if (act.action.toLowerCase().includes("replied") || act.action.toLowerCase().includes("response")) {
-          title = "ðŸ’¬ Lead Replied";
+        const rawAction = act.action || '';
+        const cleanedAction = cleanMojibake(rawAction);
+        const lower = cleanedAction.toLowerCase();
+
+        let title = "📌 Lead Activity";
+        if (lower.includes("human takeover") || lower.includes("takeover")) {
+          title = "👤 Human Takeover";
+        } else if (lower.includes("high alert")) {
+          title = "🚨 High Priority Alert";
+        } else if (lower.includes("schedule") || lower.includes("appointment") || lower.includes("site visit")) {
+          title = "📅 Meeting Scheduled";
+        } else if (lower.includes("inbound email reply") || lower.includes("homeowner replied")) {
+          title = "💬 Lead Replied";
+        } else if (lower.includes("outreach") || lower.includes("qualification email") || lower.includes("dispatched")) {
+          title = "📧 AI Outreach Sent";
+        } else if (lower.includes("hot lead") || lower.includes("marked lead as hot")) {
+          title = "🔥 Hot Lead Qualified";
+        } else if (lower.includes("marked lead as warm")) {
+          title = "🟡 Lead Engaged";
+        } else if (lower.includes("toggled on") || lower.includes("toggled off")) {
+          title = "🤖 AI Status Changed";
+        } else if (lower.includes("added") || lower.includes("manually")) {
+          title = "👤 New Lead Added";
         }
+
         return {
           id: act.id,
           title,
-          desc: `${act.lead?.name || 'Lead'}: ${act.action}`,
+          desc: `${act.lead?.name || 'Lead'}: ${cleanedAction}`,
           time: act.createdAt.toISOString(),
           unread: new Date().getTime() - act.createdAt.getTime() < 3600000
         };
@@ -410,7 +442,7 @@ export async function createHighAlertNotification({
       data: {
         builderId,
         leadId,
-        action: `ðŸš¨ High Alert [${title}]: ${message}`,
+        action: `🚨 High Alert [${title}]: ${message}`,
       }
     });
     invalidateCache("dashboard_");
@@ -580,7 +612,7 @@ export const addManualLead = createServerFn({ method: 'POST' })
           builderId: session.builderId || '',
           leadId: lead.id,
           leadName: data.name,
-          title: "ðŸ”¥ High-Priority Hot Lead",
+          title: "🔥 High-Priority Hot Lead",
           message: `${data.name} with project budget $${estimatedBudget.toLocaleString()} added from ${source}.`,
           type: "hot_lead"
         });
@@ -734,8 +766,8 @@ export const sendSmsOutreach = createServerFn({ method: 'POST' })
 
       // Always log the intent as an activity
       const actionText = twilioSent
-        ? `ðŸ’¬ SMS sent to ${lead.name} (${lead.phone || 'no phone'}): "${message.substring(0, 60)}${message.length > 60 ? '...' : ''}"`
-        : `ðŸ“¤ SMS outreach queued for ${lead.name} (${lead.phone || 'no phone'}): "${message.substring(0, 60)}${message.length > 60 ? '...' : ''}"`
+        ? `💬 SMS sent to ${lead.name} (${lead.phone || 'no phone'}): "${message.substring(0, 60)}${message.length > 60 ? '...' : ''}"`
+        : `📤 SMS outreach queued for ${lead.name} (${lead.phone || 'no phone'}): "${message.substring(0, 60)}${message.length > 60 ? '...' : ''}"`
 
       await db.activity.create({
         data: { builderId: session.builderId || '', leadId, action: actionText }
@@ -782,7 +814,7 @@ export const retriggerLeadFlow = createServerFn({ method: 'POST' })
         data: {
           builderId: session.builderId || '',
           leadId,
-          action: `ðŸ”„ AI intake flow re-triggered for ${lead.name}. Lead reset to New / Cold for re-qualification.`
+          action: `🔄 AI intake flow re-triggered for ${lead.name}. Lead reset to New / Cold for re-qualification.`
         }
       })
 
@@ -1438,7 +1470,7 @@ export const updateLeadMemory = createServerFn({ method: 'POST' })
       data: {
         builderId: session.builderId || '',
         leadId: data.leadId,
-        action: `ðŸ§  Lead Memory & Deal Score updated manually by builder team.`
+        action: `🧠 Lead Memory & Deal Score updated manually by builder team.`
       }
     });
 
@@ -1916,7 +1948,7 @@ Do not output any markdown formatting or text outside the raw JSON object.`;
         data: {
           builderId,
           leadId,
-          action: `ðŸ”¥ VIP HUMAN ESCALATION TRIGGERED: ${escalationReason || 'High ticket client requires immediate executive call'}.`
+          action: `🔥 VIP HUMAN ESCALATION TRIGGERED: ${escalationReason || 'High ticket client requires immediate executive call'}.`
         }
       });
     }
@@ -2031,17 +2063,17 @@ export const summarizeConversation = createServerFn({ method: 'POST' })
 
 Analyze the entire conversation log and construct a detailed, highly structured Pre-Meeting Briefing covering these 4 core categories:
 
-ðŸ“‹ CLIENT PROFILE & DESIGN SPECS:
-â€¢ Summarize home style, square footage, bed/bath count, target county/city, land ownership, lot conditions (slopes, utilities, etc.).
+📋 CLIENT PROFILE & DESIGN SPECS:
+• Summarize home style, square footage, bed/bath count, target county/city, land ownership, lot conditions (slopes, utilities, etc.).
 
-ðŸ’° FINANCIALS & FEASIBILITY:
-â€¢ Summarize stated budget range, per sq ft cost discussions, slope/foundation/retaining wall engineering cost expectations.
+💰 FINANCIALS & FEASIBILITY:
+• Summarize stated budget range, per sq ft cost discussions, slope/foundation/retaining wall engineering cost expectations.
 
-â“ KEY CONCERNS & OBJECTIONS RAISED:
-â€¢ Summarize specific technical or pricing questions the client asked that the builder must address during the call.
+❓ KEY CONCERNS & OBJECTIONS RAISED:
+• Summarize specific technical or pricing questions the client asked that the builder must address during the call.
 
-ðŸŽ¯ ACTION PLAN & MEETING DELIVERABLES:
-â€¢ Summarize scheduled meeting/call date, time, phone number, and exact documents requested (e.g. site evaluation report, floor plan proposals, estimate sheets).
+🎯 ACTION PLAN & MEETING DELIVERABLES:
+• Summarize scheduled meeting/call date, time, phone number, and exact documents requested (e.g. site evaluation report, floor plan proposals, estimate sheets).
 
 Format the output clearly using bullet points and bold section headers. Keep it professional, highly detailed, clear, and actionable for the builder.`;
 
@@ -2202,7 +2234,7 @@ export const bookAppointment = createServerFn({ method: 'POST' })
         data: {
           builderId: session.builderId || '',
           leadId: data.leadId,
-          action: `ðŸ“† Appointment booked: ${data.type} - ${data.location} scheduled for ${formattedDate}.`,
+          action: `🗓️ Appointment booked: ${data.type} - ${data.location} scheduled for ${formattedDate}.`,
         }
       })
 
@@ -2212,7 +2244,7 @@ export const bookAppointment = createServerFn({ method: 'POST' })
           builderId: session.builderId || '',
           leadId: data.leadId,
           sender: 'system',
-          content: `ðŸ“† Site Visit Booked: ${data.type} scheduled for ${formattedDate} at ${data.location}.`,
+          content: `🗓️ Site Visit Booked: ${data.type} scheduled for ${formattedDate} at ${data.location}.`,
           channel: 'portal',
           isRead: true
         }
@@ -2223,7 +2255,7 @@ export const bookAppointment = createServerFn({ method: 'POST' })
         builderId: session.builderId || '',
         leadId: data.leadId,
         leadName: lead.name,
-        title: "ðŸ“… New Meeting Scheduled",
+        title: "📅 New Meeting Scheduled",
         message: `${lead.name} scheduled ${data.type} for ${formattedDate} at ${data.location}.`,
         type: "booking"
       });
@@ -2245,7 +2277,7 @@ export const bookAppointment = createServerFn({ method: 'POST' })
                 <p style="color: #475569; font-size: 15px; line-height: 1.6;">We have confirmed your upcoming meeting with the <strong>${companyName}</strong> team.</p>
                 
                 <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px 20px; margin: 24px 0;">
-                  <p style="margin: 0 0 8px 0; color: #0f172a; font-weight: 600; font-size: 14px;">ðŸ“… Session Details:</p>
+                  <p style="margin: 0 0 8px 0; color: #0f172a; font-weight: 600; font-size: 14px;">📅 Session Details:</p>
                   <p style="margin: 0 0 4px 0; color: #334155; font-size: 13px;"><strong>Type:</strong> ${data.type}</p>
                   <p style="margin: 0 0 4px 0; color: #334155; font-size: 13px;"><strong>Date & Time:</strong> ${formattedDate}</p>
                   <p style="margin: 0; color: #334155; font-size: 13px;"><strong>Location:</strong> ${data.location}</p>
@@ -2303,7 +2335,7 @@ export const rescheduleAppointment = createServerFn({ method: 'POST' })
         data: {
           builderId: session.builderId || '',
           leadId: existing.leadId,
-          action: `ðŸ”„ Appointment rescheduled: ${existing.type} moved to ${formattedDate}.`,
+          action: `🔄 Appointment rescheduled: ${existing.type} moved to ${formattedDate}.`,
         }
       })
 
@@ -2899,8 +2931,8 @@ export async function triggerAutonomousAiOutreach(
           builderId,
           leadId,
           action: emailDispatched
-            ? `ðŸ¤– AI Autonomous Outreach: Bespoke qualification email dispatched to ${lead.email} (Reply-To: ${profileEmail})`
-            : `ðŸ¤– AI Outreach Created: Message generated for ${lead.email} (Reply-To: ${profileEmail})${emailNotice}`,
+            ? `🤖 AI Autonomous Outreach: Bespoke qualification email dispatched to ${lead.email} (Reply-To: ${profileEmail})`
+            : `🤖 AI Outreach Created: Message generated for ${lead.email} (Reply-To: ${profileEmail})${emailNotice}`,
         }
       });
 
@@ -4068,7 +4100,7 @@ export const createTeamInvite = createServerFn({ method: 'POST' })
             <p style="color: #475569; font-size: 15px; line-height: 1.6;"><strong>${inviterName}</strong> has invited you to join the <strong>${companyName}</strong> workspace on WeaverFrame as a <strong>${roleLabel}</strong>.</p>
             
             <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px 20px; margin: 24px 0;">
-              <p style="margin: 0 0 6px 0; color: #0f172a; font-weight: 600; font-size: 14px;">ðŸ”‘ Account Details:</p>
+              <p style="margin: 0 0 6px 0; color: #0f172a; font-weight: 600; font-size: 14px;">🔑 Account Details:</p>
               <p style="margin: 0 0 4px 0; color: #334155; font-size: 13px;"><strong>Login Email:</strong> ${data.email}</p>
               <p style="margin: 0; color: #334155; font-size: 13px;"><strong>Assigned Role:</strong> ${roleLabel}</p>
             </div>
@@ -4373,7 +4405,7 @@ export const submitDemoRequest = createServerFn({ method: 'POST' })
       if (adminEmail) {
         sendOutboundEmail({
           to: adminEmail,
-          subject: `ðŸš€ [Demo Request] ${data.name.trim()} from ${data.company.trim()} (${data.buildVolume})`,
+          subject: `🚀 [Demo Request] ${data.name.trim()} from ${data.company.trim()} (${data.buildVolume})`,
           html: buildAdminDemoNotificationHtml({
             name: data.name.trim(),
             company: data.company.trim(),
