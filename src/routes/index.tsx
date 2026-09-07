@@ -148,7 +148,7 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
 
   const getInitialDateRange = () => {
     if (typeof window === "undefined") {
-      return { range: "All Time", start: "", end: "" };
+      return { range: "Today", start: "", end: "" };
     }
     const saved = sessionStorage.getItem("globalDateRange");
     if (saved) {
@@ -157,13 +157,12 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
         if (parsed.label === "Custom Range") {
           return { range: "Custom Range", start: parsed.start || "", end: parsed.end || "" };
         }
-        return { range: parsed.label || "All Time", start: "", end: "" };
+        return { range: parsed.label || "Today", start: "", end: "" };
       } catch (_) {}
     }
-    return { range: "All Time", start: "", end: "" };
+    return { range: "Today", start: "", end: "" };
   };
 
-  const [isSyncing, setIsSyncing] = useState(false);
   const [initialDate] = useState(() => getInitialDateRange());
   const [selectedDateRange, setSelectedDateRange] = useState<string>(initialDate.range);
   const [customStart, setCustomStart] = useState<string>(initialDate.start);
@@ -184,20 +183,6 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
     window.addEventListener("globalDateRangeChanged", handleGlobalDateChange);
     return () => window.removeEventListener("globalDateRangeChanged", handleGlobalDateChange);
   }, []);
-
-  const changeDateRange = (label: string, start?: string, end?: string) => {
-    setSelectedDateRange(label);
-    if (typeof window !== "undefined") {
-      const rangeData = { label, start, end };
-      sessionStorage.setItem("globalDateRange", JSON.stringify(rangeData));
-      (window as any).__globalDateRange = rangeData;
-      window.dispatchEvent(
-        new CustomEvent("globalDateRangeChanged", {
-          detail: rangeData,
-        }),
-      );
-    }
-  };
 
   const matchDate = (dateInput: string | Date) => {
     if (selectedDateRange === "All Time") return true;
@@ -334,63 +319,6 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
 
   return (
     <>
-      {/* ── Overview Quick Date Range Filter Bar ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 bg-card/60 border border-border/70 backdrop-blur-sm p-2 sm:p-2.5 rounded-2xl shadow-sm">
-        <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto custom-scrollbar py-0.5">
-          <div className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground pr-2 border-r border-border/60 shrink-0">
-            <Calendar className="size-3.5 text-[#e5d9c5]" />
-            <span className="hidden md:inline uppercase text-[10px] tracking-wider font-semibold">Date Window:</span>
-          </div>
-          {[
-            "All Time",
-            "Today",
-            "Yesterday",
-            "Last 7 Days",
-            "Last 30 Days",
-            "This Month",
-          ].map((preset) => (
-            <button
-              key={preset}
-              onClick={() => changeDateRange(preset)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-xl transition-all whitespace-nowrap cursor-pointer ${
-                selectedDateRange === preset
-                  ? "bg-[#e5d9c5] text-black font-semibold shadow-sm shadow-[#e5d9c5]/20"
-                  : "bg-secondary/50 text-muted-foreground hover:text-foreground hover:bg-secondary border border-border/40"
-              }`}
-            >
-              {preset}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex items-center gap-2.5 justify-end shrink-0">
-          <div className="text-[11px] font-mono text-muted-foreground hidden sm:block">
-            {selectedDateRange === "All Time"
-              ? "All Historical Pipeline"
-              : selectedDateRange === "Today"
-              ? `Today (${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})`
-              : selectedDateRange}
-          </div>
-          <button
-            onClick={async () => {
-              if (isSyncing) return;
-              setIsSyncing(true);
-              try {
-                await router.invalidate();
-              } finally {
-                setTimeout(() => setIsSyncing(false), 800);
-              }
-            }}
-            disabled={isSyncing}
-            className="inline-flex items-center gap-1.5 text-xs border border-border/80 bg-secondary/60 rounded-xl px-3 py-1.5 text-foreground hover:bg-secondary transition-colors cursor-pointer shadow-sm disabled:opacity-80"
-            title="Refresh Data"
-          >
-            <RefreshCw className={`size-3 transition-transform duration-300 ${isSyncing ? 'animate-spin text-[#c9a84c] dark:text-[#e5d9c5]' : 'text-muted-foreground'}`} />
-            <span className="text-[11px] font-mono">{isSyncing ? 'Syncing...' : 'Sync'}</span>
-          </button>
-        </div>
-      </div>
-
       {/* KPI row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Kpi

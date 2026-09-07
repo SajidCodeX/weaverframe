@@ -825,10 +825,14 @@ function LeadsPage() {
                               <Calendar className="size-3.5" />
                             </button>
                             <button
-                              onClick={(e) => { e.stopPropagation(); setSelected(lead); }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                router.navigate({ to: '/messages', search: { leadId: lead.id } as any });
+                              }}
+                              title="Open Chat / Inbox"
                               className="size-7 rounded hover:bg-secondary text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors"
                             >
-                              <Eye className="size-3.5" />
+                              <MessageSquare className="size-3.5" />
                             </button>
 
                             <div className="relative">
@@ -1812,6 +1816,7 @@ type LeadKanbanCardProps = {
 };
 
 function LeadKanbanCard({ lead, column, isPrivacyMode, onSelectLead, onEmailLead, onScheduleLead, onEditLead, onDeleteLead, onSendSms, onRetrigger }: LeadKanbanCardProps) {
+  const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -1918,11 +1923,14 @@ function LeadKanbanCard({ lead, column, isPrivacyMode, onSelectLead, onEmailLead
             <Calendar className="size-3" />
           </button>
           <button
-            onClick={() => onSelectLead(lead)}
-            title="View Lead Detail"
+            onClick={(e) => {
+              e.stopPropagation();
+              router.navigate({ to: '/messages', search: { leadId: lead.id } as any });
+            }}
+            title="Open Chat / Inbox"
             className="size-6 rounded hover:bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
           >
-            <Eye className="size-3" />
+            <MessageSquare className="size-3" />
           </button>
 
           {/* More actions menu */}

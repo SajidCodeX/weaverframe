@@ -355,7 +355,7 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
 
         {/* Actions */}
         <div className="flex items-center gap-2">
-          {/* Refresh Button */}
+          {/* Refresh / Sync Button */}
           <button
             onClick={async () => {
               if (isRefreshing) return;
@@ -367,10 +367,11 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
               }
             }}
             disabled={isRefreshing}
-            className="hidden sm:flex items-center justify-center size-9 text-muted-foreground bg-card border border-border rounded-xl hover:border-primary/40 hover:text-foreground transition-all duration-150 cursor-pointer shadow-sm shrink-0 disabled:opacity-80"
+            className="hidden sm:flex items-center gap-1.5 h-9 px-3 text-xs text-muted-foreground bg-card border border-border rounded-xl hover:border-primary/40 hover:text-foreground transition-all duration-150 cursor-pointer shadow-sm shrink-0 disabled:opacity-80"
             title="Refresh Page Data"
           >
             <RefreshCw className={`size-3.5 transition-transform duration-300 ${isRefreshing ? 'animate-spin text-[#c9a84c] dark:text-[#e5d9c5]' : 'text-muted-foreground'}`} />
+            <span className="text-xs font-medium">{isRefreshing ? 'Syncing...' : 'Refresh'}</span>
           </button>
 
           {/* Cmd+K Search trigger */}
