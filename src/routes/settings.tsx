@@ -1384,7 +1384,12 @@ function SettingsPage() {
                           <div className="space-y-2.5">
                             <div className="flex items-center justify-between border-b border-border/40 pb-2">
                               <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
-                                <span>⚡ Zapier Webhook Setup</span>
+                                <svg className="size-4 shrink-0" viewBox="0 0 24 24">
+                                  <rect width="24" height="24" rx="5" fill="#FF4F00" />
+                                  <path d="M11 5h2v6h5v2h-5v6h-2v-6H6v-2h5V5z" fill="#FFF" />
+                                  <path d="M7.4 6.6l1.4-1.4 8.5 8.5-1.4 1.4L7.4 6.6zm9.9 1.4l-1.4-1.4-8.5 8.5 1.4 1.4 8.5-8.5z" fill="#FFF" />
+                                </svg>
+                                <span>Zapier Webhook Setup</span>
                               </h4>
                               <span className="text-[10px] font-mono text-muted-foreground">3-Step Setup</span>
                             </div>
@@ -1400,7 +1405,13 @@ function SettingsPage() {
                           <div className="space-y-2.5">
                             <div className="flex items-center justify-between border-b border-border/40 pb-2">
                               <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
-                                <span>🟣 Make.com (Integromat) Setup</span>
+                                <svg className="size-4 shrink-0" viewBox="0 0 24 24">
+                                  <rect width="24" height="24" rx="5" fill="#6E00F5" />
+                                  <path d="M5.5 8.5L9.5 5.5L13.5 8.5L9.5 11.5L5.5 8.5Z" fill="#FFF" />
+                                  <path d="M10.5 12.5L14.5 9.5L18.5 12.5L14.5 15.5L10.5 12.5Z" fill="#FFF" opacity="0.9"/>
+                                  <path d="M5.5 15.5L9.5 12.5L13.5 15.5L9.5 18.5L5.5 15.5Z" fill="#FFF" opacity="0.75"/>
+                                </svg>
+                                <span>Make.com (Integromat) Setup</span>
                               </h4>
                               <span className="text-[10px] font-mono text-muted-foreground">HTTP Module</span>
                             </div>
@@ -1416,7 +1427,10 @@ function SettingsPage() {
                           <div className="space-y-2.5">
                             <div className="flex items-center justify-between border-b border-border/40 pb-2">
                               <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
-                                <span>🟦 WordPress (Elementor Pro / WPForms / Gravity)</span>
+                                <svg className="size-4 shrink-0" viewBox="0 0 24 24" fill="#21759B">
+                                  <path d="M12 2C6.486 2 2 6.486 2 12c0 4.418 2.865 8.167 6.839 9.49L4.47 8.358C5.83 5.46 8.7 3.5 12 3.5c1.68 0 3.25.503 4.568 1.368L12 2zm8.53 10c0-1.657-.597-2.808-1.11-3.71-.682-1.11-1.32-2.046-1.32-3.155 0-1.233.937-2.383 2.26-2.383.104 0 .204.01.306.022A9.957 9.957 0 0012 3.5c-3.766 0-7.067 2.09-8.79 5.204l5.748 16.717c.64-1.87 1.312-4.54 1.312-6.657 0-1.657-.597-2.808-1.11-3.71-.682-1.11-1.32-2.046-1.32-3.155 0-1.233.937-2.383 2.26-2.383zM12 22a9.96 9.96 0 005.161-1.425l-5.07-14.73-5.26 14.797A9.97 9.97 0 0012 22z"/>
+                                </svg>
+                                <span>WordPress (Elementor Pro / WPForms / Gravity)</span>
                               </h4>
                               <span className="text-[10px] font-mono text-muted-foreground">Native Form Webhooks</span>
                             </div>
@@ -1432,7 +1446,10 @@ function SettingsPage() {
                           <div className="space-y-2.5">
                             <div className="flex items-center justify-between border-b border-border/40 pb-2">
                               <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
-                                <span>📱 Meta Lead Ads (Facebook & Instagram)</span>
+                                <svg className="size-4 shrink-0" viewBox="0 0 24 24" fill="#0081FB">
+                                  <path d="M16.96 4C14.74 4 13.06 5.21 12 6.55 10.94 5.21 9.26 4 7.04 4 3.15 4 0 7.22 0 11.23c0 4.88 4.25 9.07 10.63 11.13.88.29 1.86.29 2.74 0C19.75 20.3 24 16.11 24 11.23 24 7.22 20.85 4 16.96 4zm-9.92 9.77c-2.06 0-3.68-1.59-3.68-3.54 0-1.96 1.62-3.55 3.68-3.55 1.51 0 2.59.88 3.32 1.89-1.23 1.58-2.36 3.49-3.32 5.2zm9.92 0c-.96-1.71-2.09-3.62-3.32-5.2.73-1.01 1.81-1.89 3.32-1.89 2.06 0 3.68 1.59 3.68 3.55 0 1.95-1.62 3.54-3.68 3.54z"/>
+                                </svg>
+                                <span>Meta Lead Ads (Facebook & Instagram)</span>
                               </h4>
                               <span className="text-[10px] font-mono text-muted-foreground">Instant Lead Sync</span>
                             </div>
@@ -1446,7 +1463,10 @@ function SettingsPage() {
                           <div className="space-y-2.5">
                             <div className="flex items-center justify-between border-b border-border/40 pb-2">
                               <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
-                                <span>🌊 Webflow Forms Webhook</span>
+                                <svg className="size-4 shrink-0" viewBox="0 0 24 24" fill="#146EF5">
+                                  <path d="M17.8 7.2c-.3 0-.6.1-.8.4L13.7 13l-2.4-7.8c-.1-.3-.4-.5-.7-.5s-.6.2-.7.5L6.6 15.9 4.3 8.3c-.1-.3-.4-.5-.7-.5H1.4c-.4 0-.7.4-.6.8l3.6 11.9c.1.3.4.5.7.5h2.8c.3 0 .6-.2.7-.5l3.2-9.6 3.2 9.6c.1.3.4.5.7.5h2.8c.3 0 .6-.2.7-.5l4.8-12.7c.1-.4-.2-.8-.6-.8h-1.9z"/>
+                                </svg>
+                                <span>Webflow Forms Webhook</span>
                               </h4>
                               <span className="text-[10px] font-mono text-muted-foreground">Project Settings</span>
                             </div>
@@ -1462,7 +1482,8 @@ function SettingsPage() {
                           <div className="space-y-2.5">
                             <div className="flex items-center justify-between border-b border-border/40 pb-2">
                               <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
-                                <span>💻 1-Line HTML Form / Embed Snippet</span>
+                                <Code2 className="size-4 text-emerald-400 shrink-0" />
+                                <span>1-Line HTML Form / Embed Snippet</span>
                               </h4>
                               <span className="text-[10px] font-mono text-muted-foreground">Embed Anywhere</span>
                             </div>
