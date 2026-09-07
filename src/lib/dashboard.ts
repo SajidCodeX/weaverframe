@@ -2532,7 +2532,7 @@ export const sendMessage = createServerFn({ method: 'POST' })
         }
       })
 
-      if (currentLead && currentLead.status !== 'Appointment') {
+      if (currentLead && !['Appointment', 'Qualified', 'Scheduled', 'Closed Won'].includes(currentLead.status)) {
         await db.lead.update({
           where: { id: leadId },
           data: { status: 'Replied' }
