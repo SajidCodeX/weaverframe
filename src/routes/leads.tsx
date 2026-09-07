@@ -1831,8 +1831,29 @@ function LeadKanbanCard({ lead, column, isPrivacyMode, onSelectLead, onEmailLead
       ? `${lead.firstName} ${lead.lastName.split(/\s+/).map((p: string) => p.replace(/[^a-zA-Z]/g, '').charAt(0).toUpperCase()).filter(Boolean).join('. ')}.`
       : lead.firstName;
 
-  const daysAgo = Math.floor((Date.now() - new Date(lead.createdAt).getTime()) / (1000 * 60 * 60 * 24));
-  const daysLabel = daysAgo === 0 ? 'Today' : daysAgo === 1 ? '1d ago' : `${daysAgo}d ago`;
+  // Determine relevant interaction time: latest message date, or fallback to lead creation date
+  const latestInteractionDate = lead.messages?.[0]?.createdAt || lead.createdAt;
+  const targetDate = new Date(latestInteractionDate);
+  const diffMs = Math.max(0, Date.now() - (isNaN(targetDate.getTime()) ? Date.now() : targetDate.getTime()));
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHr = Math.floor(diffMin / 60);
+  const diffDays = Math.floor(diffHr / 24);
+
+  let daysLabel = "Today";
+  if (diffSec < 60) {
+    daysLabel = "Just now";
+  } else if (diffMin < 60) {
+    daysLabel = `${diffMin}m ago`;
+  } else if (diffHr < 24) {
+    daysLabel = `${diffHr}h ago`;
+  } else if (diffDays === 1) {
+    daysLabel = "1d ago";
+  } else if (diffDays < 7) {
+    daysLabel = `${diffDays}d ago`;
+  } else {
+    daysLabel = targetDate.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  }
 
   const scoreColors: Record<string, string> = {
     hot: 'text-orange-400 bg-orange-400/10 border-orange-400/20',
