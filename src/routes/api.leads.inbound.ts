@@ -318,6 +318,22 @@ export async function handleInboundLeadDirect(inputData: any = {}, request?: Req
         console.error('[INBOUND AI OUTREACH ERROR]:', aiErr);
       });
 
+      // ── Forward immediately to Connected CRMs (HubSpot & GoHighLevel) ────
+      import('@/lib/crm.server').then(({ syncLeadToConnectedCrms }) => {
+        syncLeadToConnectedCrms(targetBuilderId, {
+          id: lead.id,
+          name: lead.name,
+          email: lead.email,
+          phone: lead.phone,
+          county: lead.county,
+          state: lead.state,
+          estimatedBudget: lead.estimatedBudget,
+          scoreTier: lead.scoreTier,
+          status: lead.status,
+          summary: lead.lastAiSummary,
+        }).catch(err => console.error('[INBOUND CRM FORWARD ERROR]:', err));
+      }).catch(() => {});
+
       invalidateCache("dashboard_");
 
       return {
@@ -359,9 +375,23 @@ export const Route = createFileRoute('/api/leads/inbound')({
       });
     }
 
+    // Meta Webhook Handshake Verification (GET request with hub.challenge)
+    if (request?.url) {
+      try {
+        const url = new URL(request.url);
+        if (url.searchParams.get('hub.mode') === 'subscribe') {
+          const challenge = url.searchParams.get('hub.challenge') || '';
+          return new Response(challenge, {
+            status: 200,
+            headers: { 'Content-Type': 'text/plain' },
+          });
+        }
+      } catch {}
+    }
+
     const payloadInfo = {
       endpoint: "/api/leads/inbound",
-      methods: ["POST"],
+      methods: ["POST", "GET"],
       description: "Submit new inbound website or ad leads into WeaverFrame",
       supportedPlatforms: ["WordPress / Elementor / WPForms", "Meta Lead Ads (FB/IG)", "Webflow", "Wix", "Squarespace", "Zapier", "Make.com", "Custom HTML Forms"],
       payloadExample: {
