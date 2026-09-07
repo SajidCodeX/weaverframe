@@ -1262,74 +1262,75 @@ function SettingsPage() {
 
                 {isInboundExpanded && (
                   <div className="p-5 border-t border-border/40 bg-card space-y-4 animate-in slide-in-from-top-2 duration-150">
-                    <div className="p-4 sm:p-5 rounded-xl border border-border/70 bg-secondary/15 dark:bg-neutral-900/40 space-y-4 animate-in fade-in duration-150">
+                    <div className="p-4 sm:p-5 rounded-xl border border-border/70 bg-secondary/15 dark:bg-neutral-900/40 space-y-3.5 animate-in fade-in duration-150">
 
-                      {/* Row 1: Webhook Endpoint Header, Status Badge & Action Controls */}
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border/40">
-                        <div className="flex items-center gap-3">
-                          <div className="size-9 rounded-lg bg-card border border-border flex items-center justify-center shrink-0 shadow-sm">
-                            <Globe className="size-4.5 text-[#c9a84c] dark:text-[#e5d9c5]" />
-                          </div>
-                          <div>
-                            <div className="text-sm font-semibold text-foreground">
-                              Inbound Webhook Endpoint
-                            </div>
-                            <div className="text-xs text-muted-foreground mt-0.5">
-                              Accepts JSON & form-encoded payloads from any lead source
-                            </div>
-                          </div>
+                      {/* Row 1: Icon & Title */}
+                      <div className="flex items-center gap-3">
+                        <div className="size-9 rounded-lg bg-card border border-border flex items-center justify-center shrink-0 shadow-sm">
+                          <Globe className="size-4.5 text-[#c9a84c] dark:text-[#e5d9c5]" />
                         </div>
-
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <button
-                            type="button"
-                            onClick={() => setShowWebhookUrl(!showWebhookUrl)}
-                            className="text-xs px-3 py-1.5 rounded-lg border border-border bg-card text-foreground hover:bg-secondary transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm font-medium"
-                            title={showWebhookUrl ? "Hide full URL" : "Show full URL"}
-                          >
-                            {showWebhookUrl ? <EyeOff className="size-3 text-muted-foreground" /> : <Eye className="size-3 text-primary" />}
-                            <span>{showWebhookUrl ? "Hide URL" : "Show URL"}</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => copyToClipboard(inboundWebhookUrl, "webhook_url")}
-                            className="text-xs px-3 py-1.5 rounded-lg border border-border bg-card text-foreground hover:bg-secondary transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm font-medium"
-                            title="Copy webhook URL to clipboard"
-                          >
-                            {copiedKey === "webhook_url" ? (
-                              <>
-                                <Check className="size-3 text-emerald-400" />
-                                <span className="text-emerald-400">Copied!</span>
-                              </>
-                            ) : (
-                              <>
-                                <Copy className="size-3 text-foreground" />
-                                <span>Copy URL</span>
-                              </>
-                            )}
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={handleSendTestLead}
-                            disabled={isTestingInbound}
-                            className="text-xs px-3 py-1.5 rounded-lg border border-border bg-card text-foreground hover:bg-secondary transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50 shadow-sm font-medium"
-                            title="Send sample qualified lead"
-                          >
-                            {isTestingInbound ? (
-                              <>
-                                <Loader2 className="size-3 animate-spin" />
-                                <span>Testing...</span>
-                              </>
-                            ) : (
-                              <>
-                                <Send className="size-3 text-primary" />
-                                <span>Test Lead</span>
-                              </>
-                            )}
-                          </button>
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span className="text-sm font-semibold text-foreground whitespace-nowrap">
+                            Inbound Webhook Endpoint
+                          </span>
                         </div>
+                      </div>
+
+                      {/* Row 2: Subtitle / Description */}
+                      <div className="text-xs text-muted-foreground">
+                        Accepts JSON & form-encoded payloads from any lead source
+                      </div>
+
+                      {/* Row 3: Action Buttons (Show URL, Copy URL, Test Lead) */}
+                      <div className="flex items-center gap-2 flex-wrap pt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setShowWebhookUrl(!showWebhookUrl)}
+                          className="text-xs px-3 py-1.5 rounded-lg border border-border bg-card text-foreground hover:bg-secondary transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm font-medium"
+                          title={showWebhookUrl ? "Hide full URL" : "Show full URL"}
+                        >
+                          {showWebhookUrl ? <EyeOff className="size-3 text-muted-foreground" /> : <Eye className="size-3 text-primary" />}
+                          <span>{showWebhookUrl ? "Hide URL" : "Show URL"}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(inboundWebhookUrl, "webhook_url")}
+                          className="text-xs px-3 py-1.5 rounded-lg border border-border bg-card text-foreground hover:bg-secondary transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm font-medium"
+                          title="Copy webhook URL to clipboard"
+                        >
+                          {copiedKey === "webhook_url" ? (
+                            <>
+                              <Check className="size-3 text-emerald-400" />
+                              <span className="text-emerald-400">Copied!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="size-3 text-foreground" />
+                              <span>Copy URL</span>
+                            </>
+                          )}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleSendTestLead}
+                          disabled={isTestingInbound}
+                          className="text-xs px-3 py-1.5 rounded-lg border border-border bg-card text-foreground hover:bg-secondary transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50 shadow-sm font-medium"
+                          title="Send sample qualified lead"
+                        >
+                          {isTestingInbound ? (
+                            <>
+                              <Loader2 className="size-3 animate-spin" />
+                              <span>Testing...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Send className="size-3 text-primary" />
+                              <span>Test Lead</span>
+                            </>
+                          )}
+                        </button>
                       </div>
 
                       {/* Visible URL Bar when toggled */}
