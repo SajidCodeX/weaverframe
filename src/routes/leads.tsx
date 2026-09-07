@@ -185,12 +185,12 @@ function LeadsPage() {
   // Sync date selection dynamically from TopBar header dispatches
   useEffect(() => {
     const handleGlobalDateChange = (e: any) => {
-      const { label, start, end } = e.detail;
+      const { label, start, end } = e.detail || {};
       if (label === "Custom Range") {
         setSelectedDateRange("Custom Range");
         setCustomStart(start || "");
         setCustomEnd(end || "");
-      } else {
+      } else if (label) {
         setSelectedDateRange(label);
       }
     };
@@ -254,33 +254,43 @@ function LeadsPage() {
 
       // Captured Date range filter
       let matchDate = true;
-      if (selectedDateRange !== "All Time" && l.createdAt) {
-        const leadDate = new Date(l.createdAt);
+      if (selectedDateRange !== "All Time") {
+        const leadDate = l.createdAt ? new Date(l.createdAt) : (l.purchaseDate ? new Date(l.purchaseDate) : null);
         const lastActivityDate = l.messages?.[0]?.createdAt ? new Date(l.messages[0].createdAt) : null;
-        if (!isNaN(leadDate.getTime())) {
+
+        if (!leadDate && !lastActivityDate) {
+          matchDate = false;
+        } else {
           const now = new Date();
+          const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
 
           if (selectedDateRange === "Today") {
-            const isCreatedToday = leadDate.toDateString() === now.toDateString();
-            const hasActivityToday = lastActivityDate && lastActivityDate.toDateString() === now.toDateString();
+            const isCreatedToday = leadDate ? leadDate.toDateString() === now.toDateString() : false;
+            const hasActivityToday = lastActivityDate ? lastActivityDate.toDateString() === now.toDateString() : false;
             matchDate = Boolean(isCreatedToday || hasActivityToday);
           } else if (selectedDateRange === "Yesterday") {
-            const yesterday = new Date();
-            yesterday.setDate(yesterday.getDate() - 1);
-            const isCreatedYest = leadDate.toDateString() === yesterday.toDateString();
-            const hasActivityYest = lastActivityDate && lastActivityDate.toDateString() === yesterday.toDateString();
+            const yesterday = new Date(now);
+            yesterday.setDate(now.getDate() - 1);
+            const isCreatedYest = leadDate ? leadDate.toDateString() === yesterday.toDateString() : false;
+            const hasActivityYest = lastActivityDate ? lastActivityDate.toDateString() === yesterday.toDateString() : false;
             matchDate = Boolean(isCreatedYest || hasActivityYest);
           } else if (selectedDateRange === "Last 7 Days") {
-            const diffDays = Math.ceil(Math.abs(now.getTime() - leadDate.getTime()) / (1000 * 60 * 60 * 24));
-            const diffActDays = lastActivityDate ? Math.ceil(Math.abs(now.getTime() - lastActivityDate.getTime()) / (1000 * 60 * 60 * 24)) : 999;
-            matchDate = diffDays <= 7 || diffActDays <= 7;
+            const startOfPeriod = new Date(now);
+            startOfPeriod.setDate(now.getDate() - 7);
+            startOfPeriod.setHours(0, 0, 0, 0);
+            const leadInPeriod = leadDate ? (leadDate >= startOfPeriod && leadDate <= endOfToday) : false;
+            const actInPeriod = lastActivityDate ? (lastActivityDate >= startOfPeriod && lastActivityDate <= endOfToday) : false;
+            matchDate = leadInPeriod || actInPeriod;
           } else if (selectedDateRange === "Last 30 Days") {
-            const diffDays = Math.ceil(Math.abs(now.getTime() - leadDate.getTime()) / (1000 * 60 * 60 * 24));
-            const diffActDays = lastActivityDate ? Math.ceil(Math.abs(now.getTime() - lastActivityDate.getTime()) / (1000 * 60 * 60 * 24)) : 999;
-            matchDate = diffDays <= 30 || diffActDays <= 30;
+            const startOfPeriod = new Date(now);
+            startOfPeriod.setDate(now.getDate() - 30);
+            startOfPeriod.setHours(0, 0, 0, 0);
+            const leadInPeriod = leadDate ? (leadDate >= startOfPeriod && leadDate <= endOfToday) : false;
+            const actInPeriod = lastActivityDate ? (lastActivityDate >= startOfPeriod && lastActivityDate <= endOfToday) : false;
+            matchDate = leadInPeriod || actInPeriod;
           } else if (selectedDateRange === "This Month") {
-            const isCreatedMonth = leadDate.getMonth() === now.getMonth() && leadDate.getFullYear() === now.getFullYear();
-            const hasActMonth = lastActivityDate && lastActivityDate.getMonth() === now.getMonth() && lastActivityDate.getFullYear() === now.getFullYear();
+            const isCreatedMonth = leadDate ? (leadDate.getMonth() === now.getMonth() && leadDate.getFullYear() === now.getFullYear()) : false;
+            const hasActMonth = lastActivityDate ? (lastActivityDate.getMonth() === now.getMonth() && lastActivityDate.getFullYear() === now.getFullYear()) : false;
             matchDate = Boolean(isCreatedMonth || hasActMonth);
           } else if (selectedDateRange === "Custom Range" || selectedDateRange.includes("to")) {
             let startBound: Date | null = null;
@@ -298,9 +308,11 @@ function LeadsPage() {
               endBound.setHours(23, 59, 59, 999);
             }
             if (startBound && endBound) {
-              const leadInBound = leadDate >= startBound && leadDate <= endBound;
+              const leadInBound = leadDate ? (leadDate >= startBound && leadDate <= endBound) : false;
               const actInBound = lastActivityDate ? (lastActivityDate >= startBound && lastActivityDate <= endBound) : false;
               matchDate = leadInBound || actInBound;
+            } else {
+              matchDate = true;
             }
           }
         }
