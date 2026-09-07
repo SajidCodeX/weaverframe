@@ -1271,12 +1271,8 @@ function SettingsPage() {
                             <Globe className="size-4.5 text-[#c9a84c] dark:text-[#e5d9c5]" />
                           </div>
                           <div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-semibold text-foreground">Inbound Webhook Endpoint</span>
-                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 font-medium shrink-0">
-                                <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                                Ready (POST)
-                              </span>
+                            <div className="text-sm font-semibold text-foreground">
+                              Inbound Webhook Endpoint
                             </div>
                             <div className="text-xs text-muted-foreground mt-0.5">
                               Accepts JSON & form-encoded payloads from any lead source
