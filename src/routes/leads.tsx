@@ -1,7 +1,7 @@
 import { createFileRoute, useLoaderData, useRouteContext, useRouter, Link, useNavigate } from '@tanstack/react-router';
 import { RoutePending } from "@/components/dashboard/RoutePending";
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Search, Plus, Download, Phone, Calendar, Eye, MoreHorizontal, X, Mail, Check, AlertCircle, Edit, RefreshCw, LayoutGrid, List, MessageSquare, Zap, Star, Sparkles, AlertTriangle, Lightbulb, Brain } from "lucide-react";
+import { Search, Plus, Download, Phone, Calendar, Eye, MoreHorizontal, X, Mail, Check, AlertCircle, Edit, RefreshCw, LayoutGrid, List, MessageSquare, Zap, Star, Sparkles, AlertTriangle, Lightbulb, Brain, Inbox, Send, CheckCircle2, Archive, MapPin, Clock, Trash2 } from "lucide-react";
 import { Shell } from "@/components/dashboard/Shell";
 import { Card, ScoreBadge, StageBadge } from "@/components/dashboard/primitives";
 import { CustomSelect } from "@/components/dashboard/CustomSelect";
@@ -658,7 +658,7 @@ function LeadsPage() {
             </button>
             <button
               onClick={exportToCSV}
-              className="inline-flex items-center gap-1.5 text-xs border border-white/[0.1] bg-[#0c0d14] rounded-lg px-3 py-1.5 text-white/80 hover:text-white hover:border-[#e5d9c5]/40 transition-colors whitespace-nowrap cursor-pointer"
+              className="inline-flex items-center gap-1.5 text-xs border border-white/[0.1] bg-[#141414] rounded-lg px-3 py-1.5 text-white/80 hover:text-white hover:border-[#e5d9c5]/40 transition-colors whitespace-nowrap cursor-pointer"
             >
               <Download className="size-3.5 text-white/50" /> Export CSV
             </button>
@@ -1166,7 +1166,7 @@ function LeadsPage() {
                     <CustomSelect
                       value={modalForm.scoreTier}
                       onChange={(val) => setModalForm({ ...modalForm, scoreTier: val })}
-                      options={[{label: "🔥 Hot", value: "Hot"}, {label: "⚡ Warm", value: "Warm"}, {label: "❄️ Cold", value: "Cold"}]}
+                      options={[{label: "Hot", value: "Hot"}, {label: "Warm", value: "Warm"}, {label: "Cold", value: "Cold"}]}
                     />
                   </div>
                 </div>
@@ -1685,60 +1685,56 @@ type KanbanBoardProps = {
   onRetrigger: (lead: any) => void;
 };
 
+// Format large custom home budgets gracefully (e.g. $2200k -> $2.2M)
+function formatLeadBudget(budget: string | number | undefined) {
+  if (!budget) return "$0";
+  const str = String(budget).trim();
+  const matchK = str.match(/^\$?(\d+)\s*k$/i);
+  if (matchK) {
+    const num = parseInt(matchK[1], 10);
+    if (num >= 1000) {
+      const millions = (num / 1000).toFixed(1).replace(/\.0$/, '');
+      return `$${millions}M`;
+    }
+    return `$${num}k`;
+  }
+  return str.startsWith('$') ? str : `$${str}`;
+}
+
 const KANBAN_COLUMNS = [
   {
     id: 'new',
     label: 'New Leads',
     stages: ['New', 'new', 'Unassigned', 'pending'],
-    icon: '📥',
-    accent: 'border-t-slate-500',
-    headerBg: 'bg-slate-500/10',
-    headerText: 'text-slate-300',
-    countBg: 'bg-slate-500/20 text-slate-300',
+    icon: Inbox,
     dotColor: 'bg-slate-400',
   },
   {
     id: 'outreach',
     label: 'Outreach Sent',
     stages: ['Emailed', 'Outreach', 'contacted', 'Builder Notified', 'Sent'],
-    icon: '📧',
-    accent: 'border-t-blue-500',
-    headerBg: 'bg-blue-500/10',
-    headerText: 'text-blue-300',
-    countBg: 'bg-blue-500/20 text-blue-300',
-    dotColor: 'bg-blue-400',
+    icon: Send,
+    dotColor: 'bg-sky-400',
   },
   {
     id: 'engaged',
     label: 'Engaged',
     stages: ['Opened', 'Replied', 'engaged', 'Nurturing', 'In Progress'],
-    icon: '💬',
-    accent: 'border-t-amber-500',
-    headerBg: 'bg-amber-500/10',
-    headerText: 'text-amber-300',
-    countBg: 'bg-amber-500/20 text-amber-300',
+    icon: MessageSquare,
     dotColor: 'bg-amber-400',
   },
   {
     id: 'qualified',
     label: 'Qualified (Hot)',
     stages: ['Qualified', 'Appointment', 'Scheduled', 'Closed Won', 'Hot', 'Won'],
-    icon: '⭐',
-    accent: 'border-t-green-500',
-    headerBg: 'bg-green-500/10',
-    headerText: 'text-green-300',
-    countBg: 'bg-green-500/20 text-green-300',
-    dotColor: 'bg-green-400',
+    icon: CheckCircle2,
+    dotColor: 'bg-emerald-400',
   },
   {
     id: 'archived',
     label: 'Disqualified',
     stages: ['Closed Lost', 'Disqualified', 'Cold', 'Lost', 'Archived'],
-    icon: '📁',
-    accent: 'border-t-zinc-600',
-    headerBg: 'bg-zinc-600/10',
-    headerText: 'text-zinc-400',
-    countBg: 'bg-zinc-600/20 text-zinc-400',
+    icon: Archive,
     dotColor: 'bg-zinc-500',
   },
 ];
@@ -1747,7 +1743,7 @@ function KanbanBoard(props: KanbanBoardProps) {
   const { leads, ...rest } = props;
 
   return (
-    <div className="flex gap-3 h-full px-4 py-4">
+    <div className="flex gap-3 h-full px-4 py-4 overflow-x-auto custom-scrollbar">
       {KANBAN_COLUMNS.map(col => {
         const colLeads = leads.filter(l => col.stages.includes(l.status || l.stage));
         return (
@@ -1777,27 +1773,29 @@ type KanbanColumnProps = {
 };
 
 function KanbanColumn({ column, leads, ...cardProps }: KanbanColumnProps) {
+  const Icon = column.icon;
   return (
-    <div className={`flex flex-col flex-1 min-w-0 rounded-xl border-t-2 ${column.accent} bg-card/60 border border-border overflow-hidden`}>
+    <div className="flex flex-col flex-1 min-w-[260px] rounded-xl bg-[#111111]/90 border border-white/[0.07] overflow-hidden shadow-xs">
       {/* Column Header */}
-      <div className={`px-3 py-2.5 ${column.headerBg} border-b border-border flex items-center justify-between shrink-0`}>
+      <div className="px-3.5 py-3 bg-[#151515] border-b border-white/[0.06] flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
-          <span className="text-base leading-none">{column.icon}</span>
-          <span className={`text-xs font-semibold uppercase tracking-wider ${column.headerText}`}>
+          <span className={`size-1.5 rounded-full ${column.dotColor}`} />
+          <Icon className="size-3.5 text-white/50 shrink-0" />
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-white/90">
             {column.label}
           </span>
         </div>
-        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${column.countBg}`}>
+        <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded-full bg-white/[0.06] text-white/70 border border-white/[0.06]">
           {leads.length}
         </span>
       </div>
 
-      {/* Cards */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar">
+      {/* Cards Area */}
+      <div className="flex-1 overflow-y-auto p-2.5 space-y-2.5 custom-scrollbar">
         {leads.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-10 text-center">
-            <div className={`size-2 rounded-full ${column.dotColor} mb-2 opacity-40`} />
-            <p className="text-[11px] text-muted-foreground/60 font-mono">No leads here</p>
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <div className={`size-2 rounded-full ${column.dotColor} mb-2.5 opacity-30`} />
+            <p className="text-[11px] text-muted-foreground/50 font-mono">No leads in stage</p>
           </div>
         ) : (
           leads.map(lead => (
@@ -1872,65 +1870,102 @@ function LeadKanbanCard({ lead, column, isPrivacyMode, onSelectLead, onEmailLead
     daysLabel = targetDate.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   }
 
-  const scoreColors: Record<string, string> = {
-    hot: 'text-orange-400 bg-orange-400/10 border-orange-400/20',
-    warm: 'text-yellow-400 bg-yellow-400/10 border-yellow-400/20',
-    cold: 'text-sky-400 bg-sky-400/10 border-sky-400/20',
+  // Refined quiet luxury Score Tier Styling
+  const scoreBadgeStyles: Record<string, string> = {
+    hot: 'bg-rose-500/10 text-rose-300 border-rose-500/20',
+    warm: 'bg-[#c9a84c]/10 text-[#e5d9c5] border-[#c9a84c]/20',
+    cold: 'bg-white/[0.04] text-zinc-400 border-white/[0.08]',
   };
-  const scoreColor = scoreColors[lead.score] || scoreColors.cold;
+  const scoreKey = (lead.scoreTier || lead.score || 'cold').toLowerCase();
+  const scoreStyle = scoreBadgeStyles[scoreKey] || scoreBadgeStyles.cold;
 
-  const aiDot = lead.aiStatus === 'Replied'
-    ? 'bg-green-400'
-    : lead.aiStatus === 'Awaiting'
-    ? 'bg-yellow-400'
-    : 'bg-red-400';
+  // Refined AI Status Styling
+  const aiStatusConfig: Record<string, { dot: string; bg: string; text: string; label: string }> = {
+    Replied: {
+      dot: 'bg-emerald-400',
+      bg: 'bg-emerald-500/10 border-emerald-500/20',
+      text: 'text-emerald-400',
+      label: 'Replied',
+    },
+    Awaiting: {
+      dot: 'bg-amber-400',
+      bg: 'bg-amber-500/10 border-amber-500/20',
+      text: 'text-amber-300/90',
+      label: 'Awaiting',
+    },
+    Active: {
+      dot: 'bg-sky-400',
+      bg: 'bg-sky-500/10 border-sky-500/20',
+      text: 'text-sky-300',
+      label: 'Active',
+    },
+  };
+  const aiConfig = aiStatusConfig[lead.aiStatus] || {
+    dot: 'bg-zinc-400',
+    bg: 'bg-white/[0.04] border-white/[0.08]',
+    text: 'text-zinc-400',
+    label: lead.aiStatus || 'Pending',
+  };
 
   return (
     <div
       onClick={() => onSelectLead(lead)}
-      className="group relative bg-card border border-border rounded-lg p-3 cursor-pointer hover:border-white/20 hover:bg-card/80 transition-all duration-150 animate-in fade-in duration-200"
+      className="group relative bg-[#161616] hover:bg-[#1a1a1a] border border-white/[0.07] hover:border-white/[0.18] rounded-xl p-3.5 cursor-pointer transition-all duration-150 shadow-xs hover:shadow-md space-y-3"
     >
-      {/* Top row: name + score badge */}
-      <div className="flex items-start justify-between gap-2 mb-2">
+      {/* Top row: Client Name & Score Tier */}
+      <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-foreground truncate leading-tight">{displayName}</p>
-          <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{lead.city}, {lead.state || 'TX'}</p>
+          <p className="text-[13px] font-semibold text-white/95 group-hover:text-[#e5d9c5] transition-colors truncate leading-snug">
+            {displayName}
+          </p>
+          <div className="flex items-center gap-1 mt-0.5 text-[11px] text-muted-foreground/75 truncate font-normal">
+            <MapPin className="size-3 text-muted-foreground/50 shrink-0" />
+            <span className="truncate">
+              {lead.city ? `${lead.city}${lead.state ? `, ${lead.state}` : ''}` : (lead.state || 'Custom Architectural Build')}
+            </span>
+          </div>
         </div>
-        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wide shrink-0 ${scoreColor}`}>
-          {lead.scoreTier === 'Hot' ? '🔥' : lead.scoreTier === 'Warm' ? '🌡' : '❄️'} {lead.scoreTier}
+
+        {/* Score Badge */}
+        <span className={`text-[10px] font-mono font-medium px-2 py-0.5 rounded-full border uppercase tracking-wider shrink-0 ${scoreStyle}`}>
+          {lead.scoreTier || lead.score || 'Lead'}
         </span>
       </div>
 
-      {/* Budget row */}
-      <div className="flex items-center justify-between mb-2.5">
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs font-mono font-bold text-foreground">{lead.budget}</span>
-          <span className="text-[10px] text-muted-foreground">budget</span>
+      {/* Commercial Intelligence Row: Budget & AI Status */}
+      <div className="flex items-center justify-between gap-2 pt-0.5">
+        <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/[0.03] border border-white/[0.06]">
+          <span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Est.</span>
+          <span className="text-xs font-mono font-bold text-white/95">
+            {formatLeadBudget(lead.budget)}
+          </span>
         </div>
-        <div className="flex items-center gap-1">
-          <span className={`size-1.5 rounded-full ${aiDot}`} />
-          <span className="text-[10px] text-muted-foreground">{lead.aiStatus}</span>
+
+        <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] font-medium ${aiConfig.bg} ${aiConfig.text}`}>
+          <span className={`size-1.5 rounded-full ${aiConfig.dot}`} />
+          <span>{aiConfig.label}</span>
         </div>
       </div>
 
-      {/* Divider */}
-      <div className="border-t border-border/50 mb-2" />
+      {/* Footer: timestamp + quick actions */}
+      <div className="pt-2 border-t border-white/[0.06] flex items-center justify-between text-muted-foreground">
+        <div className="flex items-center gap-1 text-[11px] font-mono text-muted-foreground/70">
+          <Clock className="size-3 text-muted-foreground/40" />
+          <span>{daysLabel}</span>
+        </div>
 
-      {/* Footer: days ago + action buttons */}
-      <div className="flex items-center justify-between">
-        <span className="text-[10px] text-muted-foreground font-mono">{daysLabel}</span>
         <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
           <button
             onClick={() => onEmailLead(lead)}
             title="Send Email"
-            className="size-6 rounded hover:bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+            className="size-6 rounded-md hover:bg-white/[0.08] flex items-center justify-center text-muted-foreground/60 hover:text-white transition-colors cursor-pointer"
           >
             <Mail className="size-3" />
           </button>
           <button
             onClick={() => onScheduleLead(lead)}
-            title="Schedule Appointment"
-            className="size-6 rounded hover:bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+            title="Schedule Consultation"
+            className="size-6 rounded-md hover:bg-white/[0.08] flex items-center justify-center text-muted-foreground/60 hover:text-white transition-colors cursor-pointer"
           >
             <Calendar className="size-3" />
           </button>
@@ -1939,8 +1974,8 @@ function LeadKanbanCard({ lead, column, isPrivacyMode, onSelectLead, onEmailLead
               e.stopPropagation();
               router.navigate({ to: '/messages', search: { leadId: lead.id } as any });
             }}
-            title="Open Chat / Inbox"
-            className="size-6 rounded hover:bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+            title="Open Inbox Thread"
+            className="size-6 rounded-md hover:bg-white/[0.08] flex items-center justify-center text-muted-foreground/60 hover:text-white transition-colors cursor-pointer"
           >
             <MessageSquare className="size-3" />
           </button>
@@ -1949,37 +1984,37 @@ function LeadKanbanCard({ lead, column, isPrivacyMode, onSelectLead, onEmailLead
           <div className="relative" ref={menuRef}>
             <button
               onClick={() => setMenuOpen(p => !p)}
-              title="More Actions"
-              className="size-6 rounded hover:bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+              title="More Options"
+              className="size-6 rounded-md hover:bg-white/[0.08] flex items-center justify-center text-muted-foreground/60 hover:text-white transition-colors cursor-pointer"
             >
               <MoreHorizontal className="size-3" />
             </button>
             {menuOpen && (
-              <div className="absolute right-0 bottom-7 w-36 rounded-lg bg-card/95 backdrop-blur-xl border border-border p-1 shadow-xl z-50 animate-in fade-in slide-in-from-bottom-2 duration-100">
+              <div className="absolute right-0 bottom-7 w-40 rounded-xl bg-[#181818] border border-white/10 p-1.5 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-100">
                 <button
                   onClick={() => { setMenuOpen(false); onEditLead(lead); }}
-                  className="w-full text-left text-xs px-2.5 py-1.5 rounded hover:bg-white/[0.04] text-foreground transition-colors flex items-center gap-1.5"
+                  className="w-full text-left text-xs px-2.5 py-1.5 rounded-lg hover:bg-white/[0.06] text-white/90 transition-colors flex items-center gap-2 font-medium cursor-pointer"
                 >
-                  <Edit className="size-3" /> Edit Lead
+                  <Edit className="size-3 text-muted-foreground" /> Edit Lead
                 </button>
                 <button
                   onClick={() => { setMenuOpen(false); onSendSms(lead); }}
-                  className="w-full text-left text-xs px-2.5 py-1.5 rounded hover:bg-white/[0.04] text-foreground transition-colors flex items-center gap-1.5"
+                  className="w-full text-left text-xs px-2.5 py-1.5 rounded-lg hover:bg-white/[0.06] text-white/90 transition-colors flex items-center gap-2 font-medium cursor-pointer"
                 >
-                  <Mail className="size-3" /> Send Email
+                  <Mail className="size-3 text-muted-foreground" /> Send Email
                 </button>
                 <button
                   onClick={() => { setMenuOpen(false); onRetrigger(lead); }}
-                  className="w-full text-left text-xs px-2.5 py-1.5 rounded hover:bg-white/[0.04] text-foreground transition-colors flex items-center gap-1.5"
+                  className="w-full text-left text-xs px-2.5 py-1.5 rounded-lg hover:bg-white/[0.06] text-white/90 transition-colors flex items-center gap-2 font-medium cursor-pointer"
                 >
-                  <Zap className="size-3" /> Re-trigger AI
+                  <Zap className="size-3 text-amber-400" /> Re-trigger AI
                 </button>
-                <div className="border-t border-border/40 my-1" />
+                <div className="border-t border-white/[0.06] my-1" />
                 <button
                   onClick={() => { setMenuOpen(false); onDeleteLead(lead); }}
-                  className="w-full text-left text-xs px-2.5 py-1.5 rounded hover:bg-danger/10 text-danger font-medium transition-colors"
+                  className="w-full text-left text-xs px-2.5 py-1.5 rounded-lg hover:bg-red-500/10 text-red-400 transition-colors flex items-center gap-2 font-medium cursor-pointer"
                 >
-                  Delete Lead
+                  <Trash2 className="size-3" /> Delete Lead
                 </button>
               </div>
             )}

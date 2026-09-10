@@ -102,7 +102,7 @@ function Kpi({
   isGold?: boolean;
 }) {
   return (
-    <Card className={`p-5 relative overflow-hidden transition-all duration-300 ${highlight ? 'border-white/15' : ''}`} highlight={highlight}>
+    <Card className={`p-5 relative overflow-hidden transition-all duration-300 ${highlight ? 'border-white/15' : ''}`} highlight={highlight} lift>
       <div className="text-[10px] font-mono font-medium text-muted-foreground uppercase tracking-widest flex items-center justify-between">
         <span>{label}</span>
         {isGold && <span className="size-1.5 rounded-full bg-[#e5d9c5] shadow-[0_0_8px_rgba(229,217,197,0.8)]" />}
@@ -334,7 +334,7 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
           value={dynamicStats.qualifiedLeads.toString()}
           sub={`${dynamicStats.totalLeads > 0 ? Math.round((dynamicStats.qualifiedLeads / dynamicStats.totalLeads) * 100) : 0}% qualification rate`}
           extra={
-            <div className="h-1.5 bg-[#101014] rounded-full overflow-hidden border border-white/[0.04]">
+            <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden border border-white/[0.04]">
               <div
                 className="h-full rounded-full bar-animated"
                 style={{
@@ -493,7 +493,7 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
                       <span className="text-xs font-mono font-bold text-right w-8" style={{ color: row.color }}>
                         {row.pct}%
                       </span>
-                      <div className="w-16 h-1.5 bg-[#14151e] rounded-full overflow-hidden shrink-0 border border-white/[0.04]">
+                      <div className="w-16 h-1.5 bg-white/[0.06] rounded-full overflow-hidden shrink-0 border border-white/[0.04]">
                         <div
                           className="h-full rounded-full"
                           style={{
@@ -510,11 +510,11 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
 
             {/* Quick Stats Footer */}
             <div className="mt-auto pt-4 grid grid-cols-2 gap-3">
-              <div className="p-3.5 rounded-xl border border-white/[0.08] bg-[#0f1016] flex flex-col justify-between hover:border-[#e5d9c5]/30 transition-colors">
+              <div className="p-3.5 rounded-xl border border-white/[0.08] bg-[#181818] flex flex-col justify-between hover:border-[#e5d9c5]/30 transition-colors">
                 <div className="text-[9.5px] font-mono text-muted-foreground uppercase tracking-widest mb-1.5">Avg Time to Book</div>
                 <div className="text-2xl font-nevera font-normal text-white">{avgDaysToBook} <span className="text-xs text-muted-foreground font-sans">days</span></div>
               </div>
-              <div className="p-3.5 rounded-xl border border-white/[0.08] bg-[#0f1016] flex flex-col justify-between hover:border-[#e5d9c5]/30 transition-colors">
+              <div className="p-3.5 rounded-xl border border-white/[0.08] bg-[#181818] flex flex-col justify-between hover:border-[#e5d9c5]/30 transition-colors">
                 <div className="text-[9.5px] font-mono text-muted-foreground uppercase tracking-widest mb-1.5">AI Qual. Rate</div>
                 <div className="text-2xl font-nevera font-normal text-white">{dynamicStats.qualRate}%</div>
               </div>
@@ -554,7 +554,7 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
                   {/* Stage card */}
                   <Link
                     {...linkProps}
-                    className="flex-1 rounded-xl border border-white/[0.08] hover:border-[#e5d9c5]/40 bg-[#0a0a0d] cursor-pointer transition-all duration-200 block no-underline shadow-sm group hover:-translate-y-0.5"
+                    className="flex-1 rounded-xl border border-white/[0.08] hover:border-[#e5d9c5]/40 bg-[#181818] hover:bg-[#1e1e1e] cursor-pointer transition-all duration-200 block no-underline shadow-sm group hover:-translate-y-0.5"
                   >
                     <div className="p-4">
                       {/* Stage number + pct */}
@@ -579,7 +579,7 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
                       </div>
 
                       {/* Progress bar */}
-                      <div className="mt-3 h-1.5 bg-[#14151e] rounded-full overflow-hidden border border-white/[0.04]">
+                      <div className="mt-3 h-1.5 bg-white/[0.06] rounded-full overflow-hidden border border-white/[0.04]">
                         <div
                           className="h-full rounded-full bar-animated"
                           style={{

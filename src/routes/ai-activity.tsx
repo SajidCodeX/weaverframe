@@ -481,51 +481,6 @@ function AIPage() {
       {/* ── TAB 1: AI BRAIN STUDIO & KNOWLEDGE CONTROLS ── */}
       {activeTab === "studio" && (
         <div className="space-y-6 max-w-5xl">
-          
-          {/* Top Save & Deploy Action Bar */}
-          <div className="p-4 rounded-2xl border border-[#c9a84c]/30 dark:border-[#e5d9c5]/30 bg-card flex items-center justify-between gap-4 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="size-9 rounded-xl bg-secondary border border-border flex items-center justify-center text-[#c9a84c] dark:text-[#e5d9c5] shrink-0">
-                <Wand2 className="size-4" />
-              </div>
-              <div>
-                <h3 className="text-xs sm:text-sm font-semibold text-foreground">
-                  Ready to deploy updates to your AI Brain?
-                </h3>
-                <p className="text-[11px] text-muted-foreground">
-                  Changes take effect immediately across all Email conversations and the live sandbox.
-                </p>
-              </div>
-            </div>
-
-            <button
-              onClick={handleSaveBrain}
-              disabled={isSavingBrain}
-              className={`px-5 py-2.5 rounded-xl text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer shadow-md shrink-0 ${
-                brainSaved 
-                  ? "bg-emerald-500 text-white border-emerald-600" 
-                  : "bg-primary text-primary-foreground hover:bg-primary/90"
-              }`}
-            >
-              {isSavingBrain ? (
-                <>
-                  <RefreshCw className="size-3.5 animate-spin" />
-                  <span>Deploying...</span>
-                </>
-              ) : brainSaved ? (
-                <>
-                  <Check className="size-3.5" />
-                  <span>Deployed & Active!</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles className="size-3.5" />
-                  <span>Save & Deploy AI Brain</span>
-                </>
-              )}
-            </button>
-          </div>
-
           {/* 1. Primary AI Objective (Goal Dropdown) */}
           <div className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-3">
             <div className="flex items-center justify-between">
@@ -1090,7 +1045,7 @@ function AIPage() {
               </div>
 
               {/* Chat Thread Messages with WhatsApp Wallpaper Doodle Overlay */}
-              <div className="flex-1 min-h-0 relative bg-[#050608] overflow-hidden flex flex-col">
+              <div className="flex-1 min-h-0 relative bg-background overflow-hidden flex flex-col">
                 <WhatsAppDoodleBackground idPrefix="sim" />
 
                 <div 
@@ -1105,13 +1060,13 @@ function AIPage() {
                         className={`flex ${isAssistant ? "justify-start" : "justify-end"} items-start gap-2.5`}
                       >
                         {isAssistant && (
-                          <div className="size-7 rounded-lg bg-[#181920] border border-border flex items-center justify-center font-nevera text-[10px] text-[#c9a84c] dark:text-[#e5d9c5] shrink-0 mt-0.5 shadow-sm">
+                          <div className="size-7 rounded-lg bg-secondary border border-border flex items-center justify-center font-nevera text-[10px] text-[#c9a84c] dark:text-[#e5d9c5] shrink-0 mt-0.5 shadow-sm">
                             {personaName.slice(0, 1).toUpperCase()}
                           </div>
                         )}
                         <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-xs sm:text-sm leading-relaxed shadow-md ${
                           isAssistant
-                            ? "bg-[#111218]/95 backdrop-blur-sm border border-border/80 text-foreground rounded-tl-none"
+                            ? "bg-[#161616]/95 backdrop-blur-sm border border-border/80 text-foreground rounded-tl-none"
                             : "bg-primary text-primary-foreground rounded-tr-none font-medium"
                         }`}>
                           {m.content}
@@ -1121,7 +1076,7 @@ function AIPage() {
                   })}
 
                   {isThinking && (
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono italic p-2.5 bg-[#111218]/90 backdrop-blur-sm rounded-xl border border-border w-fit animate-pulse">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono italic p-2.5 bg-[#161616]/90 backdrop-blur-sm rounded-xl border border-border w-fit animate-pulse">
                       <Bot className="size-3.5 text-primary" />
                       <span>{personaName} is formulating response...</span>
                     </div>
@@ -1286,7 +1241,7 @@ function AIPage() {
               </button>
             </div>
 
-            <div className="flex-1 min-h-0 relative bg-[#050608] overflow-hidden flex flex-col">
+            <div className="flex-1 min-h-0 relative bg-background overflow-hidden flex flex-col">
               <WhatsAppDoodleBackground idPrefix="modal" />
               
               <div className="flex-1 overflow-y-auto p-5 space-y-3 relative z-10 custom-scrollbar">
@@ -1299,7 +1254,7 @@ function AIPage() {
                     >
                       <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-xs sm:text-sm leading-relaxed shadow-md ${
                         isAssistant
-                          ? "bg-[#111218]/95 backdrop-blur-sm border border-border/80 text-foreground rounded-tl-none"
+                          ? "bg-[#161616]/95 backdrop-blur-sm border border-border/80 text-foreground rounded-tl-none"
                           : "bg-primary text-primary-foreground rounded-tr-none font-medium"
                       }`}>
                         {m.content}

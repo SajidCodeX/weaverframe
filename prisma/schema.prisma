@@ -60,6 +60,7 @@ model User {
 
   builder       Builder?  @relation(fields: [builderId], references: [id], onDelete: Cascade)
   assignedLeads Lead[]    @relation("AssignedUserLeads")
+  authoredMessages Message[] @relation("UserAuthoredMessages")
 
   @@index([builderId])
 }
@@ -206,16 +207,25 @@ model Message {
   
   leadId    String
   sender    String   // "lead" | "user" | "system"
+  subject   String?  // Email subject line (e.g. "Testing subject UI")
   content   String
   channel   String   @default("portal")  // "portal" | "sms"
   isRead    Boolean  @default(false)
   isSimulated Boolean @default(false) // True if this was generated via the Simulate Lead feature
+  
+  // ─── Team Collaboration & Internal Notes ─────────────────────────────────
+  senderUserId String?
+  senderUser   User?    @relation("UserAuthoredMessages", fields: [senderUserId], references: [id], onDelete: SetNull)
+  isInternal   Boolean  @default(false)
+  type         String   @default("message") // "message" | "internal_note" | "system_event"
+  
   createdAt DateTime @default(now())
   
   lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
   @@index([builderId])
   @@index([leadId])
+  @@index([leadId, isInternal])
   @@index([builderId, leadId])
   @@index([createdAt])
 }

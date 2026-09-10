@@ -333,7 +333,7 @@ export function GlobalMessageNotifier() {
           <div
             key={n.id}
             onClick={() => handleOpenConversation(n.leadId, n.id)}
-            className="pointer-events-auto group relative overflow-hidden rounded-xl bg-[#0d0d12]/95 backdrop-blur-xl border border-white/10 hover:border-white/20 shadow-[0_12px_32px_rgba(0,0,0,0.7)] p-3 transition-all duration-200 hover:bg-[#13131a] cursor-pointer animate-in slide-in-from-right-6 fade-in"
+            className="pointer-events-auto group relative overflow-hidden rounded-xl bg-[#121212]/95 backdrop-blur-xl border border-white/10 hover:border-white/20 shadow-[0_12px_32px_rgba(0,0,0,0.7)] p-3 transition-all duration-200 hover:bg-[#181818] cursor-pointer animate-in slide-in-from-right-6 fade-in"
           >
             <div className="flex items-center gap-3">
               {/* Sleek Minimal Avatar */}
@@ -342,7 +342,7 @@ export function GlobalMessageNotifier() {
                   {n.isMuteNotice ? "AI" : initials}
                 </div>
                 <span
-                  className={`absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full ring-2 ring-[#0d0d12] ${
+                  className={`absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full ring-2 ring-[#121212] ${
                     n.isMuteNotice ? "bg-amber-400" : "bg-emerald-500"
                   }`}
                 />

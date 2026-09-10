@@ -76,10 +76,10 @@ function ClientPortalPage() {
   const displayMessages = [...messages, ...optimisticMessages];
 
   return (
-    <div className="flex flex-col h-screen w-full bg-[#050608] text-white font-sans overflow-hidden">
+    <div className="flex flex-col h-screen w-full bg-[#0d0d0d] text-white font-sans overflow-hidden">
       
       {/* HEADER */}
-      <header className="flex items-center gap-3 px-4 py-3 bg-[#0a0a0c] border-b border-white/5 z-20 shrink-0">
+      <header className="flex items-center gap-3 px-4 py-3 bg-[#131313] border-b border-white/5 z-20 shrink-0">
         <div className="flex items-center justify-center w-10 h-10 rounded-full bg-primary/20 text-primary">
           <Home className="w-5 h-5" />
         </div>
@@ -130,7 +130,7 @@ function ClientPortalPage() {
                 <div
                   className={`relative p-3 rounded-2xl text-[13px] leading-relaxed max-w-[85%] font-sans select-text shadow-xl ${isLead
                     ? "bg-[#25D366] text-black rounded-tr-none font-medium opacity-100"
-                    : "bg-[#151720] border border-white/10 text-white rounded-tl-none opacity-100"
+                    : "bg-[#151515] border border-white/10 text-white rounded-tl-none opacity-100"
                     }`}
                 >
                   <p className="whitespace-pre-line">{msg.content}</p>
@@ -146,7 +146,7 @@ function ClientPortalPage() {
           {/* Typing Indicator */}
           {isSending && (
             <div className="flex flex-col items-start w-full group animate-in slide-in-from-bottom-2 duration-150">
-              <div className="relative p-3 rounded-2xl text-[13px] bg-[#151720] border border-white/10 text-white rounded-tl-none opacity-100 shadow-xl flex items-center gap-1.5 h-10 w-16">
+              <div className="relative p-3 rounded-2xl text-[13px] bg-[#151515] border border-white/10 text-white rounded-tl-none opacity-100 shadow-xl flex items-center gap-1.5 h-10 w-16">
                 <span className="w-1.5 h-1.5 rounded-full bg-white/40 animate-bounce" style={{ animationDelay: '0ms' }}></span>
                 <span className="w-1.5 h-1.5 rounded-full bg-white/40 animate-bounce" style={{ animationDelay: '150ms' }}></span>
                 <span className="w-1.5 h-1.5 rounded-full bg-white/40 animate-bounce" style={{ animationDelay: '300ms' }}></span>
@@ -158,7 +158,7 @@ function ClientPortalPage() {
       </div>
 
       {/* MESSAGE COMPOSER */}
-      <div className="p-3 bg-[#0a0a0c] border-t border-white/5 shrink-0 z-20 pb-safe">
+      <div className="p-3 bg-[#131313] border-t border-white/5 shrink-0 z-20 pb-safe">
         <div className="max-w-2xl mx-auto">
           <form onSubmit={handleSendMessage} className="relative flex items-center">
             <input

@@ -133,7 +133,7 @@ function TeamRoute() {
                 required
                 value={name}
                 onChange={e => setName(e.target.value)}
-                className="w-full bg-[#0a0a0a] border border-[#333] rounded-md px-3 py-2 text-sm text-white focus:ring-1 focus:ring-white outline-none"
+                className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm text-foreground focus:ring-1 focus:ring-white/20 outline-none"
                 placeholder="Jane Doe"
               />
             </div>
@@ -144,7 +144,7 @@ function TeamRoute() {
                 required
                 value={email}
                 onChange={e => setEmail(e.target.value)}
-                className="w-full bg-[#0a0a0a] border border-[#333] rounded-md px-3 py-2 text-sm text-white focus:ring-1 focus:ring-white outline-none"
+                className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm text-foreground focus:ring-1 focus:ring-white/20 outline-none"
                 placeholder="jane@company.com"
               />
             </div>

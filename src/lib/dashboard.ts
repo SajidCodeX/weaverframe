@@ -2413,17 +2413,14 @@ export const generatePortalToken = createServerFn({ method: 'POST' })
   });
 
 export const getConversations = createServerFn({ method: 'POST' })
-  .inputValidator((data: { activeRole?: string | null } | undefined) => data)
+  .inputValidator((data: { activeRole?: string | null; filter?: 'all' | 'assigned_to_me' | 'unassigned' } | undefined) => data)
   .handler(async ({ data }) => {
   const { getTenantDb, requireAuth } = await import('./server-utils.server');
   try {
     const session = await requireAuth(data?.activeRole ?? undefined)
     const db = await getTenantDb(session)
 
-    // Trigger Inbound Mailbox Sync (IMAP) â€” truly fire-and-forget.
-    // IMPORTANT: No `await` here. The DB query runs immediately and the response
-    // is returned to the client without waiting for the IMAP network round-trip.
-    // The throttle inside syncInboundMailbox prevents spam (max once per 2 min per builder).
+    // Trigger Inbound Mailbox Sync (IMAP) — truly fire-and-forget.
     import('./mailbox.server').then(({ syncInboundMailbox }) => {
       syncInboundMailbox(session.builderId || '').catch((e) => {
         console.warn('[MAILBOX SYNC NON-BLOCKING ERROR]:', e?.message || e);
@@ -2433,10 +2430,23 @@ export const getConversations = createServerFn({ method: 'POST' })
     const whereClause: any = {}
     if (session.role === 'builder' && session.builderRole === 'sales') {
       whereClause.assignedToId = session.userId
+    } else if (data?.filter === 'assigned_to_me') {
+      whereClause.assignedToId = session.userId
+    } else if (data?.filter === 'unassigned') {
+      whereClause.assignedToId = null
     }
+
     const leads = await db.lead.findMany({
       where: whereClause,
       include: {
+        assignedTo: {
+          select: {
+            id: true,
+            displayName: true,
+            email: true,
+            builderRole: true,
+          }
+        },
         messages: {
           orderBy: { createdAt: 'desc' },
           take: 1
@@ -2478,6 +2488,12 @@ export const getConversations = createServerFn({ method: 'POST' })
         unreadCount,
         isOnline: !!isRecentlyActive,
         portalToken: l.portalToken,
+        assignedTo: l.assignedTo ? {
+          id: l.assignedTo.id,
+          displayName: l.assignedTo.displayName,
+          email: l.assignedTo.email,
+          builderRole: l.assignedTo.builderRole,
+        } : null,
       }
     })
 
@@ -2498,12 +2514,32 @@ export const getMessagesForLead = createServerFn({ method: 'POST' })
     const { leadId } = data
     try {
       const lead = await db.lead.findUnique({
-        where: { id: leadId }
+        where: { id: leadId },
+        include: {
+          assignedTo: {
+            select: {
+              id: true,
+              displayName: true,
+              email: true,
+              builderRole: true,
+            }
+          }
+        }
       })
       if (!lead) throw new Error("Lead not found")
 
       const messages = await db.message.findMany({
         where: { leadId, isSimulated: data.isSimulated || false },
+        include: {
+          senderUser: {
+            select: {
+              id: true,
+              displayName: true,
+              builderRole: true,
+              email: true,
+            }
+          }
+        },
         orderBy: { createdAt: 'asc' }
       })
 
@@ -2519,9 +2555,19 @@ export const getMessagesForLead = createServerFn({ method: 'POST' })
         messages: messages.map(m => ({
           id: m.id,
           sender: m.sender,
+          subject: m.subject || null,
           content: m.content,
           createdAt: m.createdAt.toISOString(),
-          isRead: m.isRead
+          isRead: m.isRead,
+          isInternal: m.isInternal,
+          type: m.type,
+          senderUserId: m.senderUserId,
+          senderUser: m.senderUser ? {
+            id: m.senderUser.id,
+            displayName: m.senderUser.displayName,
+            builderRole: m.senderUser.builderRole,
+            email: m.senderUser.email,
+          } : null,
         }))
       }
     } catch (error) {
@@ -2540,26 +2586,40 @@ export const triggerMailboxSync = createServerFn({ method: 'POST' })
   });
 
 export const sendMessage = createServerFn({ method: 'POST' })
-  .inputValidator((data: { leadId: string; content: string }) => data)
+  .inputValidator((data: { leadId: string; content: string; subject?: string | null; isInternal?: boolean; activeRole?: string | null }) => data)
   .handler(async ({ data }) => {
     const { getTenantDb, requireAuth } = await import('./server-utils.server');
-    const session = await requireAuth()
-    const db = await getTenantDb()
+    const session = await requireAuth(data?.activeRole ?? undefined)
+    const db = await getTenantDb(session)
     try {
-      const { leadId, content } = data
+      const { leadId, content, subject, isInternal } = data
 
-      // 1. Create user's message in DB
+      // 1. Create message in DB
       const userMsg = await db.message.create({
         data: {
           builderId: session.builderId || '',
           leadId,
           sender: 'user',
+          subject: subject || null,
           content,
-          isRead: true
+          isRead: true,
+          isInternal: isInternal === true,
+          type: isInternal ? 'internal_note' : 'message',
+          senderUserId: session.userId || null,
+        },
+        include: {
+          senderUser: {
+            select: {
+              id: true,
+              displayName: true,
+              builderRole: true,
+              email: true,
+            }
+          }
         }
       })
 
-      // 2. Fetch full lead and builder details for Outbound Resend Email
+      // Fetch full lead and builder details
       const currentLead = await db.lead.findUnique({
         where: { id: leadId },
         select: {
@@ -2577,6 +2637,24 @@ export const sendMessage = createServerFn({ method: 'POST' })
         }
       })
 
+      // If INTERNAL NOTE: strictly log internal team activity and skip outbound client notifications
+      if (isInternal) {
+        await db.activity.create({
+          data: {
+            builderId: session.builderId || '',
+            leadId,
+            action: `📝 Internal Note added by ${session.displayName || 'Team Member'}: "${content.slice(0, 80)}${content.length > 80 ? '...' : ''}"`,
+          }
+        }).catch(() => {});
+
+        return {
+          userMessage: userMsg,
+          aiAutoMuted: false,
+          leadName: currentLead?.name
+        }
+      }
+
+      // 2. Outbound Client Reply logic (only runs for client-facing messages)
       if (currentLead && !['Appointment', 'Qualified', 'Scheduled', 'Closed Won'].includes(currentLead.status)) {
         await db.lead.update({
           where: { id: leadId },
@@ -2591,7 +2669,7 @@ export const sendMessage = createServerFn({ method: 'POST' })
           const companyName = session.companyName || currentLead.builder?.companyName || 'Custom Builder';
           const senderName = session.displayName || 'Sales Representative';
           const senderRole = session.builderRole === 'owner' ? 'Founder & Principal Builder' : 'Senior Sales Director';
-          const subject = `Re: Architectural Consultation â€” ${currentLead.county || 'Custom Build'} (${companyName})`;
+          const subject = `Re: Architectural Consultation — ${currentLead.county || 'Custom Build'} (${companyName})`;
 
           const html = buildArchitecturalEmailHtml({
             recipientName: currentLead.name || 'there',
@@ -2644,6 +2722,60 @@ export const sendMessage = createServerFn({ method: 'POST' })
     } catch (error) {
       console.error("Error in sendMessage:", error)
       throw error
+    }
+  })
+
+export const assignLeadToUser = createServerFn({ method: 'POST' })
+  .inputValidator((data: { leadId: string; userId: string | null; activeRole?: string | null }) => data)
+  .handler(async ({ data }) => {
+    const { getTenantDb, requireAuth } = await import('./server-utils.server');
+    const session = await requireAuth(data?.activeRole ?? undefined);
+    const db = await getTenantDb(session);
+    try {
+      const { leadId, userId } = data;
+
+      const lead = await db.lead.findUnique({
+        where: { id: leadId },
+        select: { id: true, name: true, assignedToId: true }
+      });
+      if (!lead) throw new Error("Lead not found");
+
+      let assignedUser: { id: string; displayName: string | null; email: string; builderRole: string } | null = null;
+      if (userId) {
+        assignedUser = await db.user.findUnique({
+          where: { id: userId },
+          select: { id: true, displayName: true, email: true, builderRole: true }
+        });
+      }
+
+      await db.lead.update({
+        where: { id: leadId },
+        data: { assignedToId: userId }
+      });
+
+      const assigneeLabel = assignedUser ? (assignedUser.displayName || assignedUser.email) : 'Unassigned';
+      await db.activity.create({
+        data: {
+          builderId: session.builderId || '',
+          leadId,
+          action: `👤 Lead assigned to ${assigneeLabel} by ${session.displayName || 'Team Member'}`,
+        }
+      }).catch(() => {});
+
+      return {
+        success: true,
+        leadId,
+        assignedToId: userId,
+        assignedTo: assignedUser ? {
+          id: assignedUser.id,
+          displayName: assignedUser.displayName,
+          email: assignedUser.email,
+          builderRole: assignedUser.builderRole,
+        } : null,
+      };
+    } catch (error) {
+      console.error("Error in assignLeadToUser:", error);
+      throw error;
     }
   })
 

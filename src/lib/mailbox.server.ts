@@ -172,6 +172,7 @@ export async function syncInboundMailbox(builderId?: string, force = false): Pro
                   builderId: targetBuilderId,
                   leadId: msg.leadId,
                   sender: 'lead',
+                  subject: msg.subject || null,
                   content: cleanBody,
                   channel: 'portal',
                   isRead: false,
@@ -249,6 +250,7 @@ export async function syncInboundMailbox(builderId?: string, force = false): Pro
                   builderId: targetBuilderId,
                   leadId: ev.leadId,
                   sender: 'user',
+                  subject: ev.subject || null,
                   content: ev.snippet || 'External reply sent from Google Workspace / Mobile.',
                   channel: 'portal',
                   isRead: true,
@@ -387,6 +389,7 @@ export async function syncInboundMailbox(builderId?: string, force = false): Pro
                 builderId: targetBuilderId,
                 leadId: item.matchedLead.id,
                 sender: 'lead',
+                subject: item.envelope?.subject || null,
                 content: cleanBody,
                 channel: 'portal',
                 isRead: false,
@@ -493,9 +496,14 @@ export async function syncInboundMailbox(builderId?: string, force = false): Pro
               if (!existingSent) {
                 const fullMsg = await client.fetchOne(String(message.uid), { source: true }, { uid: true });
                 let sentContent = 'External message sent from mobile/email client.';
+                let sentSubject: string | null = null;
                 if (fullMsg && fullMsg.source) {
                   const parsed = (await simpleParser(fullMsg.source as any)) as any;
                   sentContent = stripEmailQuotedHistory(parsed?.text || '') || sentContent;
+                  sentSubject = parsed?.subject || null;
+                }
+                if (!sentSubject && (fullMsg as any)?.envelope?.subject) {
+                  sentSubject = (fullMsg as any).envelope.subject;
                 }
 
                 // 1. Record human builder message in DB
@@ -504,6 +512,7 @@ export async function syncInboundMailbox(builderId?: string, force = false): Pro
                     builderId: targetBuilderId,
                     leadId: matchedLead.id,
                     sender: 'user',
+                    subject: sentSubject,
                     content: sentContent,
                     channel: 'portal',
                     isRead: true,

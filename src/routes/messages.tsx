@@ -15,6 +15,8 @@ import {
   simulateLeadMessage,
   generatePortalToken,
   getBuilderProfile,
+  getTeamData,
+  assignLeadToUser,
 } from "@/lib/dashboard";
 import {
   MessageSquare,
@@ -61,7 +63,10 @@ import {
   Italic,
   List,
   Quote,
-  User
+  User,
+  Lock,
+  Users,
+  UserCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -76,24 +81,26 @@ export const Route = createFileRoute("/messages")({
   loader: async ({ context }) => {
     try {
       if (typeof window === 'undefined' && !context.session) {
-        return { conversations: [], aiToggleMap: {}, integrationsStatus: {}, builderProfile: {} };
+        return { conversations: [], aiToggleMap: {}, integrationsStatus: {}, builderProfile: {}, teamMembers: [] };
       }
       const activeRole = typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? undefined) : undefined;
-      const [conversations, aiToggleMap, integrationsStatus, builderProfile] = await Promise.all([
+      const [conversations, aiToggleMap, integrationsStatus, builderProfile, teamMembers] = await Promise.all([
         getConversations({ data: { activeRole } }),
         getAiToggleMap(),
         getIntegrationsStatus(),
         getBuilderProfile({ data: { activeRole } }).catch(() => ({})),
+        getTeamData({ data: { activeRole } }).catch(() => []),
       ]);
       return {
         conversations: conversations || [],
         aiToggleMap: aiToggleMap || {},
         integrationsStatus: integrationsStatus || {},
         builderProfile: builderProfile || {},
+        teamMembers: teamMembers || [],
       };
     } catch (err) {
       console.error("Error in messages route loader:", err);
-      return { conversations: [], aiToggleMap: {}, integrationsStatus: {}, builderProfile: {} };
+      return { conversations: [], aiToggleMap: {}, integrationsStatus: {}, builderProfile: {}, teamMembers: [] };
     }
   },
   staleTime: 60_000,
@@ -107,6 +114,28 @@ export const Route = createFileRoute("/messages")({
   pendingComponent: () => <RoutePending title="Loading Messages..." type="messages" />,
   component: MessagesPage,
 });
+
+function decodeHtmlEntities(str: string | null | undefined): string {
+  if (!str) return "";
+  return str
+    .replace(/&amp;/g, "&")
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&nbsp;/g, " ");
+}
+
+function cleanMessageBody(str: string | null | undefined): string {
+  if (!str) return "";
+  let text = decodeHtmlEntities(str);
+  // Strip automated email template banners like "[Company] Architectural Consultation & Custom Builds"
+  text = text.replace(/^[^\n\r]*?Architectural Consultation\s*&\s*Custom Builds\s*/i, '');
+  // Strip company header prefix if followed by direct greeting (e.g. "s&s.co Hello SajidAli...")
+  text = text.replace(/^[a-zA-Z0-9&.\s]{2,30}\s+(Hello|Hi|Dear)\s+/i, '$1 ');
+  return text.trim();
+}
 
 function FormattedSummary({ text }: { text: string }) {
   const parseInlineMarkdown = (str: string) => {
@@ -185,8 +214,57 @@ function MessagesPage() {
   const initialIntegrationsStatus = loaderData?.integrationsStatus || {};
   // Profile email (set in Settings > Profile) — used as sender identity, NOT the login email
   const profileData = loaderData?.builderProfile || {};
+  const teamMembers: any[] = loaderData?.teamMembers || [];
+
+  const [composerMode, setComposerMode] = useState<"reply" | "internal">("reply");
+  const [filterTab, setFilterTab] = useState<"all" | "assigned_to_me" | "unassigned" | "hot">("all");
+  const [isAssigning, setIsAssigning] = useState(false);
 
   const [conversationsList, setConversationsList] = useState<any[]>(initialConversations || []);
+
+  const handleAssignLead = async (userId: string | null) => {
+    if (!selectedLeadId || isAssigning) return;
+    setIsAssigning(true);
+    try {
+      const res = await assignLeadToUser({
+        data: {
+          leadId: selectedLeadId,
+          userId,
+        }
+      });
+      
+      setActiveChat(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          lead: {
+            ...prev.lead,
+            assignedToId: userId,
+            assignedTo: res.assignedTo,
+          }
+        };
+      });
+
+      setConversationsList(prev => prev.map(c => {
+        if (c.leadId === selectedLeadId) {
+          return {
+            ...c,
+            assignedTo: res.assignedTo,
+            assignedToId: userId,
+          };
+        }
+        return c;
+      }));
+
+      toast.success(userId ? `Lead assigned to ${res.assignedTo?.displayName || 'team member'}` : 'Lead marked unassigned');
+      await router.invalidate();
+    } catch (err: any) {
+      console.error("Failed to assign lead:", err);
+      toast.error("Failed to assign lead. Please try again.");
+    } finally {
+      setIsAssigning(false);
+    }
+  };
 
   useEffect(() => {
     if (initialConversations && Array.isArray(initialConversations)) {
@@ -329,9 +407,8 @@ function MessagesPage() {
     };
   }, [isDragging]);
 
-  // Search and filter tab states
+  // Search state
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState<"all" | "unread" | "hot">("all");
 
   // WhatsApp New Chat modal state
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
@@ -736,10 +813,16 @@ function MessagesPage() {
         (t.lastMessage && t.lastMessage.toLowerCase().includes(q))
       );
     }
-    if (activeTab === "unread") return threads.filter(t => t.unreadCount > 0 && t.leadId !== selectedLeadId);
-    if (activeTab === "hot") return threads.filter(t => t.scoreTier === "Hot");
+    if (filterTab === "assigned_to_me") {
+      threads = threads.filter(t => t.assignedTo?.id === session?.userId || t.assignedToId === session?.userId);
+    } else if (filterTab === "unassigned") {
+      threads = threads.filter(t => !t.assignedTo && !t.assignedToId);
+    } else if (filterTab === "hot") {
+      threads = threads.filter(t => t.scoreTier === "Hot");
+    }
+
     return threads;
-  }, [activeThreadsList, searchQuery, activeTab, selectedLeadId]);
+  }, [activeThreadsList, searchQuery, filterTab, session?.userId]);
 
   // Handle File Selection (PDF, Blueprint, Images, CAD, Docs)
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -821,16 +904,31 @@ function MessagesPage() {
     setAttachedLink(null);
     setIsSending(true);
 
+    const isInternal = composerMode === "internal";
     const tempId = `opt-${Date.now()}`;
+    const resolvedSubject = isInternal
+      ? null
+      : (emailSubject || (currentThreadSubject.startsWith("Re: ") ? currentThreadSubject : `Re: ${currentThreadSubject}`));
+
     const optimisticMessage = {
       id: tempId,
       sender: "user" as const,
+      subject: resolvedSubject,
       content: originalText,
       createdAt: new Date().toISOString(),
-      isRead: true
+      isRead: true,
+      isInternal,
+      type: isInternal ? "internal_note" : "message",
+      senderUserId: session?.userId,
+      senderUser: {
+        id: session?.userId,
+        displayName: session?.displayName || "You",
+        builderRole: session?.builderRole || "owner",
+        email: session?.email,
+      }
     };
 
-    // Optimsitic UI Update INSTANTLY
+    // Optimistic UI Update INSTANTLY
     setActiveChat(prev => {
       if (!prev) return null;
       return { ...prev, messages: [...prev.messages, optimisticMessage] };
@@ -838,12 +936,22 @@ function MessagesPage() {
     setTimeout(scrollToBottom, 20);
 
     try {
+      const activeRole = typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? undefined) : undefined;
       const res = await sendMessage({
         data: {
           leadId: selectedLeadId,
-          content: originalText
+          content: originalText,
+          subject: resolvedSubject,
+          isInternal,
+          activeRole,
         }
       });
+
+      if (isInternal) {
+        toast.success("Team note added (visible only to team)");
+      } else {
+        toast.success("Reply sent to client");
+      }
 
       // If sending a manual message auto-muted the AI, pop up Slack-style card (silent)
       if ((res as any)?.aiAutoMuted) {
@@ -865,7 +973,11 @@ function MessagesPage() {
             sender: "user" as const,
             content: res.userMessage.content,
             createdAt: new Date().toISOString(),
-            isRead: true
+            isRead: true,
+            isInternal: res.userMessage.isInternal,
+            type: res.userMessage.type,
+            senderUserId: res.userMessage.senderUserId,
+            senderUser: (res.userMessage as any).senderUser || optimisticMessage.senderUser,
         } : m);
 
         if ((window as any)._messagesCache) {
@@ -1093,10 +1205,15 @@ function MessagesPage() {
 
   const currentThreadSubject = useMemo(() => {
     if (emailSubject && emailSubject.trim().length > 0) return emailSubject;
+    // Prefer authentic subject from incoming email thread if present
+    const genuineEmail = activeChat?.messages?.find((m: any) => m.subject && m.subject.trim().length > 0);
+    if (genuineEmail?.subject) {
+      return genuineEmail.subject;
+    }
     const county = selectedThread?.county || "Travis County, TX";
     const budget = selectedThread?.estimatedBudget ? `$${(selectedThread.estimatedBudget / 1000000).toFixed(1)}M` : "$1.8M";
     return `Inquiry: Custom Estate & Lot Planning (${county} · ${budget})`;
-  }, [emailSubject, selectedThread]);
+  }, [emailSubject, selectedThread, activeChat?.messages]);
 
   return (
     <Shell title="Messages" noPadding>
@@ -1105,7 +1222,7 @@ function MessagesPage() {
         {/* LEFT COLUMN: Search & Thread List */}
         <div
           style={{ width: `${leftWidth}px` }}
-          className="border-r border-border flex flex-col h-full min-h-0 bg-[#080808]/90 shrink-0 relative"
+          className="border-r border-border flex flex-col h-full min-h-0 bg-[#0d0d0d] shrink-0 relative"
         >
           {/* Thread Search Box */}
           <div className="p-3.5 border-b border-border space-y-3">
@@ -1146,28 +1263,39 @@ function MessagesPage() {
             </div>
 
             <div className="relative">
-              <Search className="absolute left-3 top-2.5 size-3.5 text-muted-foreground" />
+              <Search className="absolute left-3 top-3 size-4 text-muted-foreground" />
               <input
                 type="text"
                 placeholder="Search conversations..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-secondary border border-border rounded-lg pl-8 pr-3 py-1.5 text-xs text-foreground focus:outline-none focus:border-primary/60 placeholder:text-muted-foreground transition-colors"
+                className="w-full bg-secondary border border-border rounded-lg pl-9 pr-3 py-2 text-[13px] text-foreground focus:outline-none focus:border-primary/60 placeholder:text-muted-foreground transition-colors"
               />
             </div>
 
-            {/* Filter Tabs */}
-            <div className="flex gap-1 p-0.5 bg-secondary/60 rounded-lg">
-              {(["all", "unread", "hot"] as const).map((tab) => (
+            {/* Consolidated Filter Tabs */}
+            <div className="grid grid-cols-4 gap-1 p-0.5 bg-secondary/60 rounded-lg">
+              {[
+                { id: "all", label: "All" },
+                { id: "assigned_to_me", label: "My Leads" },
+                { id: "unassigned", label: "Unassigned" },
+                { id: "hot", label: "Hot" },
+              ].map((tab) => (
                 <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`flex-1 py-1 text-[10.5px] font-medium capitalize rounded-md transition-all ${activeTab === tab
-                    ? "bg-card text-foreground shadow-sm font-semibold"
-                    : "text-muted-foreground hover:text-foreground"
-                    }`}
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setFilterTab(tab.id as any)}
+                  className={`py-1.5 text-xs font-medium rounded-md transition-all truncate text-center cursor-pointer ${
+                    filterTab === tab.id
+                      ? tab.id === "unassigned"
+                        ? "bg-amber-500/20 text-amber-300 font-semibold shadow-sm"
+                        : tab.id === "hot"
+                        ? "bg-rose-500/20 text-rose-300 font-semibold shadow-sm"
+                        : "bg-card text-foreground font-semibold shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
                 >
-                  {tab === "all" ? "All" : tab === "unread" ? "Unread" : "Hot"}
+                  {tab.label}
                 </button>
               ))}
             </div>
@@ -1194,69 +1322,79 @@ function MessagesPage() {
                       setActiveChat(null);
                       setIsLoadingChat(true);
                     }}
-                    className={`w-full text-left p-3.5 flex gap-3 transition-colors hover:bg-secondary/40 select-none outline-none focus:bg-secondary/40 relative ${isActive ? "bg-secondary text-foreground" : "text-muted-foreground"
-                      }`}
+                    className={`w-full text-left px-3.5 py-2.5 flex items-center gap-3 transition-colors select-none outline-none relative cursor-pointer ${
+                      isActive 
+                        ? "bg-white/[0.06] text-foreground" 
+                        : "text-muted-foreground hover:bg-white/[0.025] hover:text-foreground/90"
+                    }`}
                   >
                     {/* Left border active bar */}
                     {isActive && (
-                      <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-primary animate-in fade-in duration-100" />
+                      <div className="absolute left-0 top-1.5 bottom-1.5 w-[2.5px] bg-primary rounded-r" />
                     )}
 
-                    {/* Avatar Container */}
+                    {/* Compact Avatar Container */}
                     <div className="relative shrink-0">
-                      <div className={`size-9 rounded-full flex items-center justify-center text-xs font-semibold border transition-all ${isActive
-                        ? "bg-primary/10 border-primary/20 text-white"
-                        : "bg-secondary border-border text-muted-foreground"
-                        }`}>
+                      <div className={`size-8 rounded-full flex items-center justify-center text-[11px] font-semibold border transition-all ${
+                        isActive
+                          ? "bg-white/10 border-white/25 text-white font-bold shadow-xs"
+                          : "bg-zinc-900 border-zinc-800 text-zinc-300"
+                      }`}>
                         {initials}
                       </div>
 
                       {/* Online Status Dot */}
                       {thread.isOnline && (
-                        <div className="absolute bottom-0 right-0 size-2 rounded-full bg-emerald-500 ring-2 ring-[#080808]" />
+                        <div className="absolute bottom-0 right-0 size-2 rounded-full bg-emerald-500 ring-1.5 ring-[#0d0d0d]" />
                       )}
                     </div>
 
-                    {/* Thread Info Column */}
-                    <div className="flex-1 min-w-0 space-y-1">
-                      <div className="flex items-center justify-between gap-1">
-                        <span className="font-semibold text-xs text-foreground truncate">
-                          {thread.leadName}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground font-mono shrink-0 select-none">
+                    {/* 2-Line Sleek Thread Info */}
+                    <div className="flex-1 min-w-0 flex flex-col justify-center gap-0.5">
+                      {/* Line 1: Lead Name, Category tag (Monochrome/Neutral), and Time */}
+                      <div className="flex items-center justify-between gap-1.5 min-w-0">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className={`text-[12.5px] sm:text-[13px] truncate font-sans ${
+                            isActive 
+                              ? "font-semibold text-foreground" 
+                              : thread.unreadCount > 0 
+                                ? "font-semibold text-foreground" 
+                                : "font-medium text-foreground/90"
+                          }`}>
+                            {thread.leadName}
+                          </span>
+                          {thread.scoreTier === "Hot" && (
+                            <span className="px-1.5 py-0.2 rounded text-[8px] font-mono font-bold uppercase tracking-wider bg-white/10 text-zinc-200 border border-white/20 shrink-0">
+                              HOT
+                            </span>
+                          )}
+                          {thread.scoreTier === "Warm" && (
+                            <span className="px-1.5 py-0.2 rounded text-[8px] font-mono font-medium uppercase tracking-wider bg-white/[0.04] text-zinc-400 border border-white/[0.08] shrink-0">
+                              WARM
+                            </span>
+                          )}
+                          {thread.scoreTier === "Cold" && (
+                            <span className="px-1.5 py-0.2 rounded text-[8px] font-mono font-medium uppercase tracking-wider bg-transparent text-zinc-500 border border-zinc-800 shrink-0">
+                              COLD
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[10.5px] text-zinc-500 font-mono shrink-0 select-none">
                           {formatMsgTime(thread.lastMessageTime)}
                         </span>
                       </div>
 
-                      {/* Clean Score & Status */}
-                      <div className="flex items-center gap-1.5">
-                        {thread.scoreTier === "Hot" && (
-                          <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-red-500/10 text-red-400 border border-red-500/20">
-                            Hot
-                          </span>
-                        )}
-                        {thread.scoreTier === "Warm" && (
-                          <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-warning/10 text-warning border border-warning/20">
-                            Warm
-                          </span>
-                        )}
-                        {thread.scoreTier === "Cold" && (
-                          <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-muted text-muted-foreground border border-border">
-                            Cold
-                          </span>
-                        )}
-                        <span className="text-[9px] font-mono text-muted-foreground/60 select-none">
-                          · {thread.status}
-                        </span>
-                      </div>
-
-                      {/* Last Message Preview & Unread Badge */}
-                      <div className="flex items-center justify-between gap-2 mt-0.5">
-                        <p className="text-[11px] text-muted-foreground truncate leading-relaxed flex-1">
-                          {thread.lastMessage}
+                      {/* Line 2: Message Snippet & Unread Badge */}
+                      <div className="flex items-center justify-between gap-2 min-w-0">
+                        <p className={`text-[11.5px] truncate font-sans leading-relaxed flex-1 ${
+                          thread.unreadCount > 0 && !isActive 
+                            ? "text-foreground/90 font-medium" 
+                            : "text-zinc-400/80"
+                        }`}>
+                          {cleanMessageBody(thread.lastMessage) || "No messages yet"}
                         </p>
                         {!isActive && thread.unreadCount > 0 && (
-                          <span className="shrink-0 size-4.5 bg-primary text-primary-foreground text-[9.5px] font-bold flex items-center justify-center rounded-full select-none">
+                          <span className="shrink-0 min-w-4 h-4 px-1 bg-primary text-black text-[9px] font-bold flex items-center justify-center rounded-full select-none shadow-xs">
                             {thread.unreadCount}
                           </span>
                         )}
@@ -1290,88 +1428,106 @@ function MessagesPage() {
           {selectedThread && activeChat ? (
             <>
                  {/* ════════════════════════════════════════════════════════════════
-                    GMAIL EXECUTIVE TOP BAR
+                    UNIFIED EXECUTIVE HEADER BAR (Single Row)
                     ════════════════════════════════════════════════════════════════ */}
-                <div className="flex items-center justify-between px-4 py-2.5 bg-[#0a0b0f] border-b border-border/60 shrink-0">
-                  {/* Left: Gmail Action Icons */}
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => toast.success("Conversation archived")}
-                      className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                      title="Archive"
-                    >
-                      <Archive className="size-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => toast.info("Marked as spam")}
-                      className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                      title="Report spam"
-                    >
-                      <ShieldAlert className="size-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (confirm(`Delete conversation with ${selectedThread.leadName}?`)) {
-                          toast.success("Thread deleted");
-                        }
-                      }}
-                      className="p-1.5 rounded-md hover:bg-danger/10 text-muted-foreground hover:text-danger transition-colors cursor-pointer"
-                      title="Delete thread"
-                    >
-                      <Trash2 className="size-4" />
-                    </button>
-                    <div className="h-4 w-px bg-border/60 mx-1" />
-                    <button
-                      type="button"
-                      onClick={() => toast.info("Marked as unread")}
-                      className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                      title="Mark unread"
-                    >
-                      <Mail className="size-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setIsSchedulingOpen(true)}
-                      className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                      title="Snooze / Schedule Follow-up"
-                    >
-                      <Clock className="size-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => toggleStar(selectedThread.leadId, e)}
-                      className="p-1.5 rounded-md hover:bg-secondary transition-colors cursor-pointer"
-                      title="Add star"
-                    >
-                      <Star className={`size-4 ${starredMsgIds.has(selectedThread.leadId) ? 'text-amber-400 fill-amber-400' : 'text-muted-foreground hover:text-foreground'}`} />
-                    </button>
+                <div className="px-4 sm:px-6 py-2.5 bg-[#0d0d0d] border-b border-border/60 flex items-center justify-between gap-3 shrink-0">
+                  {/* Left: Lead Identity & Context */}
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-sm font-semibold text-foreground truncate">
+                          {selectedThread?.leadName || activeChat?.lead?.name || "Client"}
+                        </h2>
+                        <span className="px-1.5 py-0.5 rounded text-[9.5px] font-mono bg-primary/10 border border-primary/25 text-primary font-medium shrink-0">
+                          {selectedThread?.county || "Architectural Inquiry"}
+                        </span>
+                        {selectedThread?.scoreTier === "Hot" && (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/25 shrink-0 hidden sm:inline">
+                            Hot Deal
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground truncate font-mono mt-0.5 hidden md:block">
+                        {emailSubject && emailSubject.trim().length > 0
+                          ? decodeHtmlEntities(emailSubject)
+                          : `${selectedThread?.county || "Custom Build"} · ${selectedThread?.estimatedBudget ? `$${(selectedThread.estimatedBudget / 1000000).toFixed(1)}M Estimated Project` : "Residential Build Inquiry"}`}
+                      </p>
+                    </div>
                   </div>
 
-                  {/* Right: Quick Action Controls & AI Switch */}
+                  {/* Right: Essential Collaboration & AI Controls */}
                   <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      type="button"
-                      onClick={toggleExpandAll}
-                      className="px-2.5 py-1 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-secondary border border-border/50 flex items-center gap-1.5 cursor-pointer transition-colors"
-                      title="Expand / Collapse all emails in thread"
-                    >
-                      <ChevronsUpDown className="size-3.5" />
-                      <span className="text-[11px] font-medium hidden sm:inline">
-                        {expandedMsgIds.size === activeChat.messages.length ? "Collapse All" : "Expand All"}
-                      </span>
-                    </button>
+                    {/* Team Assignee Dropdown */}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          disabled={isAssigning}
+                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-secondary/80 hover:bg-secondary border border-border text-xs text-foreground font-medium transition-colors cursor-pointer"
+                          title="Assign this lead to a staff member"
+                        >
+                          <User className="size-3.5 text-primary" />
+                          <span className="text-[11px]">
+                            {activeChat?.lead?.assignedTo || selectedThread?.assignedTo ? (
+                              <span className="flex items-center gap-1">
+                                <span className="text-muted-foreground hidden lg:inline">Assigned:</span>
+                                <strong className="text-white">
+                                  {(activeChat?.lead?.assignedTo || selectedThread?.assignedTo)?.displayName || (activeChat?.lead?.assignedTo || selectedThread?.assignedTo)?.email}
+                                </strong>
+                              </span>
+                            ) : (
+                              <span className="text-amber-400 font-semibold">
+                                Unassigned
+                              </span>
+                            )}
+                          </span>
+                          <ChevronDown className="size-3 text-muted-foreground" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-56 bg-[#131313] border border-border">
+                        <div className="px-2 py-1.5 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+                          Assign Lead To
+                        </div>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={() => handleAssignLead(null)}
+                          className="flex items-center justify-between text-xs cursor-pointer py-1.5"
+                        >
+                          <span className="text-muted-foreground">Unassigned</span>
+                          {!(activeChat?.lead?.assignedToId || selectedThread?.assignedTo) && <Check className="size-3.5 text-primary" />}
+                        </DropdownMenuItem>
+                        {teamMembers.map((member: any) => {
+                          const isCurrent = (activeChat?.lead?.assignedToId || selectedThread?.assignedTo?.id) === member.id;
+                          return (
+                            <DropdownMenuItem
+                              key={member.id}
+                              onClick={() => handleAssignLead(member.id)}
+                              className="flex items-center justify-between text-xs cursor-pointer py-1.5"
+                            >
+                              <div className="flex flex-col min-w-0 pr-2">
+                                <span className="font-semibold text-foreground truncate">{member.displayName || member.email}</span>
+                                <span className="text-[10px] text-muted-foreground capitalize">{member.builderRole || "Member"}</span>
+                              </div>
+                              {isCurrent && <Check className="size-3.5 text-primary shrink-0" />}
+                            </DropdownMenuItem>
+                          );
+                        })}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
 
-                    <button
-                      type="button"
-                      onClick={() => window.print()}
-                      className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer hidden md:flex"
-                      title="Print thread"
-                    >
-                      <Printer className="size-4" />
-                    </button>
+                    {/* Quick 1-click Claim button if lead is unassigned */}
+                    {!(activeChat?.lead?.assignedToId || selectedThread?.assignedTo) && session?.userId && (
+                      <button
+                        type="button"
+                        onClick={() => handleAssignLead(session.userId)}
+                        disabled={isAssigning}
+                        className="px-2.5 py-1 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 text-[11px] font-semibold transition-colors cursor-pointer hidden sm:flex items-center gap-1"
+                        title="Assign this lead to yourself"
+                      >
+                        <UserCheck className="size-3" />
+                        <span>Claim Lead</span>
+                      </button>
+                    )}
 
                     {/* AI Autonomous Switch */}
                     <button
@@ -1390,7 +1546,7 @@ function MessagesPage() {
                       className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold transition-colors cursor-pointer ${
                         isAiActive
                           ? "bg-primary/15 border-primary/40 text-primary"
-                          : "bg-secondary border-border text-muted-foreground hover:text-foreground"
+                          : "bg-secondary/80 border-border text-muted-foreground hover:text-foreground"
                       }`}
                       title={isAiActive ? "AI Concierge is qualifying this buyer" : "AI Concierge is paused"}
                     >
@@ -1398,69 +1554,98 @@ function MessagesPage() {
                       <span className="hidden sm:inline">{isAiActive ? "AI Active" : "AI Off"}</span>
                     </button>
 
-                    {/* AI Summary */}
+                    {/* AI Briefing Button */}
                     <button
                       type="button"
                       onClick={handleSummarizeChat}
                       disabled={isSummarizing || !activeChat || activeChat.messages.length === 0}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-secondary border border-border hover:bg-secondary/80 text-foreground text-xs font-medium transition-colors cursor-pointer disabled:opacity-50"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-secondary/80 border border-border hover:bg-secondary text-foreground text-xs font-medium transition-colors cursor-pointer disabled:opacity-50"
                       title="Generate AI conversation briefing"
                     >
                       {isSummarizing ? <Loader2 className="size-3.5 animate-spin text-primary" /> : <BrainCircuit className="size-3.5 text-primary" />}
                       <span className="hidden lg:inline">Briefing</span>
                     </button>
 
-                    {/* More Menu */}
+                    {/* Unified More Options Menu */}
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <button className="p-1.5 rounded-md hover:bg-secondary border border-transparent hover:border-border transition-colors text-muted-foreground hover:text-foreground cursor-pointer">
+                        <button
+                          type="button"
+                          className="p-1.5 rounded-lg hover:bg-secondary border border-border text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                          title="More options"
+                        >
                           <MoreVertical className="size-4" />
                         </button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-56 bg-[#0a0a0c] border border-border">
-                        <DropdownMenuItem onClick={() => setIsPortfolioModalOpen(true)} className="flex items-center gap-2 cursor-pointer">
-                          <BookOpen className="size-4 text-muted-foreground" />
+                      <DropdownMenuContent align="end" className="w-56 bg-[#131313] border border-border">
+                        <DropdownMenuItem
+                          onClick={(e) => toggleStar(selectedThread.leadId, e)}
+                          className="flex items-center gap-2 cursor-pointer py-1.5"
+                        >
+                          <Star className={`size-3.5 ${starredMsgIds.has(selectedThread.leadId) ? 'text-amber-400 fill-amber-400' : 'text-muted-foreground'}`} />
+                          <span>{starredMsgIds.has(selectedThread.leadId) ? "Remove Star" : "Star Thread"}</span>
+                        </DropdownMenuItem>
+
+                        <DropdownMenuItem
+                          onClick={toggleExpandAll}
+                          className="flex items-center gap-2 cursor-pointer py-1.5"
+                        >
+                          <ChevronsUpDown className="size-3.5 text-muted-foreground" />
+                          <span>{expandedMsgIds.size === activeChat.messages.length ? "Collapse Messages" : "Expand All Messages"}</span>
+                        </DropdownMenuItem>
+
+                        <DropdownMenuItem
+                          onClick={() => setIsPortfolioModalOpen(true)}
+                          className="flex items-center gap-2 cursor-pointer py-1.5"
+                        >
+                          <BookOpen className="size-3.5 text-muted-foreground" />
                           <span>Attach PDF Lookbook</span>
                         </DropdownMenuItem>
+
+                        <DropdownMenuItem
+                          onClick={() => window.print()}
+                          className="flex items-center gap-2 cursor-pointer py-1.5"
+                        >
+                          <Printer className="size-3.5 text-muted-foreground" />
+                          <span>Print Conversation</span>
+                        </DropdownMenuItem>
+
                         {canSimulate && (
-                          <DropdownMenuItem onClick={() => setIsSimulateOpen(true)} className="flex items-center gap-2 cursor-pointer">
-                            <MessageSquare className="size-4 text-muted-foreground" />
+                          <DropdownMenuItem
+                            onClick={() => setIsSimulateOpen(true)}
+                            className="flex items-center gap-2 cursor-pointer py-1.5"
+                          >
+                            <MessageSquare className="size-3.5 text-muted-foreground" />
                             <span>Simulate Lead Reply</span>
                           </DropdownMenuItem>
                         )}
+
+                        <DropdownMenuSeparator />
+
+                        <DropdownMenuItem
+                          onClick={() => toast.info("Marked as unread")}
+                          className="flex items-center gap-2 cursor-pointer py-1.5 text-xs"
+                        >
+                          <Mail className="size-3.5 text-muted-foreground" />
+                          <span>Mark as Unread</span>
+                        </DropdownMenuItem>
+
+                        <DropdownMenuItem
+                          onClick={() => toast.success("Conversation archived")}
+                          className="flex items-center gap-2 cursor-pointer py-1.5 text-xs"
+                        >
+                          <Archive className="size-3.5 text-muted-foreground" />
+                          <span>Archive Conversation</span>
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
                 </div>
 
-                {/* ════════════════════════════════════════════════════════════════
-                    MASTER SUBJECT LINE & CATEGORY HEADER
-                    ════════════════════════════════════════════════════════════════ */}
-                <div className="px-5 sm:px-6 py-3.5 bg-[#06070a] border-b border-border/60 flex items-center justify-between gap-3 shrink-0">
-                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                    <h2 className="text-sm sm:text-base font-semibold text-foreground truncate font-sans tracking-tight">
-                      {currentThreadSubject}
-                    </h2>
-                    <span className="px-2 py-0.5 rounded text-[9.5px] font-mono uppercase tracking-wider bg-secondary border border-border text-muted-foreground font-semibold shrink-0">
-                      Inbox
-                    </span>
-                    <span className="px-2 py-0.5 rounded text-[9.5px] font-mono bg-primary/10 border border-primary/30 text-primary font-semibold shrink-0 hidden sm:inline">
-                      {selectedThread.county || "Architectural Lead"}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-[10px] font-mono text-emerald-400 hidden sm:flex items-center gap-1">
-                      <ShieldCheck className="size-3.5" />
-                      <span>TLS 1.3 Encryption</span>
-                    </span>
-                  </div>
-                </div>
-
                 {/* AI BRIEFING SHEET */}
                 {chatSummary && (
-                  <div className="mx-6 mt-4 p-4 rounded-xl bg-[#0f0f14] border border-primary/40 shadow-2xl animate-in fade-in slide-in-from-top-4 relative z-30 shrink-0 max-h-[260px] overflow-y-auto">
-                    <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-white/10 sticky top-0 bg-[#0f0f14] z-10">
+                  <div className="mx-6 mt-4 p-4 rounded-xl bg-[#131313] border border-primary/40 shadow-2xl animate-in fade-in slide-in-from-top-4 relative z-30 shrink-0 max-h-[260px] overflow-y-auto">
+                    <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-white/10 sticky top-0 bg-[#131313] z-10">
                       <div className="flex items-center gap-2">
                         <div className="size-6 rounded-lg bg-primary/20 border border-primary/40 flex items-center justify-center">
                           <BrainCircuit className="size-3.5 text-primary" />
@@ -1484,12 +1669,12 @@ function MessagesPage() {
                 {/* ════════════════════════════════════════════════════════════════
                     GMAIL EMAIL MESSAGE STREAM
                     ════════════════════════════════════════════════════════════════ */}
-                <div className="flex-1 flex flex-col min-h-0 relative bg-[#040508] overflow-hidden">
+                <div className="flex-1 flex flex-col min-h-0 relative bg-[#0d0d0d] overflow-hidden">
                   {/* Messages Scroll Container */}
                   <div
                     ref={chatContainerRef}
                     onScroll={handleChatScroll}
-                    className="flex-1 overflow-y-auto px-3 sm:px-6 py-4 space-y-3 min-h-0 relative z-10 custom-scrollbar"
+                    className="flex-1 overflow-y-auto px-3 sm:px-6 py-4 space-y-1 min-h-0 relative z-10 custom-scrollbar"
                   >
                     {activeChat.messages.length > 0 ? (
                       activeChat.messages.map((msg, index) => {
@@ -1537,12 +1722,27 @@ function MessagesPage() {
                         const clientName = activeChat.lead?.name || selectedThread?.leadName || "Client";
                         const clientEmail = activeChat.lead?.email || selectedThread?.email || `${clientName.toLowerCase().replace(/\s+/g, '')}@gmail.com`;
 
-                        // Dynamic From/To identity calculation
-                        const fromName = isAI 
-                          ? `${session?.displayName || 'Builder'} (AI Concierge)` 
-                          : isUser 
-                            ? `${session?.displayName || 'Sarah Jenkins'}` 
-                            : clientName;
+                        const isInternalNote = msg.isInternal || msg.type === "internal_note";
+                        const staffAuthor = msg.senderUser;
+
+                        // Dynamic Sender Identity Labels (Clean & Distinct - No repeating identical names)
+                        const senderDisplay = isInternalNote
+                          ? "Team Note"
+                          : isAI 
+                            ? "AI Concierge" 
+                            : isUser 
+                              ? "You" 
+                              : clientName;
+
+                        const fromName = isInternalNote
+                          ? (staffAuthor?.displayName || session?.displayName || "Team Member")
+                          : isAI 
+                            ? "AI Concierge" 
+                            : isUser 
+                              ? (staffAuthor?.displayName || session?.displayName || 'Team Member') 
+                              : clientName;
+
+                        const fromRole = staffAuthor?.builderRole;
 
                         const fromEmail = isAI 
                           ? builderAiEmail 
@@ -1558,11 +1758,11 @@ function MessagesPage() {
                           ? builderCompanyEmail 
                           : clientEmail;
 
-                        const msgSubject = index === 0 && isLead
-                          ? currentThreadSubject
-                          : `Re: ${currentThreadSubject}`;
+                        const msgSubject = (msg as any).subject && (msg as any).subject.trim().length > 0
+                          ? (msg as any).subject.trim()
+                          : null;
 
-                        const initials = (fromName || "L")
+                        const initials = (isUser ? (session?.displayName || "YO") : (fromName || "L"))
                           .split(" ")
                           .filter(Boolean)
                           .map((n: string) => n[0])
@@ -1570,128 +1770,206 @@ function MessagesPage() {
                           .slice(0, 2)
                           .toUpperCase();
 
-                        const avatarStyle = isAI
-                          ? "bg-primary/20 text-primary border-primary/40 font-mono"
-                          : isUser
-                            ? "bg-gradient-to-br from-emerald-600/30 to-teal-700/30 text-emerald-300 border-emerald-500/40"
-                            : "bg-gradient-to-br from-blue-600/30 to-indigo-700/30 text-blue-300 border-blue-500/40";
-
                         return (
                           <div key={msg.id} className="w-full">
                             {showDateDivider && (
-                              <div className="flex justify-center my-3">
-                                <span className="text-[10px] font-medium text-muted-foreground bg-[#111115] border border-border/80 px-3 py-0.5 rounded-full uppercase tracking-widest font-mono">
+                              <div className="flex items-center gap-3 py-3 my-1">
+                                <div className="flex-1 h-px bg-white/[0.06]" />
+                                <span className="text-[10px] font-medium text-muted-foreground/60 bg-[#0d0d0d] px-2.5 uppercase tracking-widest font-mono">
                                   {dateLabel}
                                 </span>
+                                <div className="flex-1 h-px bg-white/[0.06]" />
                               </div>
                             )}
 
-                            {/* ── GMAIL COLLAPSED ROW (WHEN INACTIVE) ── */}
+                            {/* ── HIGH-END GRID-ALIGNED THREAD ROW (WHEN COLLAPSED) ── */}
                             {!isExpanded ? (
                               <div
                                 onClick={() => toggleMessageExpand(msg.id)}
-                                className="group flex items-center justify-between gap-3 p-3 rounded-xl bg-[#08090d] hover:bg-[#0e1017] border border-border/60 hover:border-border transition-all cursor-pointer select-none"
+                                className={`group flex items-center gap-3 px-3.5 py-2.5 rounded-lg border transition-all cursor-pointer select-none ${
+                                  isInternalNote
+                                    ? "bg-[#141414] hover:bg-[#181818] border-dashed border-white/15"
+                                    : "bg-[#111111]/90 hover:bg-[#161616] border-white/[0.05] hover:border-white/10 shadow-xs"
+                                }`}
                               >
-                                <div className="flex items-center gap-3 min-w-0 flex-1">
-                                  <div className={`size-8 rounded-full border flex items-center justify-center font-bold text-xs shrink-0 ${avatarStyle}`}>
-                                    {initials}
-                                  </div>
-                                  <span className="font-semibold text-xs text-foreground truncate w-32 sm:w-44 shrink-0 font-sans">
-                                    {fromName}
-                                  </span>
-                                  <span className="text-xs text-muted-foreground truncate font-sans">
-                                    {msg.content.slice(0, 90)}...
+                                {/* Col 1: Fixed 24px Icon / Avatar */}
+                                <div className="shrink-0 flex items-center justify-center">
+                                  {isAI ? (
+                                    <div className="size-6 rounded-md bg-primary/15 border border-primary/30 flex items-center justify-center" title="AI Concierge">
+                                      <Sparkles className="size-3 text-primary" />
+                                    </div>
+                                  ) : isInternalNote ? (
+                                    <div className="size-6 rounded-md bg-white/[0.06] border border-white/10 flex items-center justify-center text-zinc-300" title="Team Note">
+                                      <Users className="size-3 text-zinc-300" />
+                                    </div>
+                                  ) : isUser ? (
+                                    <div className="size-6 rounded-full bg-white/[0.12] border border-white/20 flex items-center justify-center font-bold text-[10px] text-white" title="You">
+                                      {initials}
+                                    </div>
+                                  ) : (
+                                    <div className="size-6 rounded-full bg-white/[0.08] border border-white/12 flex items-center justify-center font-semibold text-[10px] text-white/90" title="Client">
+                                      {initials}
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Col 2: Fixed-Width Sender Name (Strictly Aligned) */}
+                                <div className="w-28 sm:w-36 shrink-0 flex items-center gap-1.5 min-w-0">
+                                  <span className={`text-xs font-semibold truncate ${
+                                    isAI ? 'text-primary' : isUser ? 'text-zinc-200' : isInternalNote ? 'text-zinc-300' : 'text-foreground'
+                                  }`}>
+                                    {senderDisplay}
                                   </span>
                                 </div>
 
-                                <div className="flex items-center gap-2.5 shrink-0">
+                                {/* Col 3: Subject & Message Preview (Grid aligned across ALL rows) */}
+                                <div className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden">
+                                  {msgSubject && (
+                                    <span className="text-xs font-medium text-foreground/90 shrink-0 truncate max-w-[140px] sm:max-w-[220px]">
+                                      {msgSubject} —
+                                    </span>
+                                  )}
+                                  <span className={`text-xs truncate font-normal ${isInternalNote ? 'text-zinc-300/80' : 'text-muted-foreground/75'}`}>
+                                    {cleanMessageBody(msg.content)}
+                                  </span>
+                                </div>
+
+                                {/* Col 4: Star & Timestamp (Right-Aligned, Fixed Width) */}
+                                <div className="shrink-0 flex items-center gap-2">
                                   <button
                                     type="button"
                                     onClick={(e) => toggleStar(msg.id, e)}
-                                    className="p-1 text-muted-foreground hover:text-amber-400 transition-colors"
+                                    className="p-1 text-muted-foreground/30 hover:text-amber-400 transition-colors cursor-pointer"
                                   >
                                     <Star className={`size-3.5 ${isStarred ? 'text-amber-400 fill-amber-400' : ''}`} />
                                   </button>
-                                  <span className="text-[10.5px] text-muted-foreground font-mono">
+                                  <span className="text-[11px] text-muted-foreground/50 font-mono w-24 text-right select-none">
                                     {msgDate.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                                   </span>
                                 </div>
                               </div>
                             ) : (
-                              /* ── GMAIL FULL EXPANDED EMAIL ENVELOPE CARD ── */
-                              <div className={`rounded-2xl border p-4 sm:p-5 shadow-md transition-all animate-in fade-in space-y-4 ${
-                                isAI
-                                  ? "bg-[#0b0c12] border-primary/25 border-l-4 border-l-primary/70"
-                                  : isUser
-                                    ? "bg-[#0a0c10] border-border border-l-4 border-l-emerald-500/70"
-                                    : "bg-[#08090d] border-border/80 border-l-4 border-l-blue-500/70"
+                              /* ── FULL EXPANDED EMAIL ENVELOPE CARD ── */
+                              <div className={`rounded-xl border p-4 sm:p-5 shadow-lg transition-all animate-in fade-in space-y-4 my-2.5 ${
+                                isInternalNote
+                                  ? "bg-[#141414] border-dashed border-white/20"
+                                  : "bg-[#131313] border-white/[0.08]"
                               }`}>
-                                {/* Envelope Header */}
-                                <div className="flex items-start justify-between gap-3 border-b border-border/40 pb-3.5">
+                                {/* Envelope Header - Click anywhere to toggle collapse */}
+                                <div
+                                  onClick={() => toggleMessageExpand(msg.id)}
+                                  className="flex items-start justify-between gap-3 border-b border-border/40 pb-3.5 cursor-pointer select-none group/header hover:bg-white/[0.015] -m-2 p-2 rounded-xl transition-colors"
+                                  title="Click to collapse email"
+                                >
                                   <div className="flex items-start gap-3 min-w-0">
-                                    <div className={`size-10 rounded-full border flex items-center justify-center font-bold text-xs shrink-0 shadow-sm ${avatarStyle}`}>
-                                      {initials}
-                                    </div>
+                                    {/* Expanded Avatar */}
+                                    {isAI ? (
+                                      <div className="size-9 rounded-xl bg-primary/15 border border-primary/30 flex items-center justify-center shrink-0">
+                                        <Sparkles className="size-4 text-primary" />
+                                      </div>
+                                    ) : isInternalNote ? (
+                                      <div className="size-9 rounded-xl bg-white/[0.06] border border-white/10 flex items-center justify-center text-zinc-300 shrink-0">
+                                        <Users className="size-4 text-zinc-300" />
+                                      </div>
+                                    ) : isUser ? (
+                                      <div className="size-9 rounded-full bg-white/[0.12] border border-white/25 flex items-center justify-center font-bold text-xs text-white shrink-0">
+                                        {initials}
+                                      </div>
+                                    ) : (
+                                      <div className="size-9 rounded-full bg-white/[0.08] border border-white/15 flex items-center justify-center font-semibold text-xs text-white/90 shrink-0">
+                                        {initials}
+                                      </div>
+                                    )}
+
                                     <div className="min-w-0">
                                       <div className="flex items-center gap-2 flex-wrap">
-                                        <span className="font-bold text-xs sm:text-sm text-foreground font-sans">{fromName}</span>
-                                        <span className="text-[11px] text-muted-foreground font-mono break-all">&lt;{fromEmail}&gt;</span>
+                                        <span className="font-bold text-xs sm:text-sm text-foreground font-sans">
+                                          {isUser ? `${fromName} (You)` : isAI ? "AI Concierge" : fromName}
+                                        </span>
+                                        {!isInternalNote && (
+                                          <span className="text-[11px] text-muted-foreground font-mono break-all">&lt;{fromEmail}&gt;</span>
+                                        )}
+                                        {isInternalNote && (
+                                          <span className="px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-white/[0.08] text-zinc-300 border border-white/15">
+                                            TEAM NOTE · PRIVATE
+                                          </span>
+                                        )}
+                                        {fromRole && (
+                                          <span className="px-1.5 py-0.2 rounded text-[8.5px] font-mono font-semibold bg-secondary text-muted-foreground border border-border uppercase">
+                                            {fromRole}
+                                          </span>
+                                        )}
                                         {isAI && (
-                                          <span className="px-1.5 py-0.2 rounded text-[8.5px] font-mono font-bold bg-primary/15 text-primary border border-primary/30">
-                                            AI CONCIERGE
+                                          <span className="px-1.5 py-0.2 rounded text-[8.5px] font-mono font-bold bg-primary/15 text-primary border border-primary/30 flex items-center gap-1">
+                                            <Sparkles className="size-2.5 text-primary" /> AI CONCIERGE
                                           </span>
                                         )}
-                                        {isUser && (
-                                          <span className="px-1.5 py-0.2 rounded text-[8.5px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                                            TEAM SENDER
+                                        {isUser && !isInternalNote && (
+                                          <span className="px-1.5 py-0.2 rounded text-[8.5px] font-mono font-medium bg-white/[0.08] text-muted-foreground border border-white/15">
+                                            YOU
                                           </span>
                                         )}
                                       </div>
 
-                                      {/* "to me / to Client" details toggle */}
-                                      <div className="relative mt-1">
-                                        <button
-                                          type="button"
-                                          onClick={() => setExpandedDetailsMsgId(isDetailsOpen ? null : msg.id)}
-                                          className="text-[11px] text-muted-foreground hover:text-foreground font-mono inline-flex items-center gap-1 cursor-pointer"
-                                        >
-                                          <span>to {toName}</span>
-                                          <ChevronDown className={`size-3 transition-transform ${isDetailsOpen ? 'rotate-180' : ''}`} />
-                                        </button>
+                                      {/* "to me / to Client" details toggle & Subject line */}
+                                      {!isInternalNote && (
+                                        <div className="mt-1 flex flex-col gap-0.5">
+                                          <div className="relative">
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setExpandedDetailsMsgId(isDetailsOpen ? null : msg.id);
+                                              }}
+                                              className="text-[11px] text-muted-foreground hover:text-foreground font-mono inline-flex items-center gap-1 cursor-pointer"
+                                            >
+                                              <span>to {toName}</span>
+                                              <ChevronDown className={`size-3 transition-transform ${isDetailsOpen ? 'rotate-180' : ''}`} />
+                                            </button>
 
-                                        {/* Real Gmail Security & Envelope Details Box */}
-                                        {isDetailsOpen && (
-                                          <div className="absolute left-0 top-6 w-[380px] sm:w-[460px] max-w-[90vw] p-3.5 rounded-xl bg-[#0f1016] border border-border shadow-2xl z-40 text-xs font-mono space-y-2 animate-in fade-in zoom-in-95 duration-150">
-                                            <div className="flex gap-2 items-baseline">
-                                              <span className="text-muted-foreground w-16 shrink-0 text-right pr-1">from:</span>
-                                              <span className="text-foreground break-all leading-relaxed font-sans">{fromName} &lt;<span className="font-mono text-emerald-400/90">{fromEmail}</span>&gt;</span>
-                                            </div>
-                                            <div className="flex gap-2 items-baseline">
-                                              <span className="text-muted-foreground w-16 shrink-0 text-right pr-1">to:</span>
-                                              <span className="text-foreground break-all leading-relaxed font-sans">{toName} &lt;<span className="font-mono text-blue-400/90">{toEmail}</span>&gt;</span>
-                                            </div>
-                                            <div className="flex gap-2 items-baseline">
-                                              <span className="text-muted-foreground w-16 shrink-0 text-right pr-1">date:</span>
-                                              <span className="text-foreground break-all leading-relaxed font-mono text-[11px]">{msgDate.toUTCString()}</span>
-                                            </div>
-                                            <div className="flex gap-2 items-baseline">
-                                              <span className="text-muted-foreground w-16 shrink-0 text-right pr-1">subject:</span>
-                                              <span className="text-foreground break-words leading-relaxed font-sans font-medium">{msgSubject}</span>
-                                            </div>
-                                            <div className="flex gap-2 pt-2 border-t border-border/40 items-center">
-                                              <span className="text-muted-foreground w-16 shrink-0 text-right pr-1">security:</span>
-                                              <span className="text-emerald-400 flex items-center gap-1.5 font-sans text-[11px]">
-                                                <ShieldCheck className="size-3.5" /> Standard TLS 1.3 Encryption & Verified Sender
-                                              </span>
-                                            </div>
+                                            {/* Clean Envelope Details Box */}
+                                            {isDetailsOpen && (
+                                              <div 
+                                                onClick={(e) => e.stopPropagation()}
+                                                className="absolute left-0 top-6 w-[340px] sm:w-[420px] max-w-[90vw] p-3 rounded-xl bg-[#141414] border border-border shadow-2xl z-40 text-xs font-mono space-y-2 animate-in fade-in zoom-in-95 duration-150 cursor-default"
+                                              >
+                                                <div className="flex gap-2 items-baseline">
+                                                  <span className="text-muted-foreground w-14 shrink-0 text-right pr-1">from:</span>
+                                                  <span className="text-foreground break-all leading-relaxed font-sans">{fromName} &lt;<span className="font-mono text-primary/80">{fromEmail}</span>&gt;</span>
+                                                </div>
+                                                <div className="flex gap-2 items-baseline">
+                                                  <span className="text-muted-foreground w-14 shrink-0 text-right pr-1">to:</span>
+                                                  <span className="text-foreground break-all leading-relaxed font-sans">{toName} &lt;<span className="font-mono text-muted-foreground">{toEmail}</span>&gt;</span>
+                                                </div>
+                                                <div className="flex gap-2 items-baseline">
+                                                  <span className="text-muted-foreground w-14 shrink-0 text-right pr-1">date:</span>
+                                                  <span className="text-foreground break-all leading-relaxed font-mono text-[11px]">
+                                                    {msgDate.toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                                                  </span>
+                                                </div>
+                                                {msgSubject && (
+                                                  <div className="flex gap-2 items-baseline border-t border-border/40 pt-2">
+                                                    <span className="text-muted-foreground w-14 shrink-0 text-right pr-1">subject:</span>
+                                                    <span className="text-foreground break-all leading-relaxed font-sans font-medium">{msgSubject}</span>
+                                                  </div>
+                                                )}
+                                              </div>
+                                            )}
                                           </div>
-                                        )}
-                                      </div>
+
+                                          {msgSubject && (
+                                            <div className="text-xs text-foreground/90 font-sans flex items-center gap-1.5 pt-0.5">
+                                              <span className="text-[10px] text-muted-foreground uppercase font-mono tracking-wider font-semibold shrink-0">Subject:</span>
+                                              <span className="font-medium text-foreground truncate max-w-[280px] sm:max-w-[440px]">{msgSubject}</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
                                     </div>
                                   </div>
 
                                   {/* Right: Timestamp & Action buttons */}
-                                  <div className="flex items-center gap-1.5 shrink-0">
+                                  <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                                     <span className="text-[11px] text-muted-foreground font-mono select-none mr-1">
                                       {msgDate.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                                     </span>
@@ -1703,18 +1981,21 @@ function MessagesPage() {
                                     >
                                       <Star className={`size-3.5 ${isStarred ? 'text-amber-400 fill-amber-400' : ''}`} />
                                     </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setIsComposerActive(true);
-                                        setNewMessageText(`\n\nOn ${msgDate.toLocaleDateString()}, ${fromName} wrote:\n> ${msg.content.slice(0, 100)}...`);
-                                        textareaRef.current?.focus();
-                                      }}
-                                      className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                                      title="Reply to this email"
-                                    >
-                                      <Reply className="size-3.5" />
-                                    </button>
+                                    {!isInternalNote && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setIsComposerActive(true);
+                                          setComposerMode('reply');
+                                          setNewMessageText(`\n\nOn ${msgDate.toLocaleDateString()}, ${fromName} wrote:\n> ${cleanMessageBody(msg.content).slice(0, 100)}...`);
+                                          textareaRef.current?.focus();
+                                        }}
+                                        className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                                        title="Reply to this email"
+                                      >
+                                        <Reply className="size-3.5" />
+                                      </button>
+                                    )}
                                     <button
                                       type="button"
                                       onClick={() => toggleMessageExpand(msg.id)}
@@ -1727,10 +2008,10 @@ function MessagesPage() {
                                 </div>
 
                                 {/* Email Body */}
-                                <div className="text-xs sm:text-[13.5px] text-foreground/90 leading-relaxed font-sans select-text space-y-3 pt-1">
+                                <div className="text-xs sm:text-[13.5px] text-foreground/90 leading-relaxed font-sans select-text space-y-3 pt-4 pl-0 sm:pl-12">
                                   {isBrochureCard ? (
                                     /* Shared document card */
-                                    <div className="bg-[#12131a] border border-border rounded-xl p-3.5 max-w-[440px] shadow-sm relative overflow-hidden">
+                                    <div className="bg-[#151515] border border-border rounded-xl p-3.5 max-w-[440px] shadow-sm relative overflow-hidden">
                                       <div className="flex gap-3 items-center">
                                         <div className="size-9 bg-primary/10 rounded-lg flex items-center justify-center border border-primary/20 shrink-0 text-primary">
                                           <FileText className="size-4.5" />
@@ -1757,7 +2038,7 @@ function MessagesPage() {
                                     </div>
                                   ) : isAppointmentCard ? (
                                     /* Site Visit Card */
-                                    <div className="bg-[#12131a] border border-border rounded-xl p-3.5 max-w-[440px] shadow-sm space-y-2">
+                                    <div className="bg-[#151515] border border-border rounded-xl p-3.5 max-w-[440px] shadow-sm space-y-2">
                                       <div className="flex items-center gap-2.5 text-primary">
                                         <Calendar className="size-4" />
                                         <span className="text-xs font-bold font-sans">Site Walkthrough & Lot Consultation</span>
@@ -1778,7 +2059,7 @@ function MessagesPage() {
                                       const dataUrl = dataUrlParam ? dataUrlParam.replace("data=", "") : "";
 
                                       return (
-                                        <div className="bg-[#12131a] border border-border rounded-xl p-3 max-w-[420px] shadow-sm space-y-2">
+                                        <div className="bg-[#151515] border border-border rounded-xl p-3 max-w-[420px] shadow-sm space-y-2">
                                           {dataUrl && (
                                             <div
                                               onClick={() => setActiveImageModalUrl(dataUrl)}
@@ -1810,7 +2091,7 @@ function MessagesPage() {
                                       const url = urlParam ? urlParam.replace("url=", "") : "#";
 
                                       return (
-                                        <div className="bg-[#12131a] border border-border rounded-xl p-3 max-w-[420px] shadow-sm space-y-2">
+                                        <div className="bg-[#151515] border border-border rounded-xl p-3 max-w-[420px] shadow-sm space-y-2">
                                           <div className="flex gap-2.5 items-start">
                                             <div className="size-9 bg-primary/10 rounded-lg flex items-center justify-center border border-primary/20 shrink-0 text-primary">
                                               <Globe className="size-4.5" />
@@ -1842,18 +2123,8 @@ function MessagesPage() {
                                   ) : (
                                     /* Standard Clean Message Text */
                                     <p className="whitespace-pre-line leading-relaxed text-[13.5px] text-foreground/90 font-sans">
-                                      {msg.content}
+                                      {cleanMessageBody(msg.content)}
                                     </p>
-                                  )}
-
-                                  {/* Professional Email Signature Block */}
-                                  {(isUser || isAI) && (
-                                    <div className="pt-4 border-t border-border/30 text-[11px] text-muted-foreground font-sans space-y-0.5 select-none">
-                                      <p className="font-semibold text-foreground/90">{fromName}</p>
-                                      <p className="text-[10.5px]">{isAI ? "AI Autonomous Qualification Concierge" : (session?.builderRole === 'owner' ? 'Founder & Principal Builder' : 'Senior Sales Director')}</p>
-                                      <p className="text-primary font-medium">{session?.companyName || "WeaverFrame Architecture OS"}</p>
-                                      <p className="text-[10px] font-mono text-muted-foreground/70">🌐 {builderDomain} · 🔒 Verified Sender</p>
-                                    </div>
                                   )}
                                 </div>
                               </div>
@@ -1889,7 +2160,7 @@ function MessagesPage() {
                 {/* ════════════════════════════════════════════════════════════════
                     GMAIL-STYLE EXECUTIVE BOTTOM COMPOSER
                     ════════════════════════════════════════════════════════════════ */}
-                <div className="p-3.5 sm:p-4 border-t border-border/80 bg-[#08090d] relative z-30 shrink-0">
+                <div className="p-3.5 sm:p-4 border-t border-border/80 bg-[#0d0d0d] relative z-30 shrink-0">
                   {isUserScrolledUp && (
                     <button
                       type="button"
@@ -1897,7 +2168,7 @@ function MessagesPage() {
                         e.preventDefault();
                         scrollToBottom(true, "smooth");
                       }}
-                      className="absolute -top-12 left-1/2 -translate-x-1/2 z-50 pointer-events-auto flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#141418]/95 border border-primary/50 text-primary shadow-xl hover:bg-primary hover:text-black transition-all cursor-pointer animate-in fade-in slide-in-from-bottom-1 duration-150 text-xs"
+                      className="absolute -top-12 left-1/2 -translate-x-1/2 z-50 pointer-events-auto flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#161616]/95 border border-primary/50 text-primary shadow-xl hover:bg-primary hover:text-black transition-all cursor-pointer animate-in fade-in slide-in-from-bottom-1 duration-150 text-xs"
                       title="Scroll to latest messages"
                     >
                       <ChevronDown className="size-3.5" />
@@ -1952,34 +2223,76 @@ function MessagesPage() {
 
                   {/* Compact Quick Reply Bar (When Not Focused) */}
                   {!isComposerActive && !newMessageText ? (
-                    <div className="flex items-center justify-between gap-3 p-3 rounded-xl border border-border/80 bg-[#0c0d14] hover:border-primary/40 transition-colors">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsComposerActive(true);
-                          setTimeout(() => textareaRef.current?.focus(), 50);
-                        }}
-                        className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground font-medium cursor-pointer"
-                      >
-                        <Reply className="size-4 text-primary" />
-                        <span>Reply to <strong>{selectedThread.leadName}</strong>...</span>
-                      </button>
+                    <div
+                      onClick={() => {
+                        setIsComposerActive(true);
+                        setTimeout(() => textareaRef.current?.focus(), 50);
+                      }}
+                      className="flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl border border-border/70 bg-[#141414] hover:border-primary/40 hover:bg-[#181818] transition-all cursor-pointer group"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        {/* Inline Mode Chips */}
+                        <div className="flex items-center p-0.5 rounded-lg bg-secondary/80 border border-border/60 shrink-0" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setComposerMode("reply");
+                              setIsComposerActive(true);
+                              setTimeout(() => textareaRef.current?.focus(), 50);
+                            }}
+                            className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                              composerMode === "reply"
+                                ? "bg-primary/20 text-primary border border-primary/30"
+                                : "text-muted-foreground hover:text-foreground"
+                            }`}
+                          >
+                            <Reply className="size-3" />
+                            <span>Reply</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setComposerMode("internal");
+                              setIsComposerActive(true);
+                              setTimeout(() => textareaRef.current?.focus(), 50);
+                            }}
+                            className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                              composerMode === "internal"
+                                ? "bg-white/[0.08] text-foreground border border-white/15"
+                                : "text-muted-foreground hover:text-foreground"
+                            }`}
+                          >
+                            <Users className="size-3" />
+                            <span>Team</span>
+                          </button>
+                        </div>
 
-                      <div className="flex items-center gap-2">
+                        {/* Prompt text */}
+                        <span className="text-xs text-muted-foreground group-hover:text-foreground/80 transition-colors truncate">
+                          {composerMode === "reply"
+                            ? `Reply to ${selectedThread.leadName}...`
+                            : "Write a note for the team..."}
+                        </span>
+                      </div>
+
+                      {/* Right Quick Shortcuts */}
+                      <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
                         <button
                           type="button"
                           onClick={() => {
+                            setComposerMode("reply");
                             setIsComposerActive(true);
                             setNewMessageText("Thank you for reaching out! We would love to schedule a design consultation to review your lot and architectural plans.");
+                            setTimeout(() => textareaRef.current?.focus(), 50);
                           }}
-                          className="px-2.5 py-1 rounded-md bg-secondary hover:bg-secondary/80 border border-border text-[11px] text-muted-foreground hover:text-foreground font-mono transition-colors cursor-pointer hidden sm:inline"
+                          className="px-2.5 py-1 rounded-md bg-secondary/70 hover:bg-secondary border border-border/60 text-[11px] text-muted-foreground hover:text-foreground font-mono transition-colors cursor-pointer hidden sm:inline"
                         >
-                          ⚡ Quick Pitch Draft
+                          ⚡ Quick Pitch
                         </button>
                         <button
                           type="button"
                           onClick={() => setIsSchedulingOpen(true)}
-                          className="px-2.5 py-1 rounded-md bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-[11px] font-semibold transition-colors cursor-pointer flex items-center gap-1"
+                          className="px-2.5 py-1 rounded-md bg-primary/10 hover:bg-primary/20 text-primary border border-primary/25 text-[11px] font-semibold transition-colors cursor-pointer flex items-center gap-1"
                         >
                           <Calendar className="size-3" /> Book Visit
                         </button>
@@ -1987,86 +2300,140 @@ function MessagesPage() {
                     </div>
                   ) : (
                     /* Full Gmail Web Composer Box */
-                    <div className="rounded-2xl border border-primary/40 bg-[#0d0e16] shadow-xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-150">
-                      {/* From / To Header */}
-                      <div className="p-3 border-b border-border/50 bg-[#08090f] space-y-2 text-xs">
-                        {/* Dynamic Sender Identity Selector (Employee vs Company vs AI) */}
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2 min-w-0 flex-1">
-                            <span className="text-[10.5px] font-mono text-muted-foreground uppercase font-bold shrink-0">From:</span>
-                            <select
-                              value={selectedSenderIdentity}
-                              onChange={(e) => setSelectedSenderIdentity(e.target.value as any)}
-                              className="bg-secondary/60 border border-border rounded-md px-2 py-1 text-xs text-foreground font-mono focus:outline-none focus:border-primary/50 cursor-pointer"
-                            >
-                              <option value="employee">
-                                {session?.displayName || "Sarah Jenkins"} &lt;{builderSalesEmail}&gt; (Assigned Member)
-                              </option>
-                              <option value="company">
-                                {session?.companyName || "Custom Builder"} Concierge &lt;{builderCompanyEmail}&gt; (Company Desk)
-                              </option>
-                              <option value="ai">
-                                {session?.displayName || "Builder"} AI Concierge &lt;{builderAiEmail}&gt; (Autonomous AI)
-                              </option>
-                            </select>
-                          </div>
-
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <button
-                              type="button"
-                              onClick={() => setShowCcDrawer(prev => !prev)}
-                              className="text-[11px] font-mono text-muted-foreground hover:text-primary cursor-pointer px-1.5 py-0.5 rounded hover:bg-white/5"
-                            >
-                              {showCcDrawer ? "Hide CC" : "Cc / Bcc"}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setIsComposerActive(false);
-                                setNewMessageText("");
-                              }}
-                              className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-white/10 cursor-pointer"
-                              title="Minimize composer"
-                            >
-                              <X className="size-3.5" />
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Recipient Row */}
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10.5px] font-mono text-muted-foreground uppercase font-bold shrink-0">To:</span>
-                          <span className="px-2 py-0.5 rounded-full bg-secondary border border-border text-foreground font-mono text-[11px] truncate">
-                            {selectedThread.leadName} &lt;{selectedThread.email || `${selectedThread.leadName?.toLowerCase().replace(/\s+/g, '')}@gmail.com`}&gt;
+                    <div className={`rounded-2xl border shadow-xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-150 transition-colors ${
+                      composerMode === "internal"
+                        ? "border-border/80 bg-[#141414]"
+                        : "border-primary/40 bg-[#121212]"
+                    }`}>
+                      {/* Dual-Mode Selector Tabs */}
+                      <div className="flex items-center border-b border-border/50 bg-[#0e0e0e] px-3 pt-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setComposerMode("reply")}
+                          className={`px-3 py-1.5 rounded-t-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border-t border-x ${
+                            composerMode === "reply"
+                              ? "bg-[#121212] text-primary border-primary/40 border-b-0 shadow-sm"
+                              : "text-muted-foreground hover:text-foreground border-transparent"
+                          }`}
+                        >
+                          <Reply className="size-3.5" />
+                          <span>Reply to Client</span>
+                          <span className="text-[9.5px] opacity-70 font-mono hidden sm:inline">(Sends Email)</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setComposerMode("internal")}
+                          className={`px-3 py-1.5 rounded-t-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border-t border-x ${
+                            composerMode === "internal"
+                              ? "bg-[#141414] text-foreground border-border/80 border-b-0 shadow-sm"
+                              : "text-muted-foreground hover:text-foreground border-transparent"
+                          }`}
+                        >
+                          <Users className="size-3.5" />
+                          <span>Team</span>
+                          <span className="text-[9px] px-1.5 py-0.2 rounded bg-white/[0.08] text-muted-foreground font-mono font-medium">
+                            Internal
                           </span>
-                        </div>
+                        </button>
 
-                        {/* Optional CC Drawer */}
-                        {showCcDrawer && (
-                          <div className="pt-2 border-t border-border/30 flex flex-col gap-2">
-                            <div className="flex items-center gap-2">
-                              <span className="text-[10px] font-mono text-muted-foreground uppercase font-semibold shrink-0">Subject:</span>
-                              <input
-                                type="text"
-                                value={emailSubject}
-                                onChange={(e) => setEmailSubject(e.target.value)}
-                                className="w-full bg-transparent text-xs text-foreground focus:outline-none"
-                                placeholder={`Re: ${currentThreadSubject}`}
-                              />
+                        <div className="ml-auto pb-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsComposerActive(false);
+                              setNewMessageText("");
+                            }}
+                            className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-white/10 cursor-pointer"
+                            title="Minimize composer"
+                          >
+                            <X className="size-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Header for Reply vs Internal Note */}
+                      {composerMode === "reply" ? (
+                        <div className="p-3 border-b border-border/50 bg-[#101010] space-y-2 text-xs">
+                          {/* Dynamic Sender Identity Selector (Employee vs Company vs AI) */}
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <span className="text-[10.5px] font-mono text-muted-foreground uppercase font-bold shrink-0">From:</span>
+                              <select
+                                value={selectedSenderIdentity}
+                                onChange={(e) => setSelectedSenderIdentity(e.target.value as any)}
+                                className="bg-secondary/60 border border-border rounded-md px-2 py-1 text-xs text-foreground font-mono focus:outline-none focus:border-primary/50 cursor-pointer"
+                              >
+                                <option value="employee">
+                                  {session?.displayName || "Sarah Jenkins"} &lt;{builderSalesEmail}&gt; (Assigned Member)
+                                </option>
+                                <option value="company">
+                                  {session?.companyName || "Custom Builder"} Concierge &lt;{builderCompanyEmail}&gt; (Company Desk)
+                                </option>
+                                <option value="ai">
+                                  {session?.displayName || "Builder"} AI Concierge &lt;{builderAiEmail}&gt; (Autonomous AI)
+                                </option>
+                              </select>
                             </div>
-                            <div className="flex items-center gap-2 pt-1 border-t border-border/20">
-                              <span className="text-[10px] font-mono text-muted-foreground uppercase font-semibold shrink-0">CC:</span>
-                              <input
-                                type="email"
-                                value={ccEmail}
-                                onChange={(e) => setCcEmail(e.target.value)}
-                                placeholder={`team@${builderDomain}`}
-                                className="w-full bg-transparent text-xs text-foreground focus:outline-none font-mono"
-                              />
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => setShowCcDrawer(prev => !prev)}
+                                className="text-[11px] font-mono text-muted-foreground hover:text-primary cursor-pointer px-1.5 py-0.5 rounded hover:bg-white/5"
+                              >
+                                {showCcDrawer ? "Hide CC" : "Cc / Bcc"}
+                              </button>
                             </div>
                           </div>
-                        )}
-                      </div>
+
+                          {/* Recipient Row */}
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10.5px] font-mono text-muted-foreground uppercase font-bold shrink-0">To:</span>
+                            <span className="px-2 py-0.5 rounded-full bg-secondary border border-border text-foreground font-mono text-[11px] truncate">
+                              {selectedThread.leadName} &lt;{selectedThread.email || `${selectedThread.leadName?.toLowerCase().replace(/\s+/g, '')}@gmail.com`}&gt;
+                            </span>
+                          </div>
+
+                          {/* Optional CC Drawer */}
+                          {showCcDrawer && (
+                            <div className="pt-2 border-t border-border/30 flex flex-col gap-2">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-mono text-muted-foreground uppercase font-semibold shrink-0">Subject:</span>
+                                <input
+                                  type="text"
+                                  value={emailSubject}
+                                  onChange={(e) => setEmailSubject(e.target.value)}
+                                  className="w-full bg-transparent text-xs text-foreground focus:outline-none"
+                                  placeholder={currentThreadSubject.startsWith("Re: ") ? currentThreadSubject : `Re: ${currentThreadSubject}`}
+                                />
+                              </div>
+                              <div className="flex items-center gap-2 pt-1 border-t border-border/20">
+                                <span className="text-[10px] font-mono text-muted-foreground uppercase font-semibold shrink-0">CC:</span>
+                                <input
+                                  type="email"
+                                  value={ccEmail}
+                                  onChange={(e) => setCcEmail(e.target.value)}
+                                  placeholder={`team@${builderDomain}`}
+                                  className="w-full bg-transparent text-xs text-foreground focus:outline-none font-mono"
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="p-2.5 px-3.5 bg-secondary/30 border-b border-border/40 flex items-center justify-between text-xs text-muted-foreground">
+                          <div className="flex items-center gap-2">
+                            <Users className="size-3.5 text-foreground shrink-0" />
+                            <span className="font-semibold text-foreground">Team Note</span>
+                            <span className="text-muted-foreground/70 text-[11px] hidden sm:inline">
+                              · Visible only to builder staff. Never sent to {selectedThread.leadName}.
+                            </span>
+                          </div>
+                          <div className="text-[10.5px] font-mono text-muted-foreground">
+                            Author: <strong className="text-foreground">{session?.displayName || "You"}</strong>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Main Rich Textarea Body */}
                       <div className="p-3.5">
@@ -2079,13 +2446,27 @@ function MessagesPage() {
                             e.target.style.height = "auto";
                             e.target.style.height = `${Math.min(e.target.scrollHeight, 240)}px`;
                           }}
-                          placeholder={`Write your response to ${selectedThread.leadName}...`}
-                          className="w-full bg-transparent p-0 text-xs sm:text-[13.5px] text-foreground placeholder:text-muted-foreground/60 focus:outline-none resize-none min-h-[90px] max-h-[240px] font-sans leading-relaxed custom-scrollbar"
+                          onKeyDown={(e) => {
+                            if (e.key === "Escape" && !newMessageText.trim() && !attachedFile && !attachedLink) {
+                              e.preventDefault();
+                              setIsComposerActive(false);
+                            }
+                          }}
+                          placeholder={
+                            composerMode === "internal"
+                              ? `Write a note, phone call summary, or consultation reminder for your team...`
+                              : `Write your response to ${selectedThread.leadName}...`
+                          }
+                          className="w-full bg-transparent p-0 text-xs sm:text-[13.5px] focus:outline-none resize-none min-h-[90px] max-h-[240px] font-sans leading-relaxed custom-scrollbar text-foreground placeholder:text-muted-foreground/60"
                         />
                       </div>
 
                       {/* Gmail Bottom Action Toolbar */}
-                      <div className="px-3.5 py-2.5 border-t border-border/40 bg-[#08090f] flex items-center justify-between gap-2">
+                      <div className={`px-3.5 py-2.5 border-t flex items-center justify-between gap-2 ${
+                        composerMode === "internal"
+                          ? "border-border/40 bg-[#141414]"
+                          : "border-border/40 bg-[#101010]"
+                      }`}>
                         {/* Left Action Buttons */}
                         <div className="flex items-center gap-1 flex-wrap">
                           {/* Send Button */}
@@ -2093,12 +2474,21 @@ function MessagesPage() {
                             type="button"
                             onClick={() => handleSendMessage()}
                             disabled={isSending || (!newMessageText.trim() && !attachedFile && !attachedLink)}
-                            className="px-4 py-1.5 rounded-lg bg-primary text-black text-xs font-bold hover:bg-primary/90 transition-all flex items-center gap-1.5 shadow-md disabled:opacity-40 cursor-pointer shrink-0"
+                            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shadow-md disabled:opacity-40 cursor-pointer shrink-0 ${
+                              composerMode === "internal"
+                                ? "bg-white/15 hover:bg-white/20 text-white border border-white/20 shadow-none"
+                                : "bg-primary text-black hover:bg-primary/90"
+                            }`}
                           >
                             {isSending ? (
                               <>
                                 <Loader2 className="size-3.5 animate-spin" />
-                                <span>Sending...</span>
+                                <span>{composerMode === "internal" ? "Sending to Team..." : "Sending..."}</span>
+                              </>
+                            ) : composerMode === "internal" ? (
+                              <>
+                                <Users className="size-3.5" />
+                                <span>Send to Team</span>
                               </>
                             ) : (
                               <>
@@ -2189,7 +2579,7 @@ function MessagesPage() {
             </>
           ) : (
             /* LOADING / EMPTY VIEW */
-            <div className="flex-1 flex flex-col items-center justify-center p-12 text-center bg-[#070708]/30">
+            <div className="flex-1 flex flex-col items-center justify-center p-12 text-center bg-[#0d0d0d]/30">
               {isLoadingChat ? (
                 <div className="flex flex-col items-center justify-center gap-2">
                   <Loader2 className="size-8 animate-spin text-muted-foreground" />
@@ -2212,10 +2602,10 @@ function MessagesPage() {
           {/* INLINE SCHEDULER POPUP DIALOG */}
           {isSchedulingOpen && selectedThread && (
             <div className="absolute inset-0 bg-[#000000]/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-100">
-              <Card className="w-full max-w-md bg-[#0B0B0C] border border-white/[0.08] rounded-xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
+              <Card className="w-full max-w-md bg-[#121212] border border-white/[0.08] rounded-xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
 
                 {/* Modal Header */}
-                <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-[#101011]">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-[#151515]">
                   <div>
                     <h3 className="font-semibold text-xs text-white">
                       Schedule Meeting
@@ -2376,9 +2766,9 @@ function MessagesPage() {
           {/* DOCUMENT PREVIEW MODAL */}
           {isLookbookOpen && (
             <div className="absolute inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-6 animate-in fade-in duration-200">
-              <div className="w-full max-w-2xl bg-[#09090a]/95 border border-white/[0.08] rounded-2xl shadow-2xl flex flex-col h-[520px] overflow-hidden animate-in zoom-in-95 duration-150">
+              <div className="w-full max-w-2xl bg-[#111111]/95 border border-white/[0.08] rounded-2xl shadow-2xl flex flex-col h-[520px] overflow-hidden animate-in zoom-in-95 duration-150">
                 {/* Header */}
-                <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-[#101011]">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-[#151515]">
                   <div className="flex items-center gap-2">
                     <FileText className="size-4 text-primary" />
                     <div>
@@ -2400,7 +2790,7 @@ function MessagesPage() {
                 </div>
 
                 {/* Slides / Content Area */}
-                <div className="flex-1 p-8 flex flex-col justify-between overflow-y-auto select-none bg-gradient-to-b from-[#09090a] to-[#040405]">
+                <div className="flex-1 p-8 flex flex-col justify-between overflow-y-auto select-none bg-gradient-to-b from-[#121212] to-[#0a0a0a]">
                   <div className="flex-1 min-h-0 flex flex-col justify-center">
                     {lookbookPage === 0 && (
                       <div className="space-y-4 animate-in fade-in duration-300">
@@ -2520,7 +2910,7 @@ function MessagesPage() {
                         type="button"
                         onClick={() => setLookbookPage((prev) => Math.max(0, prev - 1))}
                         disabled={lookbookPage === 0}
-                        className="px-3.5 py-1.5 rounded bg-[#141415] border border-border/40 text-xs font-semibold text-muted-foreground hover:text-white transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                        className="px-3.5 py-1.5 rounded bg-[#141414] border border-border/40 text-xs font-semibold text-muted-foreground hover:text-white transition-colors disabled:opacity-30 disabled:pointer-events-none"
                       >
                         Previous
                       </button>
@@ -2664,7 +3054,7 @@ function MessagesPage() {
       {/* SIMULATE MESSAGE MODAL */}
       {isSimulateOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-[#0B0B0C] border border-border w-[400px] rounded-xl shadow-2xl flex flex-col animate-in fade-in zoom-in duration-200">
+          <div className="bg-[#121212] border border-border w-[400px] rounded-xl shadow-2xl flex flex-col animate-in fade-in zoom-in duration-200">
             <div className="px-5 py-4 border-b border-border flex items-center justify-between">
               <div>
                 <h3 className="font-semibold text-sm text-foreground">Simulate Lead Reply</h3>
@@ -2713,7 +3103,7 @@ function MessagesPage() {
       {/* START NEW CHAT MODAL (WhatsApp Style) */}
       {isNewChatModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-150">
-          <div className="bg-[#12141C] border border-border/80 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[80vh] animate-in zoom-in-95 duration-200">
+          <div className="bg-[#121212] border border-border/80 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[80vh] animate-in zoom-in-95 duration-200">
             {/* Modal Header */}
             <div className="p-4 border-b border-border/60 flex items-center justify-between bg-white/[0.02]">
               <div className="flex items-center gap-2.5">
@@ -2815,8 +3205,8 @@ function MessagesPage() {
       {/* INSERT LINK DIALOG */}
       {isLinkModalOpen && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-[#0e0f14] border border-border w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
-            <div className="px-6 py-4 border-b border-border flex items-center justify-between bg-[#12131b]">
+          <div className="bg-[#121212] border border-border w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="px-6 py-4 border-b border-border flex items-center justify-between bg-[#151515]">
               <div className="flex items-center gap-2.5">
                 <div className="size-8 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
                   <Globe className="size-4" />
@@ -2846,7 +3236,7 @@ function MessagesPage() {
                   value={linkInputUrl}
                   onChange={(e) => setLinkInputUrl(e.target.value)}
                   placeholder="https://example.com/..."
-                  className="w-full bg-[#181924] border border-border focus:border-primary rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none font-mono"
+                  className="w-full bg-[#161616] border border-border focus:border-primary rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none font-mono"
                   autoFocus
                 />
               </div>
@@ -2861,7 +3251,7 @@ function MessagesPage() {
                   value={linkInputTitle}
                   onChange={(e) => setLinkInputTitle(e.target.value)}
                   placeholder="e.g. Project Photos / Spec Sheet"
-                  className="w-full bg-[#181924] border border-border focus:border-primary rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none"
+                  className="w-full bg-[#161616] border border-border focus:border-primary rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none"
                 />
               </div>
 

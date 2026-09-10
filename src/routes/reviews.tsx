@@ -1101,7 +1101,7 @@ function ReviewsPage() {
                 <select
                   value={connectPlatformName}
                   onChange={(e) => setConnectPlatformName(e.target.value)}
-                  className="w-full bg-[#0a0a0a] border border-border rounded-md px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary"
+                  className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary"
                 >
                   <option value="Google Business Reviews">Google Business Reviews</option>
                   <option value="Houzz Reviews">Houzz Reviews</option>
@@ -1119,7 +1119,7 @@ function ReviewsPage() {
                   placeholder="https://g.page/r/your-google-profile"
                   value={connectProfileUrl}
                   onChange={(e) => setConnectProfileUrl(e.target.value)}
-                  className="w-full bg-[#0a0a0a] border border-border rounded-md px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
+                  className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
                 />
               </div>
 

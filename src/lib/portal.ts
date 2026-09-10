@@ -74,9 +74,12 @@ export async function getPortalDataDirect(token: string) {
     data: { portalVisitedAt: new Date() }
   }).catch(() => {});
 
-  // Fetch messages for this lead, ordered chronologically — safe projection only
+  // Fetch messages for this lead, ordered chronologically — safe projection only (strictly exclude internal team notes)
   const messages = await db.message.findMany({
-    where: { leadId: lead.id },
+    where: { 
+      leadId: lead.id,
+      isInternal: false,
+    },
     select: {
       id: true,
       sender: true,

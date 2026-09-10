@@ -1130,7 +1130,7 @@ function SettingsPage() {
                     value={profileForm.aiContext}
                     onChange={e => setProfileForm(p => ({ ...p, aiContext: e.target.value }))}
                     placeholder="e.g. Office hours: Mon-Sat 9am-6pm. We specialize in luxury custom homes & modern architectural estates. Consultation locations: Office or virtual video call."
-                    className="w-full bg-[#0c0d12] border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-primary transition-colors text-white resize-y min-h-[100px]"
+                    className="w-full bg-[#141414] border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-primary transition-colors text-white resize-y min-h-[100px]"
                   />
                   <p className="text-[10px] text-muted-foreground">
                     Provide default operating hours, meeting locations, or policies. The AI will use this context when answering leads and booking appointments.
@@ -1159,7 +1159,7 @@ function SettingsPage() {
           {active === "Appearance" && (
             <div className="space-y-4">
               <H>Appearance</H>
-              <div className="bg-[#0a0a0a] border border-[#333] rounded-md p-6">
+              <div className="bg-card border border-border rounded-xl p-6 shadow-xs">
                 <label className="block text-sm font-medium text-muted-foreground mb-4">Theme Preference</label>
                 <div className="flex items-center gap-3">
                   <button
@@ -1167,7 +1167,7 @@ function SettingsPage() {
                     className={`px-4 py-2 rounded-md text-sm font-medium transition-colors border ${
                       theme === "light" 
                         ? "bg-white text-black border-white" 
-                        : "bg-transparent text-muted-foreground border-[#333] hover:text-white"
+                        : "bg-transparent text-muted-foreground border-border hover:text-white"
                     }`}
                   >
                     Light
@@ -1177,7 +1177,7 @@ function SettingsPage() {
                     className={`px-4 py-2 rounded-md text-sm font-medium transition-colors border ${
                       theme === "dark" 
                         ? "bg-white text-black border-white" 
-                        : "bg-transparent text-muted-foreground border-[#333] hover:text-white"
+                        : "bg-transparent text-muted-foreground border-border hover:text-white"
                     }`}
                   >
                     Dark
@@ -1187,7 +1187,7 @@ function SettingsPage() {
                     className={`px-4 py-2 rounded-md text-sm font-medium transition-colors border ${
                       theme === "system" 
                         ? "bg-white text-black border-white" 
-                        : "bg-transparent text-muted-foreground border-[#333] hover:text-white"
+                        : "bg-transparent text-muted-foreground border-border hover:text-white"
                     }`}
                   >
                     System
@@ -1335,7 +1335,7 @@ function SettingsPage() {
 
                       {/* Visible URL Bar when toggled */}
                       {showWebhookUrl && (
-                        <div className="p-3 rounded-lg bg-[#06070a] border border-border font-mono text-xs text-foreground select-all overflow-x-auto whitespace-nowrap animate-in fade-in duration-150">
+                        <div className="p-3 rounded-lg bg-[#101010] border border-border font-mono text-xs text-foreground select-all overflow-x-auto whitespace-nowrap animate-in fade-in duration-150">
                           {inboundWebhookUrl}
                         </div>
                       )}
@@ -1379,7 +1379,7 @@ function SettingsPage() {
                       </div>
 
                       {/* Row 3: Setup Instructions Box */}
-                      <div className="p-4 rounded-xl bg-[#06070a] border border-border/80 space-y-3">
+                      <div className="p-4 rounded-xl bg-[#101010] border border-border/80 space-y-3">
                         {inboundTab === "zapier" && (
                           <div className="space-y-2.5">
                             <div className="flex items-center justify-between border-b border-border/40 pb-2">
@@ -1509,7 +1509,7 @@ function SettingsPage() {
                                   {copiedKey === "html_form" ? "Copied HTML!" : "Copy HTML Snippet"}
                                 </button>
                               </div>
-                              <pre className="p-3 rounded-lg bg-[#06070a] border border-border text-[11px] font-mono text-foreground/90 overflow-x-auto">
+                              <pre className="p-3 rounded-lg bg-[#101010] border border-border text-[11px] font-mono text-foreground/90 overflow-x-auto">
 {`<form action="${inboundWebhookUrl}" method="POST">
   <input type="text" name="name" placeholder="Your Full Name" required />
   <input type="email" name="email" placeholder="Your Email Address" required />
@@ -2475,7 +2475,7 @@ function SettingsPage() {
               </div>
 
               {/* Brand & Version Hero Card */}
-              <div className="relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-[#121214] via-[#09090b] to-[#040405] p-6 shadow-xl">
+              <div className="relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-[#161616] via-[#141414] to-[#121212] p-6 shadow-xl">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="flex items-center gap-3.5">
                     <div className="size-12 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center p-2 shadow-inner">

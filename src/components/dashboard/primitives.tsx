@@ -4,16 +4,18 @@ export function Card({
   children,
   className = "",
   highlight = false,
+  lift = false,
 }: {
   children: ReactNode;
   className?: string;
   highlight?: boolean;
+  lift?: boolean;
 }) {
   return (
     <div
-      className={`group bg-card border border-border rounded-lg card-lift ${
-        highlight ? "card-highlight" : ""
-      } ${className}`}
+      className={`group bg-card border border-border/80 rounded-xl shadow-xs transition-colors ${
+        lift ? "card-lift" : ""
+      } ${highlight ? "card-highlight" : ""} ${className}`}
     >
       {children}
     </div>
@@ -70,30 +72,27 @@ export function Badge({
 }
 
 export function ScoreBadge({ score }: { score: "hot" | "warm" | "cold" }) {
-  const map = {
-    hot:  { label: "Hot",  emoji: "🔥" },
-    warm: { label: "Warm", emoji: "🌤" },
-    cold: { label: "Cold", emoji: "🧊" },
+  const map: Record<string, string> = {
+    hot:  "Hot",
+    warm: "Warm",
+    cold: "Cold",
   };
   return (
     <Badge tone={score}>
-      <span>{map[score].emoji}</span>
-      {map[score].label}
+      {map[score] || score}
     </Badge>
   );
 }
 
 export function StageBadge({ stage }: { stage: string }) {
   const tone =
-    stage === "Closed Won"
+    stage === "Closed Won" || stage === "Qualified"
       ? "success"
       : stage === "Closed Lost"
         ? "neutral"
         : stage === "Appointment" || stage === "Site Visit"
           ? "info"
-          : stage === "Qualified"
-            ? "warm"
-            : "neutral";
+          : "neutral";
   return <Badge tone={tone as never}>{stage}</Badge>;
 }
 
