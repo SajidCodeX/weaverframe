@@ -63,6 +63,7 @@ model User {
   authoredMessages Message[] @relation("UserAuthoredMessages")
 
   @@index([builderId])
+  @@index([resetToken])
 }
 
 // ─── LEADS ───────────────────────────────────────────────────────────────────
@@ -116,6 +117,7 @@ model Lead {
   @@index([status, createdAt])
   @@index([assignedToId])
   @@index([builderId, status])
+  @@index([builderId, email])
 }
 
 // ─── REVIEW PLATFORMS ────────────────────────────────────────────────────────
@@ -197,6 +199,7 @@ model Appointment {
   @@index([createdAt])
   @@index([builderId, createdAt])
   @@index([builderId, dateTime])
+  @@index([builderId, status, dateTime])
 }
 
 // ─── MESSAGES ────────────────────────────────────────────────────────────────
@@ -228,6 +231,9 @@ model Message {
   @@index([leadId, isInternal])
   @@index([builderId, leadId])
   @@index([createdAt])
+  @@index([builderId, sender, createdAt])
+  @@index([leadId, sender, isRead])
+  @@index([leadId, sender, createdAt])
 }
 
 // ─── INTEGRATIONS ────────────────────────────────────────────────────────────
@@ -243,6 +249,7 @@ model Integration {
   createdAt    DateTime @default(now())
   
   @@unique([builderId, platformId])
+  @@index([platformId, isConnected])
 }
 
 // ─── PUBLIC REVIEWS (EXTERNAL SITES) ─────────────────────────────────────────
@@ -264,6 +271,7 @@ model PublicReview {
 
   @@index([builderId])
   @@index([builderId, createdAt])
+  @@index([sentAt])
 }
 
 // ─── PLATFORM SETTINGS ───────────────────────────────────────────────────────

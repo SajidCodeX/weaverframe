@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import { Shell } from "@/components/dashboard/Shell";
 import { Card, CardHeader, ScoreBadge } from "@/components/dashboard/primitives";
+import { ActivationChecklist } from "@/components/dashboard/ActivationChecklist";
 import { getDashboardData } from "../lib/dashboard";
 import { getSessionFn } from "@/lib/auth";
 import { obscurePII } from "@/lib/utils";
@@ -36,7 +37,7 @@ export const Route = createFileRoute("/")({
       
     return getDashboardData({ data: { activeRole } });
   },
-  staleTime: 60_000, // 60s — fresh data, instant revisits within a minute
+  staleTime: 5_000, // 5s — fast refresh when returning from settings/activation steps
   pendingMs: 0,
   pendingComponent: () => <RoutePending title="Loading Overview..." type="overview" />,
   component: Overview,
@@ -319,6 +320,9 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
 
   return (
     <>
+      {/* 5-Step Luxury Activation Checklist */}
+      <ActivationChecklist data={(data as any)?.activationChecklist} />
+
       {/* KPI row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Kpi

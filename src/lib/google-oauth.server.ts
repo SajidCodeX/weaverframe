@@ -249,6 +249,12 @@ export async function getValidGoogleAccessToken(builderId: string): Promise<{
  * Dispatches an outbound email directly using the official Gmail REST API.
  * Serverless-optimized: Uses HTTPS fetch with zero raw TCP socket overhead.
  */
+export interface GmailApiAttachment {
+  filename: string;
+  content: Buffer | string;
+  contentType?: string;
+}
+
 export async function sendGmailViaRestApi(
   accessToken: string,
   options: {
@@ -258,6 +264,7 @@ export async function sendGmailViaRestApi(
     text?: string;
     from?: string;
     replyTo?: string;
+    attachments?: GmailApiAttachment[];
   }
 ): Promise<{ success: boolean; id?: string; error?: string }> {
   try {
@@ -267,20 +274,69 @@ export async function sendGmailViaRestApi(
 
     const bodyContent = options.html || options.text || '';
     const contentType = options.html ? 'text/html; charset=utf-8' : 'text/plain; charset=utf-8';
+    const hasAttachments = options.attachments && options.attachments.length > 0;
 
-    const headers = [
-      `From: ${fromAddress}`,
-      `To: ${recipients}`,
-      ...(options.replyTo ? [`Reply-To: ${options.replyTo}`] : []),
-      `Subject: ${utf8Subject}`,
-      'MIME-Version: 1.0',
-      `Content-Type: ${contentType}`,
-      'Content-Transfer-Encoding: 7bit',
-      '',
-      bodyContent
-    ];
+    let rawMessage = '';
 
-    const rawMessage = headers.join('\r\n');
+    if (!hasAttachments) {
+      const headers = [
+        `From: ${fromAddress}`,
+        `To: ${recipients}`,
+        ...(options.replyTo ? [`Reply-To: ${options.replyTo}`] : []),
+        `Subject: ${utf8Subject}`,
+        'MIME-Version: 1.0',
+        `Content-Type: ${contentType}`,
+        'Content-Transfer-Encoding: 7bit',
+        '',
+        bodyContent
+      ];
+      rawMessage = headers.join('\r\n');
+    } else {
+      const boundary = `====_WeaverFrame_${Date.now()}_====`;
+      const headers = [
+        `From: ${fromAddress}`,
+        `To: ${recipients}`,
+        ...(options.replyTo ? [`Reply-To: ${options.replyTo}`] : []),
+        `Subject: ${utf8Subject}`,
+        'MIME-Version: 1.0',
+        `Content-Type: multipart/mixed; boundary="${boundary}"`,
+        '',
+        `--${boundary}`,
+        `Content-Type: ${contentType}`,
+        'Content-Transfer-Encoding: 7bit',
+        '',
+        bodyContent,
+        ''
+      ];
+
+      for (const att of options.attachments!) {
+        const mime = att.contentType || 'application/octet-stream';
+        let b64 = '';
+        if (Buffer.isBuffer(att.content)) {
+          b64 = att.content.toString('base64');
+        } else if (typeof att.content === 'string') {
+          if (att.content.startsWith('data:')) {
+            b64 = att.content.replace(/^data:[^;]+;base64,/, '');
+          } else {
+            b64 = att.content;
+          }
+        }
+        const formattedB64 = b64.replace(/(.{76})/g, '$1\r\n');
+        headers.push(
+          `--${boundary}`,
+          `Content-Type: ${mime}; name="${att.filename}"`,
+          `Content-Disposition: attachment; filename="${att.filename}"`,
+          'Content-Transfer-Encoding: base64',
+          '',
+          formattedB64,
+          ''
+        );
+      }
+
+      headers.push(`--${boundary}--`);
+      rawMessage = headers.join('\r\n');
+    }
+
     const base64UrlMessage = Buffer.from(rawMessage)
       .toString('base64')
       .replace(/\+/g, '-')
@@ -408,12 +464,12 @@ function extractBodyFromGmailPayload(payload: any): string {
 
 /**
  * Ingests inbound emails from leads via Gmail REST API.
- * Serverless-friendly, instant, and replaces legacy IMAP on Vercel.
+ * Serverless-friendly, instant, and downloads attachments (images, PDFs, documents).
  */
 export async function fetchRecentGmailInboundMessages(
   accessToken: string,
   leadEmailMap: Map<string, any>
-): Promise<Array<{ leadId: string; senderEmail: string; subject: string; body: string; date: Date }>> {
+): Promise<Array<{ leadId: string; senderEmail: string; subject: string; body: string; attachmentTokens: string[]; date: Date }>> {
   try {
     const listRes = await fetch(
       'https://gmail.googleapis.com/gmail/v1/users/me/messages?q=in:inbox&maxResults=15',
@@ -424,7 +480,36 @@ export async function fetchRecentGmailInboundMessages(
 
     const listData = await listRes.json();
     const messages = listData.messages || [];
-    const matchedInbound: Array<{ leadId: string; senderEmail: string; subject: string; body: string; date: Date }> = [];
+    const matchedInbound: Array<{ leadId: string; senderEmail: string; subject: string; body: string; attachmentTokens: string[]; date: Date }> = [];
+
+    // Helper to format bytes to human-readable size
+    const formatBytes = (bytes: number): string => {
+      if (!bytes || isNaN(bytes)) return '1.0 MB';
+      if (bytes > 1024 * 1024) {
+        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+      }
+      return `${Math.round(bytes / 1024)} KB`;
+    };
+
+    // Helper to recursively collect all attachment parts from Gmail payload
+    const findAttachmentParts = (parts: any[], acc: Array<{ filename: string; mimeType: string; size: number; attachmentId?: string; inlineData?: string }> = []): Array<{ filename: string; mimeType: string; size: number; attachmentId?: string; inlineData?: string }> => {
+      if (!parts || !Array.isArray(parts)) return acc;
+      for (const p of parts) {
+        if (p.filename && (p.body?.attachmentId || p.body?.data)) {
+          acc.push({
+            filename: p.filename,
+            mimeType: p.mimeType || 'application/octet-stream',
+            size: Number(p.body?.size) || 0,
+            attachmentId: p.body?.attachmentId,
+            inlineData: p.body?.data,
+          });
+        }
+        if (p.parts) {
+          findAttachmentParts(p.parts, acc);
+        }
+      }
+      return acc;
+    };
 
     for (const msg of messages) {
       const detailRes = await fetch(
@@ -444,12 +529,93 @@ export async function fetchRecentGmailInboundMessages(
 
       if (cleanFrom && leadEmailMap.has(cleanFrom)) {
         const lead = leadEmailMap.get(cleanFrom)!;
-        const bodyText = extractBodyFromGmailPayload(detail.payload) || detail.snippet || '';
+        let bodyText = extractBodyFromGmailPayload(detail.payload) || detail.snippet || '';
+
+        // Extract and download attachments
+        const rawParts = findAttachmentParts(detail.payload?.parts);
+        const attachmentTokens: string[] = [];
+
+        for (const part of rawParts) {
+          try {
+            let base64 = '';
+            let finalSize = part.size;
+
+            if (part.inlineData) {
+              base64 = part.inlineData.replace(/-/g, '+').replace(/_/g, '/');
+            } else if (part.attachmentId) {
+              // Skip downloading excessively large files (> 10MB) to protect serverless memory
+              if (finalSize > 10 * 1024 * 1024) {
+                const sizeStr = formatBytes(finalSize);
+                if (part.mimeType.startsWith('image/')) {
+                  attachmentTokens.push(`🖼️ Image Shared: ${part.filename}|size=${sizeStr}|data=`);
+                } else {
+                  attachmentTokens.push(`📎 File Attachment: ${part.filename}|size=${sizeStr}|type=${part.mimeType}|data=`);
+                }
+                continue;
+              }
+
+              const attRes = await fetch(
+                `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}/attachments/${part.attachmentId}`,
+                { headers: { Authorization: `Bearer ${accessToken}` } }
+              );
+
+              if (attRes.ok) {
+                const attData = await attRes.json();
+                if (attData.data) {
+                  base64 = attData.data.replace(/-/g, '+').replace(/_/g, '/');
+                }
+                if (attData.size) finalSize = attData.size;
+              }
+            }
+
+            const sizeStr = formatBytes(finalSize);
+            
+            let fileUrl = '';
+            if (base64) {
+              try {
+                const { uploadAttachmentToR2, isR2Configured } = await import('./storage.server');
+                if (isR2Configured()) {
+                  const buf = Buffer.from(base64, 'base64');
+                  const r2Res = await uploadAttachmentToR2({
+                    buffer: buf,
+                    filename: part.filename,
+                    contentType: part.mimeType,
+                    folder: `gmail/${lead.id}`,
+                  });
+                  fileUrl = r2Res.url;
+                }
+              } catch (r2Err) {
+                console.warn('[GMAIL API] R2 upload failed, falling back to dataUrl:', r2Err);
+              }
+            }
+
+            if (!fileUrl && base64) {
+              fileUrl = `data:${part.mimeType};base64,${base64}`;
+            }
+
+            if (fileUrl) {
+              if (part.mimeType.startsWith('image/')) {
+                attachmentTokens.push(`🖼️ Image Shared: ${part.filename}|size=${sizeStr}|data=${fileUrl}`);
+              } else {
+                attachmentTokens.push(`📎 File Attachment: ${part.filename}|size=${sizeStr}|type=${part.mimeType}|data=${fileUrl}`);
+              }
+            }
+          } catch (attErr) {
+            console.warn(`[GMAIL API] Failed to download attachment ${part.filename}:`, attErr);
+          }
+        }
+
+        // If image attachments exist, clean out Gmail's inline "[image: filename.jpg]" text artifact
+        if (attachmentTokens.length > 0) {
+          bodyText = bodyText.replace(/\[image:\s*[^\]]+\]/gi, '').trim();
+        }
+
         matchedInbound.push({
           leadId: lead.id,
           senderEmail: cleanFrom,
           subject: subjectHeader,
           body: bodyText,
+          attachmentTokens,
           date: dateHeader ? new Date(dateHeader) : new Date()
         });
       }

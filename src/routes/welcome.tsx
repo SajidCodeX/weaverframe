@@ -1536,7 +1536,7 @@ function WelcomePage() {
                 <li><span className="text-white/80">Strict Multi-Tenant Isolation</span></li>
                 <li><span className="text-white/80">SOC-2 & GDPR Compliance</span></li>
                 <li><span className="text-white/80">Private AI Model Training</span></li>
-                <li><Link to="/login" className="text-[#e5d9c5] hover:underline">Client Portal Access →</Link></li>
+                <li><Link to="/login" className="text-[#e5d9c5] hover:underline">Client Login →</Link></li>
               </ul>
             </div>
           </div>

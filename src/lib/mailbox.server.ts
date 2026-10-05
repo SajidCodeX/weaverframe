@@ -153,20 +153,46 @@ export async function syncInboundMailbox(builderId?: string, force = false): Pro
           const inboundMessages = await fetchRecentGmailInboundMessages(oauthData.accessToken, leadEmailMap);
           for (const msg of inboundMessages) {
             const rawCleanBody = stripEmailQuotedHistory(msg.body);
-            if (!rawCleanBody || rawCleanBody.length === 0) continue;
-
             const { sanitizeInboundEmail } = await import('./sanitizer');
-            const cleanBody = sanitizeInboundEmail(rawCleanBody);
+            let cleanBody = sanitizeInboundEmail(rawCleanBody);
+
+            if (msg.attachmentTokens && msg.attachmentTokens.length > 0) {
+              cleanBody = cleanBody
+                ? `${cleanBody}\n\n${msg.attachmentTokens.join('\n\n')}`
+                : msg.attachmentTokens.join('\n\n');
+            }
+
+            if (!cleanBody || cleanBody.length === 0) continue;
 
             const existing = await db.message.findFirst({
               where: {
                 leadId: msg.leadId,
                 sender: 'lead',
-                content: cleanBody,
+                createdAt: {
+                  gte: new Date(msg.date.getTime() - 15000),
+                  lte: new Date(msg.date.getTime() + 15000)
+                }
               }
             });
 
-            if (!existing) {
+            if (existing) {
+              // Self-healing: if previously ingested without attachments but we now have attachments, upgrade the record
+              if (msg.attachmentTokens && msg.attachmentTokens.length > 0 && !existing.content.includes('data=')) {
+                await db.message.update({
+                  where: { id: existing.id },
+                  data: { content: cleanBody }
+                });
+                console.log(`[MAILBOX SYNC] Upgraded existing message ${existing.id} with ${msg.attachmentTokens.length} attachment(s).`);
+              }
+              // Self-healing: ensure lead status is at least 'Replied' even for previously ingested messages
+              await db.lead.updateMany({
+                where: {
+                  id: msg.leadId,
+                  status: { in: ['New', 'Emailed', 'Opened', 'Outreach', 'contacted'] },
+                },
+                data: { status: 'Replied' },
+              }).catch(() => {});
+            } else {
               await db.message.create({
                 data: {
                   builderId: targetBuilderId,
@@ -219,15 +245,6 @@ export async function syncInboundMailbox(builderId?: string, force = false): Pro
 
               invalidateCache("dashboard_");
               syncedCount++;
-            } else {
-              // Self-healing: ensure lead status is at least 'Replied' even for previously ingested messages
-              await db.lead.updateMany({
-                where: {
-                  id: msg.leadId,
-                  status: { in: ['New', 'Emailed', 'Opened', 'Outreach', 'contacted'] },
-                },
-                data: { status: 'Replied' },
-              }).catch(() => {});
             }
           }
 
@@ -363,26 +380,95 @@ export async function syncInboundMailbox(builderId?: string, force = false): Pro
           const rawBody = parsed?.text || '';
           const rawCleanBody = stripEmailQuotedHistory(rawBody);
 
-          if (!rawCleanBody || rawCleanBody.length === 0) {
-            continue;
+          // Extract attachments from parsed.attachments
+          const attachmentTokens: string[] = [];
+          if (parsed?.attachments && Array.isArray(parsed.attachments)) {
+            for (const att of parsed.attachments) {
+              try {
+                if (!att.content || (att.size && att.size > 10 * 1024 * 1024)) continue;
+                const filename = att.filename || 'attachment';
+                const mimeType = att.contentType || 'application/octet-stream';
+                const size = att.size || att.content.length || 0;
+                const sizeStr = size > 1024 * 1024 ? `${(size / (1024 * 1024)).toFixed(1)} MB` : `${Math.round(size / 1024)} KB`;
+                
+                let fileUrl = '';
+                try {
+                  const { uploadAttachmentToR2, isR2Configured } = await import('./storage.server');
+                  if (isR2Configured()) {
+                    const buf = Buffer.isBuffer(att.content) ? att.content : Buffer.from(att.content);
+                    const r2Res = await uploadAttachmentToR2({
+                      buffer: buf,
+                      filename,
+                      contentType: mimeType,
+                      folder: `inbound/${item.matchedLead.id}`,
+                    });
+                    fileUrl = r2Res.url;
+                  }
+                } catch (r2Err) {
+                  console.warn('[IMAP SYNC] R2 upload failed, falling back to base64 dataUrl:', r2Err);
+                }
+
+                if (!fileUrl) {
+                  const base64 = Buffer.isBuffer(att.content) ? att.content.toString('base64') : Buffer.from(att.content).toString('base64');
+                  fileUrl = `data:${mimeType};base64,${base64}`;
+                }
+
+                if (mimeType.startsWith('image/')) {
+                  attachmentTokens.push(`🖼️ Image Shared: ${filename}|size=${sizeStr}|data=${fileUrl}`);
+                } else {
+                  attachmentTokens.push(`📎 File Attachment: ${filename}|size=${sizeStr}|type=${mimeType}|data=${fileUrl}`);
+                }
+              } catch (attErr) {
+                console.warn('[IMAP SYNC] Failed to process attachment:', attErr);
+              }
+            }
           }
 
           // Sanitize inbound body to neutralize injection vectors, strip HTML & zero-width characters
           const { sanitizeInboundEmail } = await import('./sanitizer');
-          const cleanBody = sanitizeInboundEmail(rawCleanBody);
+          let cleanBody = sanitizeInboundEmail(rawCleanBody);
+
+          if (attachmentTokens.length > 0) {
+            cleanBody = cleanBody.replace(/\[image:\s*[^\]]+\]/gi, '').trim();
+            cleanBody = cleanBody ? `${cleanBody}\n\n${attachmentTokens.join('\n\n')}` : attachmentTokens.join('\n\n');
+          }
+
+          if (!cleanBody || cleanBody.length === 0) {
+            continue;
+          }
 
           const mailDate = item.envelope?.date || new Date();
 
-          // Deduplication: Check if message content already exists in DB for this lead
+          // Deduplication / self-healing: Check if message already exists in DB for this lead
           const existing = await db.message.findFirst({
             where: {
               leadId: item.matchedLead.id,
               sender: 'lead',
-              content: cleanBody,
+              createdAt: {
+                gte: new Date(mailDate.getTime() - 15000),
+                lte: new Date(mailDate.getTime() + 15000)
+              }
             }
           });
 
-          if (!existing) {
+          if (existing) {
+            // Self-healing: if previously ingested without attachments, upgrade with attachments
+            if (attachmentTokens.length > 0 && !existing.content.includes('data=')) {
+              await db.message.update({
+                where: { id: existing.id },
+                data: { content: cleanBody }
+              });
+              console.log(`[IMAP SYNC] Upgraded existing message ${existing.id} with ${attachmentTokens.length} attachment(s).`);
+            }
+            // Self-healing: ensure lead status is at least 'Replied' even for previously ingested messages
+            await db.lead.updateMany({
+              where: {
+                id: item.matchedLead.id,
+                status: { in: ['New', 'Emailed', 'Opened', 'Outreach', 'contacted'] },
+              },
+              data: { status: 'Replied' },
+            }).catch(() => {});
+          } else {
             // A. Insert Inbound Message from Lead into DB
             await db.message.create({
               data: {
@@ -437,15 +523,6 @@ export async function syncInboundMailbox(builderId?: string, force = false): Pro
 
             invalidateCache("dashboard_");
             newSyncedCount++;
-          } else {
-            // Self-healing: ensure lead status is at least 'Replied' even for previously ingested messages
-            await db.lead.updateMany({
-              where: {
-                id: item.matchedLead.id,
-                status: { in: ['New', 'Emailed', 'Opened', 'Outreach', 'contacted'] },
-              },
-              data: { status: 'Replied' },
-            }).catch(() => {});
           }
         }
       }

@@ -88,7 +88,7 @@ function ReviewsPage() {
   const [selectedReviewId, setSelectedReviewId] = useState<string>("");
   const [responseTone, setResponseTone] = useState<string>("appreciative");
   const [selectedKeywords, setSelectedKeywords] = useState<string[]>([
-    "Austin Custom Home Builder",
+    "Luxury Custom Home Builder",
     "Premium Custom Craftsmanship"
   ]);
   const [aiResponseText, setAiResponseText] = useState<string>("");
@@ -241,7 +241,7 @@ function ReviewsPage() {
       // Inject active selected keywords if not present
       selectedKeywords.forEach(kw => {
         if (!draftText.toLowerCase().includes(kw.toLowerCase())) {
-          draftText += ` We strive to remain the premier ${kw} in Texas.`;
+          draftText += ` We strive to remain the premier ${kw}.`;
         }
       });
 
@@ -655,7 +655,7 @@ function ReviewsPage() {
                       <label className="block text-[10px] text-muted-foreground mb-1.5 uppercase tracking-widest font-semibold">Local SEO Target Keywords</label>
                       <div className="flex flex-wrap gap-1">
                         {[
-                          "Austin Custom Home Builder",
+                          "Luxury Custom Home Builder",
                           "Premium Custom Craftsmanship",
                           "Luxury Residential Construction"
                         ].map(kw => {

@@ -13,6 +13,7 @@ import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as TeamRouteImport } from './routes/team'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ReviewsRouteImport } from './routes/reviews'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as MessagesRouteImport } from './routes/messages'
 import { Route as LoginRouteImport } from './routes/login'
@@ -22,7 +23,6 @@ import { Route as AppointmentsRouteImport } from './routes/appointments'
 import { Route as AiActivityRouteImport } from './routes/ai-activity'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
-import { Route as PortalTokenRouteImport } from './routes/portal.$token'
 import { Route as InviteTokenRouteImport } from './routes/invite.$token'
 import { Route as ApiRateRouteImport } from './routes/api.rate'
 import { Route as AdminUsersRouteImport } from './routes/admin/users'
@@ -54,6 +54,11 @@ const SettingsRoute = SettingsRouteImport.update({
 const ReviewsRoute = ReviewsRouteImport.update({
   id: '/reviews',
   path: '/reviews',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ReportsRoute = ReportsRouteImport.update({
@@ -99,11 +104,6 @@ const IndexRoute = IndexRouteImport.update({
 const AdminIndexRoute = AdminIndexRouteImport.update({
   id: '/admin/',
   path: '/admin/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PortalTokenRoute = PortalTokenRouteImport.update({
-  id: '/portal/$token',
-  path: '/portal/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const InviteTokenRoute = InviteTokenRouteImport.update({
@@ -176,6 +176,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/messages': typeof MessagesRoute
   '/reports': typeof ReportsRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/reviews': typeof ReviewsRoute
   '/settings': typeof SettingsRoute
   '/team': typeof TeamRoute
@@ -188,7 +189,6 @@ export interface FileRoutesByFullPath {
   '/admin/users': typeof AdminUsersRoute
   '/api/rate': typeof ApiRateRoute
   '/invite/$token': typeof InviteTokenRoute
-  '/portal/$token': typeof PortalTokenRoute
   '/admin/': typeof AdminIndexRoute
   '/api/billing/webhook': typeof ApiBillingWebhookRoute
   '/api/cron/sync-leads': typeof ApiCronSyncLeadsRoute
@@ -204,6 +204,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/messages': typeof MessagesRoute
   '/reports': typeof ReportsRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/reviews': typeof ReviewsRoute
   '/settings': typeof SettingsRoute
   '/team': typeof TeamRoute
@@ -216,7 +217,6 @@ export interface FileRoutesByTo {
   '/admin/users': typeof AdminUsersRoute
   '/api/rate': typeof ApiRateRoute
   '/invite/$token': typeof InviteTokenRoute
-  '/portal/$token': typeof PortalTokenRoute
   '/admin': typeof AdminIndexRoute
   '/api/billing/webhook': typeof ApiBillingWebhookRoute
   '/api/cron/sync-leads': typeof ApiCronSyncLeadsRoute
@@ -233,6 +233,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/messages': typeof MessagesRoute
   '/reports': typeof ReportsRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/reviews': typeof ReviewsRoute
   '/settings': typeof SettingsRoute
   '/team': typeof TeamRoute
@@ -245,7 +246,6 @@ export interface FileRoutesById {
   '/admin/users': typeof AdminUsersRoute
   '/api/rate': typeof ApiRateRoute
   '/invite/$token': typeof InviteTokenRoute
-  '/portal/$token': typeof PortalTokenRoute
   '/admin/': typeof AdminIndexRoute
   '/api/billing/webhook': typeof ApiBillingWebhookRoute
   '/api/cron/sync-leads': typeof ApiCronSyncLeadsRoute
@@ -263,6 +263,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/messages'
     | '/reports'
+    | '/reset-password'
     | '/reviews'
     | '/settings'
     | '/team'
@@ -275,7 +276,6 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/api/rate'
     | '/invite/$token'
-    | '/portal/$token'
     | '/admin/'
     | '/api/billing/webhook'
     | '/api/cron/sync-leads'
@@ -291,6 +291,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/messages'
     | '/reports'
+    | '/reset-password'
     | '/reviews'
     | '/settings'
     | '/team'
@@ -303,7 +304,6 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/api/rate'
     | '/invite/$token'
-    | '/portal/$token'
     | '/admin'
     | '/api/billing/webhook'
     | '/api/cron/sync-leads'
@@ -319,6 +319,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/messages'
     | '/reports'
+    | '/reset-password'
     | '/reviews'
     | '/settings'
     | '/team'
@@ -331,7 +332,6 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/api/rate'
     | '/invite/$token'
-    | '/portal/$token'
     | '/admin/'
     | '/api/billing/webhook'
     | '/api/cron/sync-leads'
@@ -348,6 +348,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   MessagesRoute: typeof MessagesRoute
   ReportsRoute: typeof ReportsRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
   ReviewsRoute: typeof ReviewsRoute
   SettingsRoute: typeof SettingsRoute
   TeamRoute: typeof TeamRoute
@@ -360,7 +361,6 @@ export interface RootRouteChildren {
   AdminUsersRoute: typeof AdminUsersRoute
   ApiRateRoute: typeof ApiRateRoute
   InviteTokenRoute: typeof InviteTokenRoute
-  PortalTokenRoute: typeof PortalTokenRoute
   AdminIndexRoute: typeof AdminIndexRoute
   ApiBillingWebhookRoute: typeof ApiBillingWebhookRoute
   ApiCronSyncLeadsRoute: typeof ApiCronSyncLeadsRoute
@@ -396,6 +396,13 @@ declare module '@tanstack/react-router' {
       path: '/reviews'
       fullPath: '/reviews'
       preLoaderRoute: typeof ReviewsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reports': {
@@ -459,13 +466,6 @@ declare module '@tanstack/react-router' {
       path: '/admin'
       fullPath: '/admin/'
       preLoaderRoute: typeof AdminIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/portal/$token': {
-      id: '/portal/$token'
-      path: '/portal/$token'
-      fullPath: '/portal/$token'
-      preLoaderRoute: typeof PortalTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/invite/$token': {
@@ -564,6 +564,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   MessagesRoute: MessagesRoute,
   ReportsRoute: ReportsRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
   ReviewsRoute: ReviewsRoute,
   SettingsRoute: SettingsRoute,
   TeamRoute: TeamRoute,
@@ -576,7 +577,6 @@ const rootRouteChildren: RootRouteChildren = {
   AdminUsersRoute: AdminUsersRoute,
   ApiRateRoute: ApiRateRoute,
   InviteTokenRoute: InviteTokenRoute,
-  PortalTokenRoute: PortalTokenRoute,
   AdminIndexRoute: AdminIndexRoute,
   ApiBillingWebhookRoute: ApiBillingWebhookRoute,
   ApiCronSyncLeadsRoute: ApiCronSyncLeadsRoute,

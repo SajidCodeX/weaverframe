@@ -175,6 +175,45 @@ function SettingsPage() {
   const [expandedIntegration, setExpandedIntegration] = useState<string | null>(null);
   const { theme, setTheme } = useTheme();
 
+  // ── Highlight & Deep-Link for Concierge Activation Steps ───────────────────
+  const [highlightSection, setHighlightSection] = useState<"profile" | "mailbox" | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const urlTab = url.searchParams.get("tab");
+    const highlight = url.searchParams.get("highlight");
+
+    if (highlight === "profile" || urlTab?.toLowerCase().includes("profile")) {
+      setActive("Builder Profile");
+      if (highlight === "profile") {
+        setHighlightSection("profile");
+        setTimeout(() => {
+          const el = document.getElementById("activation-profile-section");
+          if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 200);
+        const timer = setTimeout(() => {
+          setHighlightSection(null);
+        }, 3000);
+        return () => clearTimeout(timer);
+      }
+    } else if (highlight === "mailbox" || urlTab?.toLowerCase() === "integrations") {
+      setActive("Integrations");
+      if (highlight === "mailbox") {
+        setExpandedIntegration("email_mailbox");
+        setHighlightSection("mailbox");
+        setTimeout(() => {
+          const el = document.getElementById("activation-mailbox-section");
+          if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 200);
+        const timer = setTimeout(() => {
+          setHighlightSection(null);
+        }, 3000);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, []);
+
   // ── Billing States ──────────────────────────────────────────────────────────
   const [adSpendBalance, setAdSpendBalance] = useState(loadedBillingProfile.adSpendBalance);
   const [paymentMethod, setPaymentMethod] = useState(loadedBillingProfile.paymentMethod);
@@ -538,6 +577,12 @@ function SettingsPage() {
     
     if (!usPhoneRegex.test(phoneTrimmed) && !indiaPhoneRegex.test(phoneTrimmed)) {
       alert("Please enter a valid US or Indian phone number.");
+      return;
+    }
+
+    // Compulsory AI Knowledge Base Check
+    if (!profileForm.aiContext || profileForm.aiContext.trim().length < 20) {
+      alert("AI Knowledge Base / Builder Defaults is compulsory (minimum 20 characters). Please provide your build policies, service region, or guidelines to prevent the AI from misinforming leads.");
       return;
     }
 
@@ -996,18 +1041,21 @@ function SettingsPage() {
     setIsTestingInbound(true);
     setTestInboundResult(null);
     try {
-      const county = profileForm.targetZipCodes ? `${profileForm.targetZipCodes.split(',')[0].trim()} CAD` : "Travis County";
+      const parsedCity = profileForm.businessAddress ? profileForm.businessAddress.split(',')[0]?.trim() : "";
+      const parsedRegion = profileForm.businessAddress ? (profileForm.businessAddress.split(',')[1]?.trim() || parsedCity) : "Local Region";
+      const county = parsedRegion || (profileForm.targetZipCodes ? profileForm.targetZipCodes.split(',')[0].trim() : "Local Region");
+      const state = profileForm.businessAddress ? (profileForm.businessAddress.split(',')[2]?.trim()?.slice(0, 2)?.toUpperCase() || "US") : "US";
       const res = await addManualLead({
         data: {
           name: "Harrison Vance (Test Inbound Lead)",
           email: `inbound.buyer.${Date.now().toString().slice(-4)}@example.com`,
-          phone: "+1 (512) 555-0199",
+          phone: "+1 (555) 019-9234",
           county,
-          state: "TX",
+          state,
           estimatedBudget: 2200000,
           source: `${inboundTab.toUpperCase()} Inbound Lead Hub`,
           scoreTier: "Hot",
-          notes: "Looking for a 4,800 sqft modern architectural estate in Westlake. Lot survey already completed. Requesting architectural consultation.",
+          notes: `Inquiring about building a 4,800 sqft modern custom residence in ${county}. Lot survey already completed. Requesting consultation with ${profileForm.companyName || 'your design team'}.`,
         }
       });
 
@@ -1080,9 +1128,15 @@ function SettingsPage() {
           ))}
         </nav>
 
-        <Card className="p-6 max-w-2xl w-full">
+        <Card
+          className={`p-6 max-w-2xl w-full transition-all duration-700 ${
+            highlightSection === "profile"
+              ? "border-[#e5d9c5] ring-2 ring-[#e5d9c5] shadow-[0_0_35px_rgba(229,217,197,0.35)]"
+              : ""
+          }`}
+        >
           {active === "Builder Profile" && (
-            <div className="space-y-4">
+            <div id="activation-profile-section" className="space-y-4">
               <H>Builder Profile</H>
               <Row label="Company Organization">
                 <div className="flex items-center justify-between w-full bg-secondary/60 border border-border rounded-md px-3 py-2 text-sm text-foreground select-none">
@@ -1123,17 +1177,31 @@ function SettingsPage() {
                 </Row>
                 
                 <div className="mt-4 flex flex-col gap-1.5">
-                  <label className="text-xs font-semibold text-foreground uppercase tracking-widest">
-                    AI Knowledge Base / Builder Defaults
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-foreground uppercase tracking-widest flex items-center gap-1">
+                      <span>AI Knowledge Base / Builder Defaults</span>
+                      <span className="text-red-500 font-bold">*</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setProfileForm(p => ({
+                        ...p,
+                        aiContext: p.aiContext && p.aiContext.trim().length > 10 ? p.aiContext : `Operating Hours: Monday–Friday 8:00 AM – 5:30 PM, Saturday by appointment.\nSpecialization: Luxury architectural custom homes, site-sensitive estate design, and complete modern transformations.\nConsultation Locations: Private design studio or virtual video conference.\nFeasibility: Complimentary zoning envelope, topography slope analysis, and utility verification for buyer parcels.\nPricing & Policy: Bespoke custom builds starting at regional luxury market standards. Detailed estimates provided post-architectural discovery.`
+                      }))}
+                      className="text-[11px] text-primary hover:underline font-medium transition-colors cursor-pointer"
+                    >
+                      + Insert Standard Builder Template
+                    </button>
+                  </div>
                   <textarea
                     value={profileForm.aiContext}
                     onChange={e => setProfileForm(p => ({ ...p, aiContext: e.target.value }))}
-                    placeholder="e.g. Office hours: Mon-Sat 9am-6pm. We specialize in luxury custom homes & modern architectural estates. Consultation locations: Office or virtual video call."
-                    className="w-full bg-[#141414] border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-primary transition-colors text-white resize-y min-h-[100px]"
+                    placeholder="e.g. Office hours: Mon-Fri 8am-5pm. We specialize in luxury custom homes and architectural estates. Consultation locations: Studio or virtual video call. Feasibility: Complimentary slope and setback verification for buyer lots."
+                    className="w-full bg-[#141414] border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-primary transition-colors text-white resize-y min-h-[110px]"
+                    required
                   />
                   <p className="text-[10px] text-muted-foreground">
-                    Provide default operating hours, meeting locations, or policies. The AI will use this context when answering leads and booking appointments.
+                    The autonomous AI concierge quotes strictly from this context when conversing with leads and booking consultations. Prevents misinformation and regional assumptions.
                   </p>
                 </div>
               </div>
@@ -1500,7 +1568,7 @@ function SettingsPage() {
   <input type="email" name="email" placeholder="Your Email Address" required />
   <input type="tel" name="phone" placeholder="Phone Number" />
   <input type="number" name="estimatedBudget" placeholder="Target Budget (e.g. 1800000)" />
-  <input type="text" name="county" placeholder="County / Location (e.g. Travis County)" />
+  <input type="text" name="county" placeholder="County / Region (e.g. Palm Beach, Orange County, Westchester)" />
   <textarea name="message" placeholder="Describe your dream home vision..."></textarea>
   <button type="submit">Request Architectural Consultation</button>
 </form>`, "html_form")}
@@ -1544,7 +1612,14 @@ function SettingsPage() {
                 </h4>
 
                 {/* ── EMAIL & MAILBOX CONNECTION (PRIMARY AI MAIL GATEWAY) ── */}
-                <div className="border border-border rounded-lg bg-secondary/10 overflow-hidden transition-all duration-150">
+                <div
+                  id="activation-mailbox-section"
+                  className={`border rounded-lg bg-secondary/10 overflow-hidden transition-all duration-700 ${
+                    highlightSection === "mailbox"
+                      ? "border-[#e5d9c5] ring-2 ring-[#e5d9c5] shadow-[0_0_35px_rgba(229,217,197,0.35)]"
+                      : "border-border"
+                  }`}
+                >
                   <div className="flex items-center justify-between p-4 bg-secondary/30">
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="size-9 rounded-md bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-foreground text-xs font-mono font-bold shrink-0">

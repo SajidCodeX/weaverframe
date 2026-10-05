@@ -1,6 +1,6 @@
 import { createFileRoute, useLoaderData, useRouteContext, useRouter, Link, useNavigate } from '@tanstack/react-router';
 import { RoutePending } from "@/components/dashboard/RoutePending";
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { Search, Plus, Download, Phone, Calendar, Eye, MoreHorizontal, X, Mail, Check, AlertCircle, Edit, RefreshCw, LayoutGrid, List, MessageSquare, Zap, Star, Sparkles, AlertTriangle, Lightbulb, Brain, Inbox, Send, CheckCircle2, Archive, MapPin, Clock, Trash2 } from "lucide-react";
 import { Shell } from "@/components/dashboard/Shell";
 import { Card, ScoreBadge, StageBadge } from "@/components/dashboard/primitives";
@@ -136,6 +136,29 @@ function LeadsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalError, setModalError] = useState("");
 
+  // ── Highlight & Deep-Link for Concierge Activation Steps ───────────────────
+  const [highlightAddLead, setHighlightAddLead] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const action = url.searchParams.get("action");
+    const highlight = url.searchParams.get("highlight");
+
+    if (action === "add" || highlight === "add" || highlight === "leads") {
+      setIsAddModalOpen(true);
+      setHighlightAddLead(true);
+      setTimeout(() => {
+        const btn = document.getElementById("activation-add-lead-btn");
+        if (btn) btn.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 200);
+      const timer = setTimeout(() => {
+        setHighlightAddLead(false);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
   // Edit lead modal state
   const [editLead, setEditLead] = useState<any | null>(null);
   const [editForm, setEditForm] = useState({
@@ -166,6 +189,19 @@ function LeadsPage() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        if (editLead || activeEmailLead || activeScheduleLead || isAddModalOpen) {
+          setEditLead(null);
+          setActiveEmailLead(null);
+          setActiveScheduleLead(null);
+          setIsAddModalOpen(false);
+          setActiveDropdown(null);
+          setActiveMoreLead(null);
+          return;
+        }
+        if (selected) {
+          // Handled with smooth slide-out by LeadDetailPanel
+          return;
+        }
         setActiveDropdown(null);
         setSelected(null);
         setIsAddModalOpen(false);
@@ -180,7 +216,7 @@ function LeadsPage() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [selected]);
 
   // Sync date selection dynamically from TopBar header dispatches
   useEffect(() => {
@@ -204,7 +240,7 @@ function LeadsPage() {
       if (!l) return null;
       // Read the accurate source string directly from Postgres
       const leadName = l.name || "Prospective Buyer";
-      const source = l.source || "Austin Building Permits";
+      const source = l.source || "Inbound Lead";
       const scoreTier = l.scoreTier || "Warm";
       const status = l.status || "New";
       const aiStatus = status === "New" ? "Awaiting" : status === "Replied" ? "Replied" : "Awaiting";
@@ -215,7 +251,7 @@ function LeadsPage() {
         name: leadName,
         firstName: leadName.split(' ')[0] || "Prospective",
         lastName: leadName.split(' ').slice(1).join(' ') || "",
-        city: l.county || "Travis County",
+        city: l.county || l.city || "Location Unspecified",
         budget: l.estimatedBudget ? `$${(l.estimatedBudget / 1000).toFixed(0)}k` : "$0k",
         score: scoreKey,
         scoreTier,
@@ -227,8 +263,8 @@ function LeadsPage() {
 
     const sources = Array.from(
       new Set([
-        "Austin Building Permits",
-        "Travis County Public Records",
+        "Website Contact Form",
+        "Direct Referral",
         ...mapped.map((l: any) => l.source)
       ])
     ).filter(Boolean) as string[];
@@ -663,8 +699,13 @@ function LeadsPage() {
               <Download className="size-3.5 text-white/50" /> Export CSV
             </button>
             <button
+              id="activation-add-lead-btn"
               onClick={() => setIsAddModalOpen(true)}
-              className="inline-flex items-center gap-1.5 text-xs bg-[#e5d9c5] text-black font-semibold rounded-lg px-3.5 py-1.5 hover:bg-white transition-all duration-200 shadow-sm shadow-[#e5d9c5]/15 whitespace-nowrap cursor-pointer"
+              className={`inline-flex items-center gap-1.5 text-xs bg-[#e5d9c5] text-black font-semibold rounded-lg px-3.5 py-1.5 hover:bg-white transition-all duration-300 shadow-sm whitespace-nowrap cursor-pointer ${
+                highlightAddLead
+                  ? "ring-4 ring-[#e5d9c5]/60 shadow-[0_0_25px_rgba(229,217,197,0.5)] scale-105"
+                  : "shadow-[#e5d9c5]/15"
+              }`}
             >
               <Plus className="size-3.5" /> Add Lead
             </button>
@@ -1052,7 +1093,11 @@ function LeadsPage() {
       {isAddModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="fixed inset-0" onClick={() => setIsAddModalOpen(false)} />
-          <div className="relative w-full max-w-lg bg-card/95 backdrop-blur-xl border border-border rounded-xl shadow-none overflow-hidden animate-in zoom-in-95 duration-150">
+          <div className={`relative w-full max-w-lg bg-card/95 backdrop-blur-xl border rounded-xl shadow-none overflow-hidden animate-in zoom-in-95 duration-150 transition-all duration-700 ${
+            highlightAddLead
+              ? "border-[#e5d9c5] ring-2 ring-[#e5d9c5] shadow-[0_0_40px_rgba(229,217,197,0.35)]"
+              : "border-border"
+          }`}>
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-border">
               <h2 className="font-display text-base font-semibold text-foreground">Add Manual Lead</h2>
@@ -1233,7 +1278,7 @@ function EmailSimulatorModal({ lead, onClose }: { lead: any; onClose: () => void
     {
       label: "Welcome & Land Survey",
       subject: `Welcome ${lead.firstName} - Land Evaluation Questionnaire`,
-      body: `Hi ${lead.firstName},\n\nThanks for reaching out! I noticed you are evaluating land options in ${lead.city}, ${lead.state || "TX"}.\n\nTo help us design the perfect home style for your property, could you share:\n1. Have you officially surveyed the boundaries?\n2. What is your preferred layout style (e.g. Custom Modern Ranch)?\n\nLooking forward to building your dream home!\n\nBest regards,\nBuild Expert`
+      body: `Hi ${lead.firstName},\n\nThanks for reaching out! I noticed you are evaluating land options in ${[lead.city, lead.state].filter(Boolean).join(", ") || "your local area"}.\n\nTo help us design the perfect home style for your property, could you share:\n1. Have you officially surveyed the boundaries?\n2. What is your preferred layout style (e.g. Custom Modern Residence)?\n\nLooking forward to building your dream home!\n\nBest regards,\nBuild Expert`
     },
     {
       label: "Design Strategy Workshop",
@@ -1241,9 +1286,9 @@ function EmailSimulatorModal({ lead, onClose }: { lead: any; onClose: () => void
       body: `Hi ${lead.firstName},\n\nCongratulations on your pre-approval! We would love to invite you to our studio for a custom Design Strategy Workshop.\n\nWe will review your estimated budget of ${lead.budget} and walk through floor plans tailored to modern living layouts.\n\nLet me know if this week works for a 30-minute session!\n\nWarmly,\nLead Architect`
     },
     {
-      label: "Travis CAD Permit Follow-up",
-      subject: `Outreach regarding Travis CAD Boundary & Permitting`,
-      body: `Hi ${lead.firstName},\n\nI am following up on your custom modern ranch build. We checked the local Travis CAD zoning for your lot and have a few updates on utility connections.\n\nLet's connect this Friday to finalize the initial permit submissions.\n\nBest,\nPermitting Coordinator`
+      label: `${lead.county || lead.city || "Local"} Permitting & Zoning Follow-up`,
+      subject: `Outreach regarding ${lead.county || lead.city || "Local"} Boundary & Permitting`,
+      body: `Hi ${lead.firstName},\n\nI am following up on your custom home build. We checked the local municipal zoning guidelines for your lot in ${lead.city || lead.county || "your area"} and have a few updates on utility connections.\n\nLet's connect this Friday to review the initial permit requirements.\n\nBest,\nPermitting Coordinator`
     }
   ];
 
@@ -1456,6 +1501,43 @@ function LeadDetailPanel({ lead, onClose }: { lead: any; onClose: () => void }) 
   const { session } = useRouteContext({ strict: false }) as any;
   const isPrivacyMode = session?.role === 'admin' && !!session?.actingAsBuilderId;
 
+  const [isClosing, setIsClosing] = useState(false);
+  const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleClose = useCallback(() => {
+    if (isClosing) return;
+    setIsClosing(true);
+    closeTimeoutRef.current = setTimeout(() => {
+      onClose();
+    }, 200);
+  }, [isClosing, onClose]);
+
+  // Reset closing state when selected lead changes
+  useEffect(() => {
+    setIsClosing(false);
+    return () => {
+      if (closeTimeoutRef.current) {
+        clearTimeout(closeTimeoutRef.current);
+      }
+    };
+  }, [lead?.id]);
+
+  // Handle Escape key with smooth slide-out exit animation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        const hasOverlayModal = document.querySelector(".backdrop-blur-sm");
+        if (hasOverlayModal) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+        handleClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleClose]);
+
   let parsedMemory: Record<string, any> = {};
   if (lead.leadMemory) {
     try { parsedMemory = JSON.parse(lead.leadMemory); } catch (_) {}
@@ -1481,8 +1563,17 @@ function LeadDetailPanel({ lead, onClose }: { lead: any; onClose: () => void }) 
 
   return (
     <>
-      <div className="fixed inset-x-0 bottom-0 top-[60px] bg-black/40 z-30 animate-in fade-in duration-200" onClick={onClose} />
-      <aside className="fixed top-[60px] right-0 bottom-0 w-[480px] bg-card border-l border-border z-40 overflow-y-auto shadow-none animate-in slide-in-from-right duration-200">
+      <div
+        className={`fixed inset-x-0 bottom-0 top-[60px] bg-black/40 z-30 ${
+          isClosing ? "animate-out fade-out fill-mode-forwards duration-200 pointer-events-none" : "animate-in fade-in duration-200"
+        }`}
+        onClick={handleClose}
+      />
+      <aside
+        className={`fixed top-[60px] right-0 bottom-0 w-[480px] bg-card border-l border-border z-40 overflow-y-auto shadow-none ${
+          isClosing ? "animate-out slide-out-to-right fill-mode-forwards duration-200 pointer-events-none" : "animate-in slide-in-from-right duration-200"
+        }`}
+      >
         <div className="sticky top-0 bg-card border-b border-border px-5 py-4 flex items-start justify-between z-10">
           <div>
             <div className="flex items-center gap-2 flex-wrap">
@@ -1502,7 +1593,7 @@ function LeadDetailPanel({ lead, onClose }: { lead: any; onClose: () => void }) 
               <span>{lead.source || "Website Inbound"} · received {new Date(lead.purchaseDate || lead.createdAt || Date.now()).toLocaleDateString()}</span>
             </div>
           </div>
-          <button onClick={onClose} className="size-8 rounded hover:bg-secondary flex items-center justify-center text-muted-foreground"><X className="size-4" /></button>
+          <button onClick={handleClose} className="size-8 rounded hover:bg-secondary flex items-center justify-center text-muted-foreground"><X className="size-4" /></button>
         </div>
 
         <div className="p-5 space-y-6 text-left">
@@ -1592,7 +1683,7 @@ function LeadDetailPanel({ lead, onClose }: { lead: any; onClose: () => void }) 
             <h3 className="text-xs uppercase tracking-wider text-muted-foreground mb-3 font-mono">Lead Profile</h3>
             <dl className="grid grid-cols-2 gap-3 text-sm">
               <Field label="Budget" value={lead.budget} mono />
-              <Field label="County / City" value={`${lead.state || "TX"} · ${lead.city}`} />
+              <Field label="County / City" value={[lead.city, lead.state].filter(Boolean).join(" · ") || lead.county || "Location Unspecified"} />
               <Field label="Living situation" value={lead.landPrice > 0 ? `Bought land for $${(lead.landPrice / 1000).toFixed(0)}k` : "Evaluating land"} />
               <Field label="Estimated Land Value" value={`$${(lead.landPrice / 1000).toFixed(0)}k`} />
             </dl>
@@ -1707,35 +1798,40 @@ const KANBAN_COLUMNS = [
     label: 'New Leads',
     stages: ['New', 'new', 'Unassigned', 'pending'],
     icon: Inbox,
-    dotColor: 'bg-slate-400',
+    iconColor: 'text-slate-400',
+    cardHoverBorder: 'hover:border-slate-400/60 hover:shadow-[0_0_20px_rgba(148,163,184,0.15)]',
   },
   {
     id: 'outreach',
     label: 'Outreach Sent',
     stages: ['Emailed', 'Outreach', 'contacted', 'Builder Notified', 'Sent'],
     icon: Send,
-    dotColor: 'bg-sky-400',
+    iconColor: 'text-sky-400',
+    cardHoverBorder: 'hover:border-sky-400/60 hover:shadow-[0_0_20px_rgba(56,189,248,0.18)]',
   },
   {
     id: 'engaged',
     label: 'Engaged',
     stages: ['Opened', 'Replied', 'engaged', 'Nurturing', 'In Progress'],
     icon: MessageSquare,
-    dotColor: 'bg-amber-400',
+    iconColor: 'text-amber-400',
+    cardHoverBorder: 'hover:border-amber-400/60 hover:shadow-[0_0_20px_rgba(251,191,36,0.18)]',
   },
   {
     id: 'qualified',
     label: 'Qualified (Hot)',
     stages: ['Qualified', 'Appointment', 'Scheduled', 'Closed Won', 'Hot', 'Won'],
     icon: CheckCircle2,
-    dotColor: 'bg-emerald-400',
+    iconColor: 'text-emerald-400',
+    cardHoverBorder: 'hover:border-emerald-400/70 hover:shadow-[0_0_24px_rgba(52,211,153,0.22)]',
   },
   {
     id: 'archived',
     label: 'Disqualified',
     stages: ['Closed Lost', 'Disqualified', 'Cold', 'Lost', 'Archived'],
     icon: Archive,
-    dotColor: 'bg-zinc-500',
+    iconColor: 'text-zinc-400',
+    cardHoverBorder: 'hover:border-zinc-500/60 hover:shadow-[0_0_20px_rgba(161,161,170,0.15)]',
   },
 ];
 
@@ -1779,8 +1875,7 @@ function KanbanColumn({ column, leads, ...cardProps }: KanbanColumnProps) {
       {/* Column Header */}
       <div className="px-3.5 py-3 bg-[#151515] border-b border-white/[0.06] flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
-          <span className={`size-1.5 rounded-full ${column.dotColor}`} />
-          <Icon className="size-3.5 text-white/50 shrink-0" />
+          <Icon className={`size-3.5 ${column.iconColor} shrink-0`} />
           <span className="text-[11px] font-semibold uppercase tracking-wider text-white/90">
             {column.label}
           </span>
@@ -1794,7 +1889,7 @@ function KanbanColumn({ column, leads, ...cardProps }: KanbanColumnProps) {
       <div className="flex-1 overflow-y-auto p-2.5 space-y-2.5 custom-scrollbar">
         {leads.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
-            <div className={`size-2 rounded-full ${column.dotColor} mb-2.5 opacity-30`} />
+            <Icon className={`size-5 ${column.iconColor} mb-2 opacity-35`} />
             <p className="text-[11px] text-muted-foreground/50 font-mono">No leads in stage</p>
           </div>
         ) : (
@@ -1910,12 +2005,12 @@ function LeadKanbanCard({ lead, column, isPrivacyMode, onSelectLead, onEmailLead
   return (
     <div
       onClick={() => onSelectLead(lead)}
-      className="group relative bg-[#161616] hover:bg-[#1a1a1a] border border-white/[0.07] hover:border-white/[0.18] rounded-xl p-3.5 cursor-pointer transition-all duration-150 shadow-xs hover:shadow-md space-y-3"
+      className={`group relative bg-[#161616] hover:bg-[#191919] border border-white/[0.07] ${column.cardHoverBorder} rounded-xl p-3.5 cursor-pointer transition-all duration-200 shadow-xs hover:shadow-md space-y-3`}
     >
       {/* Top row: Client Name & Score Tier */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
-          <p className="text-[13px] font-semibold text-white/95 group-hover:text-[#e5d9c5] transition-colors truncate leading-snug">
+          <p className="text-[13px] font-semibold text-white/95 truncate leading-snug">
             {displayName}
           </p>
           <div className="flex items-center gap-1 mt-0.5 text-[11px] text-muted-foreground/75 truncate font-normal">

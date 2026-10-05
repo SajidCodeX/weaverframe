@@ -538,7 +538,7 @@ async function getOrEnsureAdminBuilderId(db: any, session: any) {
         source: "WeaverFrame Private Concierge",
         scoreTier: "Hot",
         estimatedBudget: 3500000,
-        county: "Austin Custom Homes",
+        county: "Premier Custom Estates",
       }
     });
 
@@ -596,10 +596,28 @@ export const getAdminConversations = createServerFn({ method: 'GET' })
       },
       orderBy: { createdAt: 'desc' },
       take: 100,
-      include: {
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        email: true,
+        status: true,
+        scoreTier: true,
+        estimatedBudget: true,
+        createdAt: true,
+        portalToken: true,
+        portalVisitedAt: true,
+        county: true,
+        source: true,
         messages: {
           orderBy: { createdAt: 'desc' },
           take: 1,
+          select: {
+            id: true,
+            sender: true,
+            createdAt: true,
+            channel: true,
+          }
         },
         _count: {
           select: {
@@ -617,11 +635,43 @@ export const getAdminConversations = createServerFn({ method: 'GET' })
       }
     });
 
+    const latestMessageIds = leads
+      .map((l: any) => l.messages[0]?.id)
+      .filter((id: any): id is string => typeof id === 'string' && id.length > 0);
+
+    const previewMap = new Map<string, string>();
+    if (latestMessageIds.length > 0) {
+      try {
+        const rawPreviews = await db.$queryRaw<{ id: string; preview: string }[]>`
+          SELECT id, LEFT(content, 200) as preview 
+          FROM "Message" 
+          WHERE id = ANY(${latestMessageIds}::text[])
+        `;
+        for (const row of rawPreviews) {
+          previewMap.set(row.id, row.preview || '');
+        }
+      } catch (rawErr) {
+        console.warn('[ADMIN_CONVERSATIONS_PREVIEW_QUERY_WARN]:', rawErr);
+      }
+    }
+
     const conversations = leads.map((l) => {
       const lastMsg = l.messages[0];
       const unreadCount = l._count.messages;
       const isRecentlyActive = l.portalVisitedAt &&
         (new Date().getTime() - new Date(l.portalVisitedAt).getTime()) < 1000 * 30;
+
+      let previewText = "No messages yet";
+      if (lastMsg?.id) {
+        const raw = previewMap.get(lastMsg.id) || "";
+        if (raw.includes("🖼️ Image Shared:") || raw.includes("📎 File Attachment:")) {
+          previewText = "📎 Photo & Document attached";
+        } else if (raw.length > 0) {
+          previewText = raw.length >= 200 ? raw.slice(0, 200) + "..." : raw;
+        } else {
+          previewText = "Message received";
+        }
+      }
 
       return {
         leadId: l.id,
@@ -631,7 +681,7 @@ export const getAdminConversations = createServerFn({ method: 'GET' })
         status: l.status,
         scoreTier: l.scoreTier,
         estimatedBudget: l.estimatedBudget,
-        lastMessage: lastMsg ? lastMsg.content : "No messages yet",
+        lastMessage: previewText,
         lastMessageTime: lastMsg ? lastMsg.createdAt.toISOString() : l.createdAt.toISOString(),
         unreadCount,
         isOnline: !!isRecentlyActive,

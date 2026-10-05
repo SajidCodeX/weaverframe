@@ -1073,7 +1073,7 @@ function ApptPage() {
                           >
                             <div className="flex flex-col">
                               <span className="text-xs font-semibold text-white">{isPrivacyMode ? obscurePII(getCleanLeadName(l), 'name') : getCleanLeadName(l)}</span>
-                              <span className="text-[9px] text-muted-foreground">{l.county || "Travis County"}, {l.state || "TX"}</span>
+                              <span className="text-[9px] text-muted-foreground">{[l.county || l.city, l.state].filter(Boolean).join(", ") || "Location Unspecified"}</span>
                             </div>
                             <span className={`text-[8px] px-1.5 py-0.5 rounded font-bold uppercase ${
                               l.scoreTier?.toLowerCase() === "hot" ? "bg-rose-500/10 text-rose-500" :

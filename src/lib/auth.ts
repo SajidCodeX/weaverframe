@@ -107,3 +107,25 @@ export const setInvitePassword = createServerFn({ method: 'POST' })
     const { handleSetInvitePassword } = await import('./server-utils.server')
     return handleSetInvitePassword(data)
   })
+
+export const requestPasswordReset = createServerFn({ method: 'POST' })
+  .inputValidator((data: { email: string }) => data)
+  .handler(async ({ data }) => {
+    const { handleRequestPasswordReset } = await import('./server-utils.server')
+    return handleRequestPasswordReset(data.email)
+  })
+
+export const verifyPasswordResetToken = createServerFn({ method: 'GET' })
+  .inputValidator((token: string) => token)
+  .handler(async ({ data: token }) => {
+    const { handleVerifyResetToken } = await import('./server-utils.server')
+    return handleVerifyResetToken(token)
+  })
+
+export const resetPasswordWithToken = createServerFn({ method: 'POST' })
+  .inputValidator((data: { token: string; password: string }) => data)
+  .handler(async ({ data }) => {
+    const { handleResetPassword } = await import('./server-utils.server')
+    return handleResetPassword(data)
+  })
+

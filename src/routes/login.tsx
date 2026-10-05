@@ -21,7 +21,7 @@ import {
 export const Route = createFileRoute('/login')({
   head: () => ({
     meta: [
-      { title: 'WeaverFrame | Client Portal & Executive Login' },
+      { title: 'WeaverFrame | Executive Login' },
       { name: 'description', content: 'Secure access to the WeaverFrame AI Lead Concierge and Architecture Operating System.' },
     ],
   }),
@@ -196,13 +196,13 @@ function LoginRoute() {
                 <label className="block text-[10px] font-mono uppercase tracking-widest text-white/60">
                   Password
                 </label>
-                <button
-                  type="button"
-                  onClick={() => toast.info('Contact your administrator or executive sponsor to reset your password.')}
+                <Link
+                  to="/reset-password"
+                  search={{}}
                   className="text-[10px] font-mono tracking-wider text-[#e5d9c5]/80 hover:text-white transition-colors cursor-pointer"
                 >
-                  Forgot Key?
-                </button>
+                  Forgot Password?
+                </Link>
               </div>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-white/40">

@@ -190,8 +190,8 @@ export async function handleInboundLeadDirect(inputData: any = {}, request?: Req
       const estimatedBudget = parseBudgetString(data.estimatedBudget || data.budget);
       const landPrice = Math.round(estimatedBudget * 0.25);
       const source = sanitizeMetadataField(data.source || "Website Inbound Webhook", 60);
-      const county = sanitizeMetadataField(data.county || data.city || data.location || data.projectType || "Travis County", 60);
-      const state = sanitizeMetadataField(data.state || "TX", 10);
+      const county = sanitizeMetadataField(data.county || data.city || data.location || data.projectType || "Local Region", 60);
+      const state = sanitizeMetadataField(data.state || "", 10);
       const rawMessage = data.message || data.notes || data.comment || data.comments || data.inquiry || "";
       const message = sanitizeInboundEmail(rawMessage).trim();
 
@@ -397,12 +397,12 @@ export const Route = createFileRoute('/api/leads/inbound')({
       payloadExample: {
         name: "Harrison Vance",
         email: "harrison.vance@example.com",
-        phone: "(512) 555-0199",
-        county: "Travis County",
-        state: "TX",
+        phone: "(555) 019-9234",
+        county: "Local County",
+        state: "CA",
         estimatedBudget: 1800000,
         source: "Website Contact Form",
-        message: "Looking for a 4,500 sqft modern luxury estate in Westlake."
+        message: "Looking for a 4,500 sqft modern luxury estate."
       }
     };
 

@@ -13,10 +13,11 @@ import {
   getIntegrationsStatus,
   summarizeConversation,
   simulateLeadMessage,
-  generatePortalToken,
   getBuilderProfile,
   getTeamData,
   assignLeadToUser,
+  markConversationUnread,
+  archiveConversation,
 } from "@/lib/dashboard";
 import {
   MessageSquare,
@@ -47,6 +48,7 @@ import {
   Eye,
   BookOpen,
   Image as ImageIcon,
+  Maximize2,
   Upload,
   Archive,
   Star,
@@ -78,10 +80,18 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 export const Route = createFileRoute("/messages")({
-  loader: async ({ context }) => {
+  loader: async ({ context, location }) => {
     try {
       if (typeof window === 'undefined' && !context.session) {
-        return { conversations: [], aiToggleMap: {}, integrationsStatus: {}, builderProfile: {}, teamMembers: [] };
+        return { 
+          conversations: [] as any[], 
+          aiToggleMap: {} as Record<string, boolean>, 
+          integrationsStatus: {} as any, 
+          builderProfile: {} as any, 
+          teamMembers: [] as any[], 
+          initialChat: null as { lead: any; messages: any[] } | null, 
+          initialLeadId: null as string | null 
+        };
       }
       const activeRole = typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? undefined) : undefined;
       const [conversations, aiToggleMap, integrationsStatus, builderProfile, teamMembers] = await Promise.all([
@@ -91,16 +101,35 @@ export const Route = createFileRoute("/messages")({
         getBuilderProfile({ data: { activeRole } }).catch(() => ({})),
         getTeamData({ data: { activeRole } }).catch(() => []),
       ]);
+
+      // Preload active conversation in single pass (Zero Waterfall)
+      const queryLeadId = (location?.search as any)?.leadId;
+      const initialLeadId: string | null = queryLeadId || conversations?.[0]?.leadId || null;
+      let initialChat: { lead: any; messages: any[] } | null = null;
+      if (initialLeadId) {
+        initialChat = await getMessagesForLead({ data: { leadId: initialLeadId, activeRole } }).catch(() => null);
+      }
+
       return {
         conversations: conversations || [],
         aiToggleMap: aiToggleMap || {},
         integrationsStatus: integrationsStatus || {},
         builderProfile: builderProfile || {},
         teamMembers: teamMembers || [],
+        initialChat,
+        initialLeadId,
       };
     } catch (err) {
       console.error("Error in messages route loader:", err);
-      return { conversations: [], aiToggleMap: {}, integrationsStatus: {}, builderProfile: {}, teamMembers: [] };
+      return { 
+        conversations: [] as any[], 
+        aiToggleMap: {} as Record<string, boolean>, 
+        integrationsStatus: {} as any, 
+        builderProfile: {} as any, 
+        teamMembers: [] as any[], 
+        initialChat: null as { lead: any; messages: any[] } | null, 
+        initialLeadId: null as string | null 
+      };
     }
   },
   staleTime: 60_000,
@@ -137,6 +166,143 @@ function cleanMessageBody(str: string | null | undefined): string {
   return text.trim();
 }
 
+export function formatMessagePreview(str: string | null | undefined): string {
+  if (!str) return "No messages yet";
+  const hasImage = str.includes("🖼️ Image Shared:") || /\[image:\s*([^\]]+)\]/i.test(str);
+  const hasFile = str.includes("📎 File Attachment:");
+  const hasLookbook = str.includes("📄 Document Shared:");
+  const hasAppt = str.includes("📆 Site Visit Booked:");
+  const hasLink = str.includes("🔗 Link Shared:");
+
+  if (hasImage && hasFile) {
+    return "📎 Photo & Document attached";
+  }
+  if (hasImage) {
+    const fn = str.replace(/.*(?:🖼️ Image Shared:|\[image:)\s*([^|\]\r\n]+).*/s, "$1").trim();
+    return `📷 Photo: ${fn || "Attachment"}`;
+  }
+  if (hasFile) {
+    const fn = str.replace(/.*📎 File Attachment:\s*([^|\r\n]+).*/s, "$1").trim();
+    return `📎 Document: ${fn || "Attachment"}`;
+  }
+  if (hasLookbook) {
+    const fn = str.replace("📄 Document Shared: ", "").split(".pdf|size=")[0];
+    return `📄 PDF Lookbook: ${fn}`;
+  }
+  if (hasAppt) {
+    return `📆 Site Visit Booked`;
+  }
+  if (hasLink) {
+    const title = str.replace("🔗 Link Shared: ", "").split("|")[0];
+    return `🔗 Link: ${title || "Web Link"}`;
+  }
+  return cleanMessageBody(str);
+}
+
+export interface ParsedMessageContent {
+  text: string;
+  images: Array<{ name: string; size?: string; dataUrl?: string }>;
+  files: Array<{ name: string; size?: string; fileType: string; dataUrl?: string }>;
+  brochures: Array<{ name: string; size?: string }>;
+  appointments: Array<{ details: string }>;
+  links: Array<{ title: string; url: string; category?: string }>;
+}
+
+export function parseMessageContent(rawContent: string | null | undefined): ParsedMessageContent {
+  const result: ParsedMessageContent = {
+    text: "",
+    images: [],
+    files: [],
+    brochures: [],
+    appointments: [],
+    links: [],
+  };
+
+  if (!rawContent) return result;
+
+  const lines = rawContent.split(/\r?\n/);
+  const remainingTextLines: string[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+    if (!trimmed) {
+      remainingTextLines.push("");
+      continue;
+    }
+
+    if (trimmed.startsWith("🖼️ Image Shared:")) {
+      const metaStr = trimmed.replace("🖼️ Image Shared:", "").trim();
+      const [nameParam, sizeParam, dataUrlParam] = metaStr.split("|");
+      const name = nameParam || "Attached Image";
+      const size = sizeParam ? sizeParam.replace("size=", "") : "";
+      const dataUrl = dataUrlParam ? dataUrlParam.replace("data=", "") : "";
+      result.images.push({ name, size, dataUrl });
+      continue;
+    }
+
+    if (trimmed.startsWith("📎 File Attachment:")) {
+      const metaStr = trimmed.replace("📎 File Attachment:", "").trim();
+      const parts = metaStr.split("|");
+      const name = parts[0] || "Attached Document";
+      let size = "";
+      let fileType = name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "application/octet-stream";
+      let dataUrl = "";
+      for (let p = 1; p < parts.length; p++) {
+        if (parts[p].startsWith("size=")) size = parts[p].replace("size=", "");
+        else if (parts[p].startsWith("type=")) fileType = parts[p].replace("type=", "");
+        else if (parts[p].startsWith("data=")) dataUrl = parts[p].replace("data=", "");
+      }
+      result.files.push({ name, size, fileType, dataUrl });
+      continue;
+    }
+
+    if (trimmed.startsWith("📄 Document Shared:")) {
+      const metaStr = trimmed.replace("📄 Document Shared:", "").trim();
+      const parts = metaStr.split(".pdf|size=");
+      const name = parts[0] ? `${parts[0]}.pdf` : "Document.pdf";
+      const size = parts[1] || "4.8 MB";
+      result.brochures.push({ name, size });
+      continue;
+    }
+
+    if (trimmed.startsWith("📆 Site Visit Booked:")) {
+      const details = trimmed.replace("📆 Site Visit Booked:", "").trim();
+      result.appointments.push({ details });
+      continue;
+    }
+
+    if (trimmed.startsWith("🔗 Link Shared:")) {
+      const metaStr = trimmed.replace("🔗 Link Shared:", "").trim();
+      const parts = metaStr.split("|");
+      const title = parts[0] || "Shared Link";
+      let url = "#";
+      let category = "";
+      for (let p = 1; p < parts.length; p++) {
+        if (parts[p].startsWith("url=")) url = parts[p].replace("url=", "");
+        else if (parts[p].startsWith("category=")) category = parts[p].replace("category=", "");
+      }
+      result.links.push({ title, url, category });
+      continue;
+    }
+
+    // Check for inline Gmail [image: filename.jpg]
+    const imgMatch = trimmed.match(/^\[image:\s*([^\]]+)\]$/i);
+    if (imgMatch) {
+      const imgName = imgMatch[1].trim();
+      const alreadyCaptured = result.images.some(img => img.name.toLowerCase() === imgName.toLowerCase());
+      if (!alreadyCaptured) {
+        result.images.push({ name: imgName, size: "Photo Attachment", dataUrl: "" });
+      }
+      continue;
+    }
+
+    remainingTextLines.push(lines[i]);
+  }
+
+  result.text = cleanMessageBody(remainingTextLines.join("\n"));
+  return result;
+}
+
 function FormattedSummary({ text }: { text: string }) {
   const parseInlineMarkdown = (str: string) => {
     const parts = str.split(/(\*\*.*?\*\*)/g);
@@ -148,21 +314,26 @@ function FormattedSummary({ text }: { text: string }) {
     });
   };
 
-  const lines = text.split('\n').filter(l => l.trim().length > 0);
+  const lines = text.split('\n').filter(l => {
+    const t = l.trim();
+    return t.length > 0 && !t.startsWith('---') && !t.startsWith('***');
+  });
 
   return (
     <div className="space-y-2">
       {lines.map((line, idx) => {
         const trimmed = line.trim();
-        const isHeader = (trimmed.startsWith('**') && (trimmed.endsWith(':**') || trimmed.endsWith('**'))) ||
-          trimmed.startsWith('📋') || trimmed.startsWith('💰') || trimmed.startsWith('❓') || trimmed.startsWith('🎯') ||
-          (trimmed.toUpperCase().includes('PROFILE') && trimmed.includes(':')) ||
-          (trimmed.toUpperCase().includes('FINANCIALS') && trimmed.includes(':')) ||
-          (trimmed.toUpperCase().includes('CONCERNS') && trimmed.includes(':')) ||
-          (trimmed.toUpperCase().includes('ACTION') && trimmed.includes(':'));
+        const cleanHeaderCheck = trimmed.replace(/^#+\s*/, '');
+        const isHeader = (cleanHeaderCheck.startsWith('**') && (cleanHeaderCheck.endsWith(':**') || cleanHeaderCheck.endsWith('**'))) ||
+          cleanHeaderCheck.startsWith('📋') || cleanHeaderCheck.startsWith('💰') || cleanHeaderCheck.startsWith('❓') || cleanHeaderCheck.startsWith('🎯') ||
+          (cleanHeaderCheck.toUpperCase().includes('PROFILE') && cleanHeaderCheck.includes(':')) ||
+          (cleanHeaderCheck.toUpperCase().includes('FINANCIALS') && cleanHeaderCheck.includes(':')) ||
+          (cleanHeaderCheck.toUpperCase().includes('CONCERNS') && cleanHeaderCheck.includes(':')) ||
+          (cleanHeaderCheck.toUpperCase().includes('ACTION') && cleanHeaderCheck.includes(':')) ||
+          trimmed.startsWith('# ') || trimmed.startsWith('## ') || trimmed.startsWith('### ');
 
         if (isHeader && !trimmed.startsWith('* ') && !trimmed.startsWith('- ') && !trimmed.startsWith('+ ')) {
-          const cleanedHeader = trimmed.replace(/\*\*/g, '').replace(/:$/, '');
+          const cleanedHeader = cleanHeaderCheck.replace(/\*\*/g, '').replace(/:$/, '');
           let icon = '';
           if (cleanedHeader.includes('PROFILE') || cleanedHeader.includes('SPECS')) icon = '📋 ';
           else if (cleanedHeader.includes('FINANCIALS') || cleanedHeader.includes('BUDGET')) icon = '💰 ';
@@ -215,6 +386,8 @@ function MessagesPage() {
   // Profile email (set in Settings > Profile) — used as sender identity, NOT the login email
   const profileData = loaderData?.builderProfile || {};
   const teamMembers: any[] = loaderData?.teamMembers || [];
+  const initialChat = loaderData?.initialChat || null;
+  const initialLeadId = loaderData?.initialLeadId || null;
 
   const [composerMode, setComposerMode] = useState<"reply" | "internal">("reply");
   const [filterTab, setFilterTab] = useState<"all" | "assigned_to_me" | "unassigned" | "hot">("all");
@@ -272,17 +445,19 @@ function MessagesPage() {
     }
   }, [initialConversations]);
 
-  // Poll conversations every 15s so online status stays fresh (WhatsApp-style)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      router.invalidate();
-    }, 15000);
-    return () => clearInterval(interval);
-  }, [router]);
 
   // Track selected lead & active conversation
-  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(queryLeadId || null);
-  const [activeChat, setActiveChat] = useState<{ lead: any; messages: any[] } | null>(null);
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(queryLeadId || initialLeadId || null);
+  const [activeChat, setActiveChat] = useState<{ lead: any; messages: any[] } | null>(() => {
+    if (initialChat) {
+      if (typeof window !== 'undefined') {
+        if (!(window as any)._messagesCache) (window as any)._messagesCache = new Map();
+        if (initialLeadId) (window as any)._messagesCache.set(initialLeadId, initialChat.messages);
+      }
+      return initialChat;
+    }
+    return null;
+  });
 
   // Sync with search param changes (e.g. from Slack notification click)
   useEffect(() => {
@@ -337,7 +512,7 @@ function MessagesPage() {
   const [lookbookPage, setLookbookPage] = useState(0);
 
   // File & Link Attachment State
-  const [attachedFile, setAttachedFile] = useState<{ name: string; size: string; type: string; dataUrl?: string } | null>(null);
+  const [attachedFiles, setAttachedFiles] = useState<Array<{ name: string; size: string; type: string; dataUrl?: string }>>([]);
   const [attachedLink, setAttachedLink] = useState<{ title: string; url: string; category: string } | null>(null);
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [linkInputUrl, setLinkInputUrl] = useState("");
@@ -415,8 +590,8 @@ function MessagesPage() {
   const [newChatSearchQuery, setNewChatSearchQuery] = useState("");
 
   // Loading and sending UI states
-  const [isLoadingChat, setIsLoadingChat] = useState(false);
-  const loadedLeadIdRef = useRef<string | null>(null);
+  const [isLoadingChat, setIsLoadingChat] = useState(!initialChat && !!initialLeadId);
+  const loadedLeadIdRef = useRef<string | null>(initialLeadId);
   const [isSending, setIsSending] = useState(false);
   const [newMessageText, setNewMessageText] = useState("");
   const [emailSubject, setEmailSubject] = useState("");
@@ -495,7 +670,13 @@ function MessagesPage() {
   const handleChatScroll = () => {
     if (!chatContainerRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
-    const isFarFromBottom = scrollHeight - scrollTop - clientHeight > 80;
+    // If container cannot scroll yet, user is naturally at bottom
+    if (scrollHeight <= clientHeight + 40) {
+      setIsUserScrolledUp(false);
+      isUserScrolledUpRef.current = false;
+      return;
+    }
+    const isFarFromBottom = scrollHeight - scrollTop - clientHeight > 90;
     setIsUserScrolledUp(isFarFromBottom);
     isUserScrolledUpRef.current = isFarFromBottom;
     if (!isFarFromBottom) {
@@ -507,16 +688,16 @@ function MessagesPage() {
   const scrollToBottom = (force = false, mode: ScrollBehavior = "smooth") => {
     if (!force && isUserScrolledUpRef.current) return;
     if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTo({
-        top: chatContainerRef.current.scrollHeight,
-        behavior: mode,
-      });
+      const el = chatContainerRef.current;
       if (mode === "instant" || mode === "auto") {
-        requestAnimationFrame(() => {
-          if (chatContainerRef.current) {
-            chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-          }
+        el.scrollTop = el.scrollHeight;
+        chatEndRef.current?.scrollIntoView({ block: "end" });
+      } else {
+        el.scrollTo({
+          top: el.scrollHeight,
+          behavior: mode,
         });
+        chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
       }
     }
     setIsUserScrolledUp(false);
@@ -534,6 +715,9 @@ function MessagesPage() {
       } else if (lastMsg) {
         setExpandedMsgIds(new Set([lastMsg.id]));
       }
+      // Re-scroll after message expansion layout changes
+      setTimeout(() => scrollToBottom(true, "instant"), 40);
+      setTimeout(() => scrollToBottom(true, "instant"), 180);
     }
   }, [selectedLeadId, activeChat?.messages?.length]);
 
@@ -620,6 +804,11 @@ function MessagesPage() {
           const lead = conversationsListRef.current.find(c => c.leadId === selectedLeadId);
           setActiveChat({ lead, messages: cachedMessages });
           setIsLoadingChat(false);
+          setIsUserScrolledUp(false);
+          isUserScrolledUpRef.current = false;
+          setNewMessagesCount(0);
+          setTimeout(() => scrollToBottom(true, "instant"), 10);
+          setTimeout(() => scrollToBottom(true, "instant"), 80);
         } else {
           setIsLoadingChat(true);
         }
@@ -641,11 +830,13 @@ function MessagesPage() {
           if (isNewLeadSelected) {
             loadedLeadIdRef.current = selectedLeadId;
             setIsLoadingChat(false);
-            // Position at bottom ONLY when switching to a NEW lead
+            // Position at bottom when switching to a lead
             setIsUserScrolledUp(false);
             isUserScrolledUpRef.current = false;
             setNewMessagesCount(0);
-            setTimeout(() => scrollToBottom(true, "instant"), 30);
+            setTimeout(() => scrollToBottom(true, "instant"), 20);
+            setTimeout(() => scrollToBottom(true, "instant"), 120);
+            setTimeout(() => scrollToBottom(true, "instant"), 300);
           }
         }
       } catch (error) {
@@ -718,8 +909,8 @@ function MessagesPage() {
       } catch (_) { /* silent */ }
     };
 
-    const msgTimer = setInterval(pollMessages, 5000);
-    const threadTimer = setInterval(pollThreads, 10000);
+    const msgTimer = setInterval(pollMessages, 10000);
+    const threadTimer = setInterval(pollThreads, 30000);
 
     return () => {
       isMounted = false;
@@ -741,16 +932,21 @@ function MessagesPage() {
     };
   }, []);
 
-  // Handle global Escape key to blur inputs and close scheduling overlays
+  // Handle global Escape key to blur inputs and close scheduling overlays or image modal
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        if (activeImageModalUrl) {
+          setActiveImageModalUrl(null);
+          return;
+        }
         if (isDropdownOpen) {
           setIsDropdownOpen(false);
           return;
         }
         setIsPortfolioModalOpen(false);
         setIsSchedulingOpen(false);
+        setIsLinkModalOpen(false);
         if (document.activeElement instanceof HTMLElement) {
           document.activeElement.blur();
         }
@@ -758,7 +954,7 @@ function MessagesPage() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isDropdownOpen]);
+  }, [isDropdownOpen, activeImageModalUrl]);
 
   // Keyboard navigation for custom dropdown
   const handleDropdownKeyDown = (e: React.KeyboardEvent) => {
@@ -824,28 +1020,33 @@ function MessagesPage() {
     return threads;
   }, [activeThreadsList, searchQuery, filterTab, session?.userId]);
 
-  // Handle File Selection (PDF, Blueprint, Images, CAD, Docs)
+  // Handle File Selection (PDF, Blueprint, Images, CAD, Docs) - Multi-file support
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
-    let sizeStr = `${(file.size / 1024).toFixed(0)} KB`;
-    if (file.size > 1024 * 1024) {
-      sizeStr = `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
-    }
+    Array.from(files).forEach((file) => {
+      let sizeStr = `${(file.size / 1024).toFixed(0)} KB`;
+      if (file.size > 1024 * 1024) {
+        sizeStr = `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
+      }
 
-    const isImg = file.type.startsWith("image/");
-    const reader = new FileReader();
-    reader.onload = () => {
-      setAttachedFile({
-        name: file.name,
-        size: sizeStr,
-        type: file.type || (isImg ? "image/jpeg" : "application/pdf"),
-        dataUrl: typeof reader.result === "string" ? reader.result : undefined
-      });
-      toast.success(`Attached ${file.name} (${sizeStr})`);
-    };
-    reader.readAsDataURL(file);
+      const isImg = file.type.startsWith("image/");
+      const reader = new FileReader();
+      reader.onload = () => {
+        setAttachedFiles((prev) => [
+          ...prev,
+          {
+            name: file.name,
+            size: sizeStr,
+            type: file.type || (isImg ? "image/jpeg" : "application/pdf"),
+            dataUrl: typeof reader.result === "string" ? reader.result : undefined,
+          },
+        ]);
+        toast.success(`Attached ${file.name} (${sizeStr})`);
+      };
+      reader.readAsDataURL(file);
+    });
 
     e.target.value = "";
   };
@@ -876,23 +1077,59 @@ function MessagesPage() {
     toast.success(`Attached link: ${finalTitle}`);
   };
 
+  // Handle Mark as Unread
+  const handleMarkUnread = async () => {
+    if (!selectedThread) return;
+    try {
+      await markConversationUnread({ data: { leadId: selectedThread.leadId } });
+      setConversationsList(prev =>
+        prev.map(c =>
+          c.leadId === selectedThread.leadId
+            ? { ...c, unreadCount: Math.max(1, (c.unreadCount || 0) + 1) }
+            : c
+        )
+      );
+      toast.success("Conversation marked as unread");
+      await router.invalidate();
+    } catch (err: any) {
+      toast.error("Failed to mark unread: " + (err?.message || err));
+    }
+  };
+
+  // Handle Archive Conversation
+  const handleArchiveThread = async () => {
+    if (!selectedThread) return;
+    try {
+      await archiveConversation({ data: { leadId: selectedThread.leadId } });
+      setConversationsList(prev => prev.filter(c => c.leadId !== selectedThread.leadId));
+      setSelectedLeadId(null);
+      setActiveChat(null);
+      toast.success("Conversation archived");
+      await router.invalidate();
+    } catch (err: any) {
+      toast.error("Failed to archive conversation: " + (err?.message || err));
+    }
+  };
+
   // Handle sending text message or attachments
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!selectedLeadId || (!newMessageText.trim() && !attachedFile && !attachedLink) || isSending) return;
+    if (!selectedLeadId || (!newMessageText.trim() && attachedFiles.length === 0 && !attachedLink) || isSending) return;
 
     let payloadContent = newMessageText.trim();
-    if (attachedFile) {
-      if (attachedFile.type.startsWith("image/")) {
-        const header = `🖼️ Image Shared: ${attachedFile.name}|size=${attachedFile.size}|data=${attachedFile.dataUrl || ""}`;
-        payloadContent = payloadContent ? `${header}\n\n${payloadContent}` : header;
-      } else {
-        const header = `📎 File Attachment: ${attachedFile.name}|size=${attachedFile.size}|type=${attachedFile.type}|data=${attachedFile.dataUrl || ""}`;
-        payloadContent = payloadContent ? `${header}\n\n${payloadContent}` : header;
-      }
-    } else if (attachedLink) {
+    if (attachedLink) {
       const header = `🔗 Link Shared: ${attachedLink.title}|url=${attachedLink.url}|category=${attachedLink.category}`;
       payloadContent = payloadContent ? `${header}\n\n${payloadContent}` : header;
+    }
+    if (attachedFiles.length > 0) {
+      const fileHeaders = attachedFiles.map(file => {
+        if (file.type.startsWith("image/")) {
+          return `🖼️ Image Shared: ${file.name}|size=${file.size}|data=${file.dataUrl || ""}`;
+        } else {
+          return `📎 File Attachment: ${file.name}|size=${file.size}|type=${file.type}|data=${file.dataUrl || ""}`;
+        }
+      }).join("\n\n");
+      payloadContent = payloadContent ? `${fileHeaders}\n\n${payloadContent}` : fileHeaders;
     }
 
     const originalText = payloadContent;
@@ -900,7 +1137,7 @@ function MessagesPage() {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
-    setAttachedFile(null);
+    setAttachedFiles([]);
     setAttachedLink(null);
     setIsSending(true);
 
@@ -1130,10 +1367,21 @@ function MessagesPage() {
     if (!selectedLeadId || isSummarizing) return;
     setIsSummarizing(true);
     try {
-      const summary = await summarizeConversation({ data: { leadId: selectedLeadId } });
-      setChatSummary(summary);
-    } catch (err) {
+      const activeRole = typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? undefined) : undefined;
+      const summary = await summarizeConversation({ data: { leadId: selectedLeadId, activeRole } });
+      if (!summary || summary.startsWith("Failed to generate summary") || summary.startsWith("Unable to generate")) {
+        toast.error(summary || "Unable to generate conversation briefing.");
+        setChatSummary(summary || null);
+      } else if (summary === "No conversation history available.") {
+        toast.info("No conversation history available to summarize.");
+        setChatSummary(summary);
+      } else {
+        setChatSummary(summary);
+        toast.success("Executive Briefing ready");
+      }
+    } catch (err: any) {
       console.error("Failed to summarize chat", err);
+      toast.error(err?.message || "Failed to generate briefing. Please try again.");
     } finally {
       setIsSummarizing(false);
     }
@@ -1210,7 +1458,7 @@ function MessagesPage() {
     if (genuineEmail?.subject) {
       return genuineEmail.subject;
     }
-    const county = selectedThread?.county || "Travis County, TX";
+    const county = selectedThread?.county || selectedThread?.city || "Custom Home Inquiry";
     const budget = selectedThread?.estimatedBudget ? `$${(selectedThread.estimatedBudget / 1000000).toFixed(1)}M` : "$1.8M";
     return `Inquiry: Custom Estate & Lot Planning (${county} · ${budget})`;
   }, [emailSubject, selectedThread, activeChat?.messages]);
@@ -1391,7 +1639,7 @@ function MessagesPage() {
                             ? "text-foreground/90 font-medium" 
                             : "text-zinc-400/80"
                         }`}>
-                          {cleanMessageBody(thread.lastMessage) || "No messages yet"}
+                          {formatMessagePreview(thread.lastMessage)}
                         </p>
                         {!isActive && thread.unreadCount > 0 && (
                           <span className="shrink-0 min-w-4 h-4 px-1 bg-primary text-black text-[9px] font-bold flex items-center justify-center rounded-full select-none shadow-xs">
@@ -1623,7 +1871,7 @@ function MessagesPage() {
                         <DropdownMenuSeparator />
 
                         <DropdownMenuItem
-                          onClick={() => toast.info("Marked as unread")}
+                          onClick={handleMarkUnread}
                           className="flex items-center gap-2 cursor-pointer py-1.5 text-xs"
                         >
                           <Mail className="size-3.5 text-muted-foreground" />
@@ -1631,7 +1879,7 @@ function MessagesPage() {
                         </DropdownMenuItem>
 
                         <DropdownMenuItem
-                          onClick={() => toast.success("Conversation archived")}
+                          onClick={handleArchiveThread}
                           className="flex items-center gap-2 cursor-pointer py-1.5 text-xs"
                         >
                           <Archive className="size-3.5 text-muted-foreground" />
@@ -1651,16 +1899,29 @@ function MessagesPage() {
                           <BrainCircuit className="size-3.5 text-primary" />
                         </div>
                         <div>
-                          <h4 className="text-xs font-semibold text-white">Conversation Summary</h4>
+                          <h4 className="text-xs font-semibold text-white">Executive Pre-Meeting Briefing</h4>
                         </div>
                       </div>
-                      <button
-                        onClick={() => setChatSummary(null)}
-                        className="size-6 rounded-md bg-white/5 hover:bg-white/15 text-muted-foreground hover:text-white flex items-center justify-center transition-colors"
-                        title="Close Summary"
-                      >
-                        <X className="size-3.5" />
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={handleSummarizeChat}
+                          disabled={isSummarizing}
+                          className="px-2 py-0.5 rounded text-[11px] bg-white/5 hover:bg-white/10 text-muted-foreground hover:text-white flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-50"
+                          title="Regenerate Briefing"
+                        >
+                          <RefreshCw className={`size-3 ${isSummarizing ? 'animate-spin text-primary' : ''}`} />
+                          <span className="hidden sm:inline">Refresh</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setChatSummary(null)}
+                          className="size-6 rounded-md bg-white/5 hover:bg-white/15 text-muted-foreground hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                          title="Close Summary"
+                        >
+                          <X className="size-3.5" />
+                        </button>
+                      </div>
                     </div>
                     <FormattedSummary text={chatSummary} />
                   </div>
@@ -1712,12 +1973,6 @@ function MessagesPage() {
                             dateLabel = msgDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
                           }
                         }
-
-                        const isBrochureCard = msg.content.includes("📄 Document Shared");
-                        const isAppointmentCard = msg.content.includes("📆 Site Visit Booked");
-                        const isFileAttachment = msg.content.includes("📎 File Attachment:");
-                        const isImageAttachment = msg.content.includes("🖼️ Image Shared:");
-                        const isLinkShared = msg.content.includes("🔗 Link Shared:");
 
                         const clientName = activeChat.lead?.name || selectedThread?.leadName || "Client";
                         const clientEmail = activeChat.lead?.email || selectedThread?.email || `${clientName.toLowerCase().replace(/\s+/g, '')}@gmail.com`;
@@ -1830,7 +2085,7 @@ function MessagesPage() {
                                     </span>
                                   )}
                                   <span className={`text-xs truncate font-normal ${isInternalNote ? 'text-zinc-300/80' : 'text-muted-foreground/75'}`}>
-                                    {cleanMessageBody(msg.content)}
+                                    {formatMessagePreview(msg.content)}
                                   </span>
                                 </div>
 
@@ -2009,123 +2264,223 @@ function MessagesPage() {
 
                                 {/* Email Body */}
                                 <div className="text-xs sm:text-[13.5px] text-foreground/90 leading-relaxed font-sans select-text space-y-3 pt-4 pl-0 sm:pl-12">
-                                  {isBrochureCard ? (
-                                    /* Shared document card */
-                                    <div className="bg-[#151515] border border-border rounded-xl p-3.5 max-w-[440px] shadow-sm relative overflow-hidden">
-                                      <div className="flex gap-3 items-center">
-                                        <div className="size-9 bg-primary/10 rounded-lg flex items-center justify-center border border-primary/20 shrink-0 text-primary">
-                                          <FileText className="size-4.5" />
-                                        </div>
-                                        <div className="min-w-0 flex-1">
-                                          <h4 className="text-xs font-semibold text-white truncate">{msg.content.replace("📄 Document Shared: ", "").split(".pdf|size=")[0]}</h4>
-                                          <p className="text-[10px] text-muted-foreground mt-0.5">PDF Document · {msg.content.includes("|size=") ? msg.content.split("|size=")[1] : "4.8 MB"}</p>
-                                        </div>
-                                      </div>
-                                      <div className="border-t border-border/40 mt-3 pt-2.5 flex items-center justify-between">
-                                        <span className="text-[9px] text-muted-foreground font-mono">Attachment</span>
-                                        <a
-                                          href="#"
-                                          onClick={(e) => {
-                                            e.preventDefault();
-                                            setIsLookbookOpen(true);
-                                            setLookbookPage(0);
-                                          }}
-                                          className="text-xs text-primary hover:underline font-mono"
-                                        >
-                                          View PDF
-                                        </a>
-                                      </div>
-                                    </div>
-                                  ) : isAppointmentCard ? (
-                                    /* Site Visit Card */
-                                    <div className="bg-[#151515] border border-border rounded-xl p-3.5 max-w-[440px] shadow-sm space-y-2">
-                                      <div className="flex items-center gap-2.5 text-primary">
-                                        <Calendar className="size-4" />
-                                        <span className="text-xs font-bold font-sans">Site Walkthrough & Lot Consultation</span>
-                                      </div>
-                                      <p className="text-xs text-muted-foreground leading-relaxed">
-                                        {msg.content.replace("📆 Site Visit Booked: ", "")}
-                                      </p>
-                                    </div>
-                                  ) : isImageAttachment ? (
-                                    /* Image Card */
-                                    (() => {
-                                      const parts = msg.content.replace("🖼️ Image Shared: ", "").split("\n\n");
-                                      const metaStr = parts[0] || "";
-                                      const caption = parts.slice(1).join("\n\n");
-                                      const [nameParam, sizeParam, dataUrlParam] = metaStr.split("|");
-                                      const fileName = nameParam || "Attached Image";
-                                      const fileSize = sizeParam ? sizeParam.replace("size=", "") : "";
-                                      const dataUrl = dataUrlParam ? dataUrlParam.replace("data=", "") : "";
+                                  {(() => {
+                                    const parsed = parseMessageContent(msg.content);
+                                    const hasAnyContent = parsed.text ||
+                                      parsed.images.length > 0 ||
+                                      parsed.files.length > 0 ||
+                                      parsed.brochures.length > 0 ||
+                                      parsed.appointments.length > 0 ||
+                                      parsed.links.length > 0;
 
-                                      return (
-                                        <div className="bg-[#151515] border border-border rounded-xl p-3 max-w-[420px] shadow-sm space-y-2">
-                                          {dataUrl && (
-                                            <div
-                                              onClick={() => setActiveImageModalUrl(dataUrl)}
-                                              className="relative rounded-lg overflow-hidden border border-border max-h-[240px] bg-black/40 cursor-pointer group/img"
-                                            >
-                                              <img src={dataUrl} alt={fileName} className="w-full h-auto object-cover max-h-[240px] group-hover/img:scale-105 transition-transform duration-200" />
-                                            </div>
-                                          )}
-                                          <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono px-1">
-                                            <span className="truncate max-w-[200px]">{fileName}</span>
-                                            {fileSize && <span>{fileSize}</span>}
-                                          </div>
-                                          {caption && (
-                                            <p className="text-xs text-white/90 pt-1 leading-relaxed border-t border-white/5 whitespace-pre-line">
-                                              {caption}
-                                            </p>
-                                          )}
-                                        </div>
-                                      );
-                                    })()
-                                  ) : isLinkShared ? (
-                                    /* Shared Link */
-                                    (() => {
-                                      const parts = msg.content.replace("🔗 Link Shared: ", "").split("\n\n");
-                                      const metaStr = parts[0] || "";
-                                      const caption = parts.slice(1).join("\n\n");
-                                      const [titleParam, urlParam] = metaStr.split("|");
-                                      const title = titleParam || "Shared Link";
-                                      const url = urlParam ? urlParam.replace("url=", "") : "#";
+                                    return (
+                                      <>
+                                        {/* 1. Main Text Body */}
+                                        {parsed.text && (
+                                          <p className="whitespace-pre-line leading-relaxed text-[13.5px] text-foreground/90 font-sans">
+                                            {parsed.text}
+                                          </p>
+                                        )}
 
-                                      return (
-                                        <div className="bg-[#151515] border border-border rounded-xl p-3 max-w-[420px] shadow-sm space-y-2">
-                                          <div className="flex gap-2.5 items-start">
-                                            <div className="size-9 bg-primary/10 rounded-lg flex items-center justify-center border border-primary/20 shrink-0 text-primary">
-                                              <Globe className="size-4.5" />
-                                            </div>
-                                            <div className="min-w-0 flex-1">
-                                              <h4 className="text-xs font-semibold text-white truncate">{title}</h4>
-                                              <p className="text-[10px] text-muted-foreground truncate font-mono">{url}</p>
+                                        {/* 2. Image Attachments */}
+                                        {parsed.images.map((img, imgIdx) => (
+                                          <div key={imgIdx} className="bg-[#151515] border border-border rounded-xl p-3 max-w-[440px] shadow-sm space-y-2">
+                                            {img.dataUrl ? (
+                                              <div
+                                                onClick={() => setActiveImageModalUrl(img.dataUrl!)}
+                                                className="relative rounded-lg overflow-hidden border border-border max-h-[260px] bg-black/40 cursor-pointer group/img"
+                                                title="Click to view full image"
+                                              >
+                                                <img
+                                                  src={img.dataUrl}
+                                                  alt={img.name}
+                                                  onLoad={() => {
+                                                    if (!isUserScrolledUpRef.current) {
+                                                      scrollToBottom(true, "instant");
+                                                    }
+                                                  }}
+                                                  className="w-full h-auto object-cover max-h-[260px] group-hover/img:scale-105 transition-transform duration-200"
+                                                />
+                                                <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/30 transition-colors flex items-center justify-center opacity-0 group-hover/img:opacity-100">
+                                                  <span className="px-2.5 py-1 rounded-full bg-black/70 backdrop-blur-sm text-white text-[11px] font-medium flex items-center gap-1.5 border border-white/20">
+                                                    <Maximize2 className="size-3" /> View Fullscreen
+                                                  </span>
+                                                </div>
+                                              </div>
+                                            ) : (
+                                              <div className="p-4 rounded-lg bg-secondary/40 border border-border flex items-center gap-3">
+                                                <div className="size-9 bg-primary/10 rounded-lg flex items-center justify-center border border-primary/20 shrink-0 text-primary">
+                                                  <ImageIcon className="size-4.5" />
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                  <h4 className="text-xs font-semibold text-white truncate">{img.name}</h4>
+                                                  <p className="text-[10px] text-muted-foreground mt-0.5">Photo Attachment</p>
+                                                </div>
+                                              </div>
+                                            )}
+                                            <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono px-1">
+                                              <span className="truncate max-w-[220px]">{img.name}</span>
+                                              <div className="flex items-center gap-2.5">
+                                                {img.size && <span>{img.size}</span>}
+                                                {img.dataUrl && (
+                                                  <a
+                                                    href={img.dataUrl}
+                                                    download={img.name}
+                                                    className="text-primary hover:underline cursor-pointer inline-flex items-center gap-1 font-sans text-xs"
+                                                    title="Download photo"
+                                                  >
+                                                    <Download className="size-3" />
+                                                    <span>Save</span>
+                                                  </a>
+                                                )}
+                                              </div>
                                             </div>
                                           </div>
-                                          {caption && (
-                                            <p className="text-xs text-white/90 pt-1 border-t border-white/5 leading-relaxed whitespace-pre-line">
-                                              {caption}
+                                        ))}
+
+                                        {/* 3. Document / File Attachments (PDFs, Docs, Blueprints) */}
+                                        {parsed.files.map((file, fileIdx) => {
+                                          const isPdf = file.fileType?.includes("pdf") || file.name.toLowerCase().endsWith(".pdf");
+                                          return (
+                                            <div key={fileIdx} className="bg-[#151515] border border-border rounded-xl p-3.5 max-w-[440px] shadow-sm relative overflow-hidden">
+                                              <div className="flex gap-3 items-center">
+                                                <div className="size-9 bg-primary/10 rounded-lg flex items-center justify-center border border-primary/20 shrink-0 text-primary">
+                                                  <FileText className="size-4.5" />
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                  <h4 className="text-xs font-semibold text-white truncate" title={file.name}>{file.name}</h4>
+                                                  <p className="text-[10px] text-muted-foreground mt-0.5 font-mono">
+                                                    {isPdf ? "PDF Document" : file.name.split(".").pop()?.toUpperCase() || "Document"}
+                                                    {file.size ? ` · ${file.size}` : ""}
+                                                  </p>
+                                                </div>
+                                              </div>
+                                              <div className="border-t border-border/40 mt-3 pt-2.5 flex items-center justify-between">
+                                                <span className="text-[9px] text-muted-foreground font-mono">Attachment</span>
+                                                <div className="flex items-center gap-2">
+                                                  {file.dataUrl ? (
+                                                    <>
+                                                      {isPdf && (
+                                                        <button
+                                                          type="button"
+                                                          onClick={() => {
+                                                            try {
+                                                              if (file.dataUrl!.startsWith('http')) {
+                                                                window.open(file.dataUrl, '_blank');
+                                                                return;
+                                                              }
+                                                              const arr = file.dataUrl!.split(',');
+                                                              const mime = arr[0].match(/:(.*?);/)?.[1] || 'application/pdf';
+                                                              const bstr = atob(arr[1]);
+                                                              let n = bstr.length;
+                                                              const u8arr = new Uint8Array(n);
+                                                              while (n--) {
+                                                                u8arr[n] = bstr.charCodeAt(n);
+                                                              }
+                                                              const blob = new Blob([u8arr], { type: mime });
+                                                              const blobUrl = URL.createObjectURL(blob);
+                                                              window.open(blobUrl, '_blank');
+                                                            } catch {
+                                                              window.open(file.dataUrl, '_blank');
+                                                            }
+                                                          }}
+                                                          className="text-xs text-primary hover:underline font-mono inline-flex items-center gap-1 cursor-pointer"
+                                                        >
+                                                          <Eye className="size-3" /> View
+                                                        </button>
+                                                      )}
+                                                      <a
+                                                        href={file.dataUrl}
+                                                        download={file.name}
+                                                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-secondary hover:bg-secondary/80 text-foreground text-xs font-medium transition-colors cursor-pointer border border-border"
+                                                      >
+                                                        <Download className="size-3" /> Download
+                                                      </a>
+                                                    </>
+                                                  ) : (
+                                                    <span className="text-[10px] text-muted-foreground italic">Attached in email</span>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+
+                                        {/* 4. Shared Brochures / Lookbooks */}
+                                        {parsed.brochures.map((brochure, bIdx) => (
+                                          <div key={bIdx} className="bg-[#151515] border border-border rounded-xl p-3.5 max-w-[440px] shadow-sm relative overflow-hidden">
+                                            <div className="flex gap-3 items-center">
+                                              <div className="size-9 bg-primary/10 rounded-lg flex items-center justify-center border border-primary/20 shrink-0 text-primary">
+                                                <BookOpen className="size-4.5" />
+                                              </div>
+                                              <div className="min-w-0 flex-1">
+                                                <h4 className="text-xs font-semibold text-white truncate">{brochure.name}</h4>
+                                                <p className="text-[10px] text-muted-foreground mt-0.5">Architectural Lookbook · {brochure.size}</p>
+                                              </div>
+                                            </div>
+                                            <div className="border-t border-border/40 mt-3 pt-2.5 flex items-center justify-between">
+                                              <span className="text-[9px] text-muted-foreground font-mono">Portfolio</span>
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setIsLookbookOpen(true);
+                                                  setLookbookPage(0);
+                                                }}
+                                                className="text-xs text-primary hover:underline font-mono inline-flex items-center gap-1 cursor-pointer"
+                                              >
+                                                <Eye className="size-3" /> View Lookbook
+                                              </button>
+                                            </div>
+                                          </div>
+                                        ))}
+
+                                        {/* 5. Booked Appointments */}
+                                        {parsed.appointments.map((appt, aIdx) => (
+                                          <div key={aIdx} className="bg-[#151515] border border-border rounded-xl p-3.5 max-w-[440px] shadow-sm space-y-2">
+                                            <div className="flex items-center gap-2.5 text-primary">
+                                              <Calendar className="size-4" />
+                                              <span className="text-xs font-bold font-sans">Site Walkthrough & Lot Consultation</span>
+                                            </div>
+                                            <p className="text-xs text-muted-foreground leading-relaxed">
+                                              {appt.details}
                                             </p>
-                                          )}
-                                          <div className="border-t border-white/5 pt-2 flex items-center justify-between">
-                                            <span className="text-[9px] text-muted-foreground font-mono">Link</span>
-                                            <a
-                                              href={url}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-secondary hover:bg-secondary/80 text-foreground text-xs font-medium transition-colors cursor-pointer border border-border"
-                                            >
-                                              Open <ExternalLink className="size-3" />
-                                            </a>
                                           </div>
-                                        </div>
-                                      );
-                                    })()
-                                  ) : (
-                                    /* Standard Clean Message Text */
-                                    <p className="whitespace-pre-line leading-relaxed text-[13.5px] text-foreground/90 font-sans">
-                                      {cleanMessageBody(msg.content)}
-                                    </p>
-                                  )}
+                                        ))}
+
+                                        {/* 6. Shared Web Links */}
+                                        {parsed.links.map((link, lIdx) => (
+                                          <div key={lIdx} className="bg-[#151515] border border-border rounded-xl p-3 max-w-[420px] shadow-sm space-y-2">
+                                            <div className="flex gap-2.5 items-start">
+                                              <div className="size-9 bg-primary/10 rounded-lg flex items-center justify-center border border-primary/20 shrink-0 text-primary">
+                                                <Globe className="size-4.5" />
+                                              </div>
+                                              <div className="min-w-0 flex-1">
+                                                <h4 className="text-xs font-semibold text-white truncate">{link.title}</h4>
+                                                <p className="text-[10px] text-muted-foreground truncate font-mono">{link.url}</p>
+                                              </div>
+                                            </div>
+                                            <div className="border-t border-white/5 pt-2 flex items-center justify-between">
+                                              <span className="text-[9px] text-muted-foreground font-mono">{link.category || "Link"}</span>
+                                              <a
+                                                href={link.url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-secondary hover:bg-secondary/80 text-foreground text-xs font-medium transition-colors cursor-pointer border border-border"
+                                              >
+                                                Open <ExternalLink className="size-3" />
+                                              </a>
+                                            </div>
+                                          </div>
+                                        ))}
+
+                                        {!hasAnyContent && (
+                                          <p className="text-muted-foreground/60 italic text-xs">
+                                            (Empty message)
+                                          </p>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
                                 </div>
                               </div>
                             )}
@@ -2176,30 +2531,40 @@ function MessagesPage() {
                     </button>
                   )}
 
-                  {/* Hidden File Input Picker */}
+                  {/* Hidden File Input Picker (Supports Multiple Files) */}
                   <input
                     type="file"
                     ref={fileInputRef}
                     onChange={handleFileSelect}
                     className="hidden"
                     accept="image/*,application/pdf,.doc,.docx,.cad,.dwg,.txt,.csv"
+                    multiple
                   />
 
-                  {/* Pre-Send Attachment Banner (File) */}
-                  {attachedFile && (
-                    <div className="mb-2.5 p-2 px-3 rounded-lg bg-secondary border border-border flex items-center justify-between text-xs text-foreground animate-in slide-in-from-bottom-1">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <FileText className="size-4 text-primary shrink-0" />
-                        <span className="font-medium text-xs truncate">{attachedFile.name}</span>
-                        <span className="text-[10px] text-muted-foreground font-mono">({attachedFile.size})</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setAttachedFile(null)}
-                        className="p-1 rounded hover:bg-white/10 text-muted-foreground hover:text-foreground cursor-pointer"
-                      >
-                        <X className="size-3.5" />
-                      </button>
+                  {/* Pre-Send Attachment Banner (Files List) */}
+                  {attachedFiles.length > 0 && (
+                    <div className="mb-2.5 flex flex-wrap gap-2 animate-in slide-in-from-bottom-1">
+                      {attachedFiles.map((file, idx) => (
+                        <div key={idx} className="p-2 px-3 rounded-lg bg-secondary border border-border flex items-center gap-2.5 text-xs text-foreground">
+                          {file.type.startsWith("image/") ? (
+                            <ImageIcon className="size-4 text-primary shrink-0" />
+                          ) : (
+                            <FileText className="size-4 text-primary shrink-0" />
+                          )}
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="font-medium text-xs truncate max-w-[160px]">{file.name}</span>
+                            <span className="text-[10px] text-muted-foreground font-mono">({file.size})</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setAttachedFiles(prev => prev.filter((_, i) => i !== idx))}
+                            className="p-1 rounded hover:bg-white/10 text-muted-foreground hover:text-foreground cursor-pointer ml-1"
+                            title="Remove attachment"
+                          >
+                            <X className="size-3.5" />
+                          </button>
+                        </div>
+                      ))}
                     </div>
                   )}
 
@@ -2447,7 +2812,7 @@ function MessagesPage() {
                             e.target.style.height = `${Math.min(e.target.scrollHeight, 240)}px`;
                           }}
                           onKeyDown={(e) => {
-                            if (e.key === "Escape" && !newMessageText.trim() && !attachedFile && !attachedLink) {
+                            if (e.key === "Escape" && !newMessageText.trim() && attachedFiles.length === 0 && !attachedLink) {
                               e.preventDefault();
                               setIsComposerActive(false);
                             }
@@ -2473,7 +2838,7 @@ function MessagesPage() {
                           <button
                             type="button"
                             onClick={() => handleSendMessage()}
-                            disabled={isSending || (!newMessageText.trim() && !attachedFile && !attachedLink)}
+                            disabled={isSending || (!newMessageText.trim() && attachedFiles.length === 0 && !attachedLink)}
                             className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shadow-md disabled:opacity-40 cursor-pointer shrink-0 ${
                               composerMode === "internal"
                                 ? "bg-white/15 hover:bg-white/20 text-white border border-white/20 shadow-none"
@@ -2506,7 +2871,7 @@ function MessagesPage() {
                             onClick={() => fileInputRef.current?.click()}
                             disabled={isSending}
                             className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
-                            title="Attach File / Document"
+                            title="Attach Files / Documents"
                           >
                             <Paperclip className="size-4" />
                           </button>
@@ -2526,7 +2891,7 @@ function MessagesPage() {
                             onClick={() => setIsLinkModalOpen(true)}
                             disabled={isSending}
                             className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
-                            title="Insert Link"
+                            title="Insert Web Link"
                           >
                             <Globe className="size-4" />
                           </button>
@@ -2563,7 +2928,7 @@ function MessagesPage() {
                           type="button"
                           onClick={() => {
                             setNewMessageText("");
-                            setAttachedFile(null);
+                            setAttachedFiles([]);
                             setAttachedLink(null);
                             setIsComposerActive(false);
                           }}
@@ -2801,7 +3166,7 @@ function MessagesPage() {
                           Modern Architectural Vision & Framing Specifications
                         </h2>
                         <p className="text-xs text-muted-foreground leading-relaxed">
-                          We design custom luxury residences optimized for the unique topography of Austin. Every project begins with a foundation engineered specifically for your site's soil reports and elevation profiles.
+                          We design custom luxury residences optimized for the unique topography of your parcel and region. Every project begins with a foundation engineered specifically for your site's soil reports and elevation profiles.
                         </p>
                         <div className="grid grid-cols-2 gap-3 mt-4">
                           <div className="p-3 bg-white/[0.02] border border-white/[0.05] rounded-lg">
@@ -2830,7 +3195,7 @@ function MessagesPage() {
                         <div className="grid grid-cols-2 gap-3 mt-4">
                           <div className="p-3 bg-white/[0.02] border border-white/[0.05] rounded-lg">
                             <h4 className="text-[10px] font-bold text-white uppercase tracking-wider font-mono">Artisan Millwork</h4>
-                            <p className="text-[10px] text-muted-foreground mt-1">Custom white oak cabinetry built locally in Austin with Blum soft-close hardware.</p>
+                            <p className="text-[10px] text-muted-foreground mt-1">Custom white oak cabinetry hand-crafted locally with artisan precision and Blum soft-close hardware.</p>
                           </div>
                           <div className="p-3 bg-white/[0.02] border border-white/[0.05] rounded-lg">
                             <h4 className="text-[10px] font-bold text-white uppercase tracking-wider font-mono">Waterfall Countertops</h4>
@@ -3107,7 +3472,7 @@ function MessagesPage() {
             {/* Modal Header */}
             <div className="p-4 border-b border-border/60 flex items-center justify-between bg-white/[0.02]">
               <div className="flex items-center gap-2.5">
-                <div className="size-9 rounded-xl bg-[#25D366]/10 border border-[#25D366]/30 flex items-center justify-center text-[#25D366]">
+                <div className="size-9 rounded-xl bg-primary/10 border border-primary/25 flex items-center justify-center text-primary">
                   <MessageSquarePlus className="size-5" />
                 </div>
                 <div>
@@ -3278,30 +3643,41 @@ function MessagesPage() {
 
       {/* FULLSCREEN IMAGE LIGHTBOX MODAL */}
       {activeImageModalUrl && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-in fade-in duration-200">
-          <div className="fixed inset-0" onClick={() => setActiveImageModalUrl(null)} />
-          <div className="relative max-w-4xl max-h-[90vh] flex flex-col items-center z-10 animate-in zoom-in-95 duration-150">
-            <div className="absolute -top-12 right-0 flex items-center gap-2">
-              <a
-                href={activeImageModalUrl}
-                download="estate-photo.jpg"
-                className="size-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer shadow-lg"
-                title="Download image"
-              >
-                <Download className="size-4" />
-              </a>
-              <button
-                onClick={() => setActiveImageModalUrl(null)}
-                className="size-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer shadow-lg"
-                title="Close"
-              >
-                <X className="size-4" />
-              </button>
-            </div>
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 animate-in fade-in duration-200">
+          {/* Backdrop click to dismiss */}
+          <div className="fixed inset-0 cursor-zoom-out" onClick={() => setActiveImageModalUrl(null)} />
+
+          {/* Top Controls Bar — FIXED to viewport so buttons are NEVER hidden or covered */}
+          <div className="fixed top-4 right-4 sm:top-6 sm:right-6 z-50 flex items-center gap-2.5 pointer-events-auto">
+            <span className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-full bg-black/70 border border-white/20 text-[11px] font-mono text-white/70 backdrop-blur-md shadow-lg select-none">
+              Esc to close
+            </span>
+            <a
+              href={activeImageModalUrl}
+              download="attachment"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="size-10 rounded-full bg-black/70 hover:bg-black/90 border border-white/20 text-white flex items-center justify-center transition-all cursor-pointer shadow-2xl hover:scale-105 active:scale-95"
+              title="Download image"
+            >
+              <Download className="size-4.5" />
+            </a>
+            <button
+              type="button"
+              onClick={() => setActiveImageModalUrl(null)}
+              className="size-10 rounded-full bg-black/70 hover:bg-black/90 border border-white/20 text-white flex items-center justify-center transition-all cursor-pointer shadow-2xl hover:scale-105 active:scale-95"
+              title="Close (Esc)"
+            >
+              <X className="size-5" />
+            </button>
+          </div>
+
+          {/* Centered Image Container */}
+          <div className="relative max-w-5xl max-h-[86vh] flex items-center justify-center z-10 animate-in zoom-in-95 duration-150 p-2 pointer-events-none">
             <img
               src={activeImageModalUrl}
               alt="Fullscreen attachment"
-              className="max-h-[80vh] w-auto rounded-2xl object-contain shadow-2xl border border-white/10"
+              className="max-h-[84vh] max-w-[90vw] rounded-2xl object-contain shadow-2xl border border-white/10 select-none pointer-events-auto"
             />
           </div>
         </div>

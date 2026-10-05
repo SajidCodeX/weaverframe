@@ -1,5 +1,5 @@
 import { RoutePending } from "@/components/dashboard/RoutePending";
-import { createFileRoute, useLoaderData } from "@tanstack/react-router";
+import { createFileRoute, useLoaderData, useRouter } from "@tanstack/react-router";
 import { Shell } from "@/components/dashboard/Shell";
 import { Card, CardHeader, Badge } from "@/components/dashboard/primitives";
 import { CustomSelect } from "@/components/dashboard/CustomSelect";
@@ -162,6 +162,7 @@ function WhatsAppDoodleBackground({ idPrefix = "sim" }: { idPrefix?: string }) {
 }
 
 function AIPage() {
+  const router = useRouter();
   const { session } = useRouteContext({ strict: false }) as any;
   const isPrivacyMode = session?.role === 'admin' && !!session?.actingAsBuilderId;
 
@@ -172,6 +173,43 @@ function AIPage() {
 
   // Active Main View Tab
   const [activeTab, setActiveTab] = useState<"studio" | "simulator" | "logs">("studio");
+
+  // ── Highlight & Deep-Link for Concierge Activation Steps ───────────────────
+  const [highlightSection, setHighlightSection] = useState<"voice" | "rules" | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const focus = url.searchParams.get("focus") || url.searchParams.get("highlight");
+
+    if (focus === "voice" || focus === "brain") {
+      setActiveTab("studio");
+      setHighlightSection("voice");
+      setTimeout(() => {
+        const el = document.getElementById("activation-voice-section");
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }, 200);
+      const timer = setTimeout(() => {
+        setHighlightSection(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    } else if (focus === "rules" || focus === "qualification") {
+      setActiveTab("studio");
+      setHighlightSection("rules");
+      setTimeout(() => {
+        const el = document.getElementById("activation-rules-section");
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }, 200);
+      const timer = setTimeout(() => {
+        setHighlightSection(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, []);
 
   // ── AI Brain Studio State ───────────────────────────────────────────────────
   const [primaryGoal, setPrimaryGoal] = useState<string>(initialBrainConfig.primaryGoal || "book_consultation");
@@ -203,6 +241,7 @@ function AIPage() {
           customDirectives,
         }
       });
+      await router.invalidate();
       setBrainSaved(true);
       setTimeout(() => setBrainSaved(false), 3000);
     } catch (err) {
@@ -310,7 +349,7 @@ function AIPage() {
       const greeting = [
         { 
           role: 'assistant' as const, 
-          content: `Hi ${name}, I noticed your residential permit inquiry filed in ${leadObj.county || 'Travis County'}. I'm ${personaName}, executive concierge representing ${initialProfile.companyName || 'our custom estate studio'}. Are you currently exploring a custom build, or have you already engaged a general contractor?` 
+          content: `Hi ${name}, I noticed your residential inquiry regarding ${leadObj?.county || leadObj?.city || 'your upcoming build'}. I'm ${personaName}, executive concierge representing ${initialProfile.companyName || 'our custom estate studio'}. Are you currently exploring a custom build, or have you already engaged a general contractor?` 
         }
       ];
       setChatHistory(greeting);
@@ -355,7 +394,7 @@ function AIPage() {
         leadId: selectedLeadId,
         leadName: name,
         scoreTier: leadObj?.scoreTier || "Warm",
-        county: leadObj?.county || "Travis County",
+        county: leadObj?.county || leadObj?.city || "Local Area",
         lastMessageAt: "Just now",
         messages: updatedHistory
       }
@@ -399,7 +438,7 @@ function AIPage() {
           leadId: selectedLeadId,
           leadName: name,
           scoreTier: intent.charAt(0) + intent.slice(1).toLowerCase(),
-          county: leadObj?.county || "Travis County",
+          county: leadObj?.county || leadObj?.city || "Local Area",
           lastMessageAt: "Just now",
           messages: finalHistory
         }
@@ -513,7 +552,14 @@ function AIPage() {
           </div>
 
           {/* 2. Brand Voice, Persona & Tone Dropdown */}
-          <div className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-4">
+          <div
+            id="activation-voice-section"
+            className={`rounded-2xl border bg-card p-6 shadow-sm space-y-4 transition-all duration-700 ${
+              highlightSection === "voice"
+                ? "border-[#e5d9c5] ring-2 ring-[#e5d9c5] shadow-[0_0_35px_rgba(229,217,197,0.35)] scale-[1.01]"
+                : "border-border"
+            }`}
+          >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <Volume2 className="size-4 text-[#c9a84c] dark:text-[#e5d9c5]" />
@@ -580,7 +626,14 @@ function AIPage() {
           </div>
 
           {/* 3. In-Depth Qualification Criteria */}
-          <div className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-5">
+          <div
+            id="activation-rules-section"
+            className={`rounded-2xl border bg-card p-6 shadow-sm space-y-5 transition-all duration-700 ${
+              highlightSection === "rules"
+                ? "border-[#e5d9c5] ring-2 ring-[#e5d9c5] shadow-[0_0_35px_rgba(229,217,197,0.35)] scale-[1.01]"
+                : "border-border"
+            }`}
+          >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <Sliders className="size-4 text-[#c9a84c] dark:text-[#e5d9c5]" />
@@ -740,7 +793,7 @@ function AIPage() {
               {[
                 "10-Year Structural Warranty Included",
                 "Never quote exact square foot price over text",
-                "Specializing in Travis & Williamson Counties",
+                "Specializing in bespoke luxury residential construction",
                 "In-house architectural & interior design team",
                 "Office open Mon-Sat 9am to 6pm"
               ].map((chip) => (
@@ -874,11 +927,11 @@ function AIPage() {
               >
                 {leads.map((l: any) => (
                   <option key={l.id} value={l.id}>
-                    {getCleanLeadName(l)} · {l.county || 'Travis County'} ({l.scoreTier || 'Warm'})
+                    {getCleanLeadName(l)} · {l.county || l.city || 'Local Area'} ({l.scoreTier || 'Warm'})
                   </option>
                 ))}
                 {leads.length === 0 && (
-                  <option value="demo">Demo Homeowner (Travis County Modern Estate)</option>
+                  <option value="demo">Demo Homeowner (Bespoke Architectural Residence)</option>
                 )}
               </select>
             </div>
@@ -1229,7 +1282,7 @@ function AIPage() {
                     {conversations[activeModalLeadId]?.leadName} &middot; Email History
                   </h3>
                   <span className="text-[11px] text-muted-foreground font-mono">
-                    County: {conversations[activeModalLeadId]?.county || "Travis County"}
+                    Location: {conversations[activeModalLeadId]?.county || conversations[activeModalLeadId]?.city || "Local Area"}
                   </span>
                 </div>
               </div>

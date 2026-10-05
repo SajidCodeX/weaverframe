@@ -206,6 +206,122 @@ export const getDashboardData = createServerFn({ method: 'POST' })
       city: a.lead.county,
     }))
 
+    // Compute 5-Step Luxury Activation Checklist
+    const builderId = session.role === 'admin' ? (session.actingAsBuilderId || session.builderId) : session.builderId;
+    const [builderRecord, connectedIntegrationsCount] = await Promise.all([
+      builderId ? db.builder.findUnique({
+        where: { id: builderId },
+        select: { companyName: true, contactName: true, phone: true, email: true, settings: true }
+      }).catch(() => null) : null,
+      builderId ? db.integration.count({
+        where: { isConnected: true }
+      }).catch(() => 0) : 0,
+    ]);
+
+    let parsedSettings: Record<string, any> = {};
+    if (builderRecord?.settings) {
+      try {
+        parsedSettings = typeof builderRecord.settings === 'string'
+          ? JSON.parse(builderRecord.settings)
+          : builderRecord.settings;
+      } catch {}
+    }
+
+    const profileSettings = parsedSettings['builder_profile'] || {};
+    const qualSettings = parsedSettings['qualification_rules'] || {};
+    const aiBrainConfig = parsedSettings['ai_brain_config'] || {};
+    const aiSettings = parsedSettings['ai_brain_config'] || parsedSettings['ai_instructions'] || parsedSettings['brain_voice'] || {};
+    const mailboxSettings = parsedSettings['email_mailbox'] || {};
+
+    // 1. Profile: builder has saved their profile or customized name/contact/address
+    const hasProfile = Boolean(
+      profileSettings.businessAddress ||
+      profileSettings.companyName ||
+      profileSettings.primaryContact ||
+      profileSettings.phone ||
+      (builderRecord?.companyName && builderRecord.companyName.trim() !== '' && builderRecord.companyName !== 'Horizon Homes LLC') ||
+      (builderRecord?.contactName && builderRecord?.phone)
+    );
+
+    // 2. Mailbox: connected integration in DB or saved mailbox credentials
+    const hasMailbox = Boolean(
+      (connectedIntegrationsCount || 0) > 0 ||
+      (mailboxSettings.email && (mailboxSettings.password || mailboxSettings.provider === 'google_oauth' || mailboxSettings.provider === 'google'))
+    );
+
+    // 3. Buyer Rules: qualification criteria configured in qualification_rules or ai_brain_config
+    const hasQual = Boolean(
+      qualSettings.minBudget ||
+      qualSettings.maxTimeline ||
+      qualSettings.minLeadScore !== undefined ||
+      aiBrainConfig.minBudget ||
+      aiBrainConfig.maxTimeline ||
+      aiBrainConfig.lotRequirement ||
+      aiBrainConfig.plansRequirement
+    );
+
+    // 4. AI Voice: calibrated tone, persona name, or directives in ai_brain_config
+    const hasAi = Boolean(
+      aiBrainConfig.brandVoice ||
+      aiBrainConfig.primaryGoal ||
+      aiBrainConfig.personaName ||
+      aiBrainConfig.customDirectives ||
+      aiSettings.brandVoice ||
+      aiSettings.rules ||
+      aiSettings.customPrompt ||
+      aiSettings.tone
+    );
+
+    // 5. Leads: at least one lead ingested
+    const hasLeads = (totalLeads || 0) > 0;
+
+    const activationChecklist = {
+      steps: [
+        {
+          id: 'profile',
+          title: 'Establish Brand Identity & Territory',
+          description: 'Set your luxury builder name, primary metropolitan markets, and contact details.',
+          isCompleted: hasProfile,
+          href: '/settings?tab=Builder+Profile&highlight=profile',
+          actionText: 'Configure Profile',
+        },
+        {
+          id: 'mailbox',
+          title: 'Connect Client Reception Mailbox',
+          description: 'Link Google Workspace or IMAP for autonomous 2-way client concierge communication.',
+          isCompleted: hasMailbox,
+          href: '/settings?tab=Integrations&highlight=mailbox',
+          actionText: 'Connect Mailbox',
+        },
+        {
+          id: 'qualification',
+          title: 'Establish Buyer Qualification Criteria',
+          description: 'Define minimum build budget ($1M+), land status preference, and construction timeline.',
+          isCompleted: hasQual,
+          href: '/ai-activity?focus=rules',
+          actionText: 'Set Criteria',
+        },
+        {
+          id: 'brain',
+          title: 'Tune Architectural AI Brand Voice',
+          description: 'Calibrate design specifications, luxury finishes, and executive tone of voice.',
+          isCompleted: hasAi,
+          href: '/ai-activity?focus=voice',
+          actionText: 'Tune AI Brain',
+        },
+        {
+          id: 'leads',
+          title: 'Ingest Your First Luxury Lead',
+          description: 'Capture website inquiries via webhook or add your first prospective client.',
+          isCompleted: hasLeads,
+          href: '/leads?action=add',
+          actionText: 'Add First Lead',
+        },
+      ],
+      completedCount: [hasProfile, hasMailbox, hasQual, hasAi, hasLeads].filter(Boolean).length,
+      totalCount: 5,
+    };
+
     const result = {
       totalLeads,
       qualifiedLeads,
@@ -213,6 +329,7 @@ export const getDashboardData = createServerFn({ method: 'POST' })
       funnel,
       scoreData,
       activityFeed,
+      activationChecklist,
       allLeads: allLeadsRaw.map((l: any) => ({
         id: l.id,
         name: l.name,
@@ -452,10 +569,10 @@ export async function createHighAlertNotification({
 }
 
 export function determineLeadSource(lead: { source?: string | null; county?: string | null }) {
-  if (lead.source && lead.source.trim() && lead.source !== "Austin Building Permits") {
+  if (lead.source && lead.source.trim()) {
     return lead.source.trim();
   }
-  return lead.source || "Website Contact Form";
+  return "Website Contact Form";
 }
 
 /**
@@ -509,20 +626,43 @@ export const getLeadsData = createServerFn({ method: 'POST' })
     const leads = await db.lead.findMany({
       where: whereClause,
       orderBy: { createdAt: 'desc' },
-      include: {
+      select: {
+        id: true,
+        builderId: true,
+        name: true,
+        email: true,
+        phone: true,
+        county: true,
+        state: true,
+        landPrice: true,
+        estimatedBudget: true,
+        purchaseDate: true,
+        status: true,
+        scoreTier: true,
+        dealScore: true,
+        source: true,
+        assignedToId: true,
+        portalToken: true,
+        portalVisitedAt: true,
+        lastAiSummary: true,
+        smsUsed: true,
+        smsQuota: true,
+        createdAt: true,
+        assignedTo: {
+          select: { id: true, displayName: true, email: true, builderRole: true }
+        },
         appointments: {
           orderBy: { dateTime: 'desc' },
-          take: 1
+          take: 1,
+          select: { id: true, type: true, dateTime: true, status: true, location: true }
         },
         messages: {
           orderBy: { createdAt: 'desc' },
-          take: 5
+          take: 1,
+          select: { id: true, sender: true, createdAt: true, isRead: true, channel: true }
         }
       }
     })
-
-    // Self-healing pipeline sync: reconcile any leads with inbound replies
-    await reconcileLeadReplyStatuses(db, leads);
 
     return leads.map(lead => ({
       ...lead,
@@ -1021,7 +1161,7 @@ export const submitClientReview = createServerFn({ method: 'POST' })
             rating: rating,
             reviewText: feedback || `Incredible custom building experience with ${session.companyName || 'our team'}! Extremely satisfied with their professionalism and quality.`,
             projectType: "Custom Home Build",
-            location: "Austin, TX",
+            location: existing.lead?.city ? `${existing.lead.city}${existing.lead.state ? `, ${existing.lead.state}` : ''}` : "Verified Client",
             status: "Unanswered"
           }
         })
@@ -1233,8 +1373,10 @@ export async function callAiEngine(
 
   // 1. PRIMARY ROUTE: Google Gemini Flash (gemini-3.5-flash)
   if (geminiKey && geminiKey.trim() !== "") {
-    const modelsToTry = [primaryGeminiModel, "gemini-3.5-flash"].filter((v, i, a) => a.indexOf(v) === i);
+    const modelsToTry = [primaryGeminiModel, "gemini-3.5-flash", "gemini-3.5-flash-lite"].filter((v, i, a) => a.indexOf(v) === i);
+    let shouldSkipGemini = false;
     for (const m of modelsToTry) {
+      if (shouldSkipGemini) break;
       for (let attempt = 1; attempt <= 2; attempt++) {
         try {
           console.log(`[AI ROUTING] Executing primary model: Google Gemini (${m}) (attempt ${attempt}/2)...`);
@@ -1263,9 +1405,16 @@ export async function callAiEngine(
             }
           }
 
-          const isTransient = res.status === 429 || res.status >= 500;
+          const is503Or404 = res.status === 503 || res.status === 404;
+          const isTransient = res.status === 429 || (res.status >= 500 && res.status !== 503);
           const errText = await res.text().catch(() => "");
           console.warn(`[AI ROUTING] Gemini model ${m} returned HTTP ${res.status}: ${errText.slice(0, 160)}`);
+
+          if (is503Or404 && groqKey) {
+            console.log(`[AI ROUTING] Google capacity spike (${res.status}). Instantly handing over to Groq fallback...`);
+            shouldSkipGemini = true;
+            break;
+          }
 
           if (isTransient && attempt === 1) {
             console.log(`[AI ROUTING RETRY] Transient ${res.status} on ${m}. Backing off 1.2s before retry...`);
@@ -1275,6 +1424,11 @@ export async function callAiEngine(
           break;
         } catch (geminiErr: any) {
           console.warn(`[AI ROUTING] Gemini model ${m} network/timeout error: ${geminiErr?.message || geminiErr}`);
+          if (groqKey) {
+            console.log(`[AI ROUTING] Gemini network timeout. Handing over to Groq fallback immediately...`);
+            shouldSkipGemini = true;
+            break;
+          }
           if (attempt === 1) {
             console.log(`[AI ROUTING RETRY] Network glitch on ${m}. Backing off 1.2s before retry...`);
             await new Promise(r => setTimeout(r, 1200));
@@ -1288,7 +1442,7 @@ export async function callAiEngine(
 
   // 2. FALLBACK ROUTE: Groq Cloud (openai/gpt-oss-120b)
   if (groqKey && groqKey.trim() !== "") {
-    const groqModelsToTry = [defaultGroqModel, "openai/gpt-oss-120b", "openai/gpt-oss-20b"].filter((v, i, a) => a.indexOf(v) === i);
+    const groqModelsToTry = [defaultGroqModel, "openai/gpt-oss-120b"].filter((v, i, a) => a.indexOf(v) === i);
     for (const gm of groqModelsToTry) {
       for (let attempt = 1; attempt <= 2; attempt++) {
         try {
@@ -1306,7 +1460,7 @@ export async function callAiEngine(
               max_tokens: maxTokens,
               ...(options?.isJson ? { response_format: { type: "json_object" } } : {})
             }),
-            signal: AbortSignal.timeout(15000)
+            signal: AbortSignal.timeout(25000)
           });
 
           if (groqRes.ok) {
@@ -1374,7 +1528,7 @@ export const generateGroqCompletion = createServerFn({ method: 'POST' })
 
       const lower = lastUserMsg.toLowerCase();
       if (lower.includes("budget") || lower.includes("price") || lower.includes("cost")) {
-        reply = "Absolutely! Our custom home projects in Austin typically start at $500K for semi-custom builds and range upwards of $1.5M+ for full luxury estates. Does that range align with your investment plans?";
+        reply = `Absolutely! Our custom home projects with ${session.companyName || "our team"} typically start at $500K for semi-custom builds and range upwards of $1.5M+ for full luxury estates. Does that range align with your investment plans?`;
       } else if (lower.includes("saturday") || lower.includes("meet") || lower.includes("schedule") || lower.includes("tour")) {
         reply = "I would be delighted to schedule a walkthrough! Saturday morning at 10:30 AM works perfectly. Should I lock that slot in and send over the directions?";
       } else if (lower.includes("basement") || lower.includes("sloping") || lower.includes("terrain")) {
@@ -1534,7 +1688,12 @@ export async function generateAiReplyCore(
   // Fetch lead to personalize prompt and load existing Lead Memory Graph
   const lead = await db.lead.findUnique({ where: { id: leadId } });
   const leadName = lead ? sanitizeMetadataField(lead.name, 60) || "Client" : "Client";
-  const leadCounty = lead ? sanitizeMetadataField(lead.county, 60) || "your area" : "your area";
+  const rawLeadLocation = [lead?.city, lead?.county, lead?.state].filter(Boolean).map((s: string) => sanitizeMetadataField(s, 60)).join(", ");
+  const builderServiceLocation = builderProfile.businessAddress || builderProfile.city || "";
+  const leadLocation = rawLeadLocation || builderServiceLocation || "your local area";
+  const leadCounty = (lead?.county ? sanitizeMetadataField(lead.county, 60) : "") 
+    || (lead?.city ? sanitizeMetadataField(lead.city, 60) : "") 
+    || leadLocation;
 
   // Parse existing Lead Memory Graph
   let currentMemory: Record<string, any> = {
@@ -1577,7 +1736,7 @@ Your builder principal is ${contactName}.
 
 MISSION & MINDSET:
 - You are an experienced, high-trust luxury custom home building director.
-- You talk like a real local builder with 20+ years of experience in ${leadCounty} (practical, warm, knowledgeable, zero sales pressure).
+- You talk like a real local builder with 20+ years of experience in ${leadLocation} (practical, warm, knowledgeable, zero sales pressure).
 - Your goal: Build genuine trust through helpful expertise, active listening, and guide qualified buyers toward an architectural review or site feasibility walkthrough.
 
 BRAND VOICE & PERSONA:
@@ -1592,7 +1751,7 @@ CRITICAL CONVERSATIONAL RULES (STRICT COMPLIANCE):
    - NEVER ignore the client's direct question or remark to force a sales question or meeting invite.
 2. CONVERSATIONAL CADENCE ("Validate → Value → Ask"):
    - Step 1 (Validate): Acknowledge their situation with authentic empathy (e.g. lot location, family needs, architectural style).
-   - Step 2 (Value): Offer ONE practical builder insight (e.g. site topography/slope engineering, foundation types, tree preservation ordinances in ${leadCounty}, utility access, or plan drafting).
+   - Step 2 (Value): Offer ONE practical builder insight (e.g. site topography/slope engineering, foundation types, tree preservation ordinances in ${leadLocation}, utility access, or plan drafting).
    - Step 3 (Ask): Ask at most ONE low-friction, open-ended question. Never ask multiple questions in one email.
 3. ZERO PREMATURE MEETING SPAMMING:
    - Do NOT ask for a call, meeting, or site tour on early turns unless the lead specifically asks about availability, timing, or scheduling.
@@ -1606,7 +1765,7 @@ OBJECTION & INQUIRY PLAYBOOKS:
 1. "JUST BROWSING / EARLY STAGES / NOT READY":
    - Disarm with zero sales pressure: "No pressure at all! Custom builds usually take 1 to 2 years of dreaming and site scouting. Feel free to use me as a sounding board whenever you have questions about floor plans, lot slopes, or county permits."
 2. "PRICING / COST PER SQ FT":
-   - Be transparent and explain reality: "In custom builds across ${leadCounty}, square foot pricing varies widely depending on lot topography, slope engineering, and finish specs. Our custom homes typically start around ${minBudget} for ground-up bespoke construction. Does that investment range align with what you had in mind?"
+   - Be transparent and explain reality: "In custom builds across ${leadLocation}, square foot pricing varies widely depending on lot topography, slope engineering, and finish specs. Our custom homes typically start around ${minBudget} for ground-up bespoke construction. Does that investment range align with what you had in mind?"
 3. "ALREADY WORKING WITH AN ARCHITECT / BUILDER":
    - Be gracious and professional: "That's fantastic! Having architectural drafts underway is a huge milestone. If you ever need a builder's constructability review or preliminary engineering budget check, we're always happy to offer a second set of eyes."
 4. "ARE YOU AN AI / BOT?":
@@ -1614,10 +1773,10 @@ OBJECTION & INQUIRY PLAYBOOKS:
 5. "LOT / SITE FEASIBILITY":
    - Reassure engineering competence: "Lot feasibility—especially soil testing, slope setbacks, and utility hookups—is where most critical planning happens before drawing blueprints. We walk sites with clients before finalizing design."
 6. "ZONING, SETBACKS & IMPERVIOUS COVERAGE (MANDATORY NON-NUMERIC GUARDRAIL)":
-   - NEVER quote, invent, or guess exact municipal impervious-cover percentages, setback footage, or tree preservation numbers (e.g. NEVER state "Austin limits it to 20%" or "5%" or "30%").
-   - Impervious-cover and setback regulations vary drastically parcel-by-parcel based on watershed classification (Barton Springs Recharge vs Contributing Zone, Lake Austin overlays), slope gradient, and local municipality/HOA deed restrictions.
-   - If a client asks for exact code limits or percentages, provide safe qualitative guidance (e.g. "recharge zones are tightly restricted", "steep slopes reduce the buildable footprint") and state clearly that an authoritative civil/topographical survey is required to calculate the exact legal coverage for their specific parcel.
-   - Sample phrasing: "Impervious-cover limits and setbacks in ${leadCounty} vary significantly based on your parcel's watershed classification, slope gradient, and environmental overlay. Rather than estimating a generic percentage, we always review a formal topographic and civil survey to establish your exact buildable footprint. Do you already have a survey or plat map for the property?"
+   - NEVER quote, invent, or guess exact municipal impervious-cover percentages, setback footage, or tree preservation numbers for any city, county, or state.
+   - Impervious-cover and setback regulations vary drastically parcel-by-parcel based on local watershed classifications, environmental overlays, slope gradients, and municipal/HOA deed restrictions in ${leadLocation}.
+   - If a client asks for exact code limits or percentages, provide safe qualitative guidance (e.g. "environmentally sensitive zones and steep slopes restrict the buildable footprint") and state clearly that an authoritative civil/topographical survey and local municipal review are required to calculate the exact legal coverage for their specific parcel.
+   - Sample phrasing: "Impervious-cover limits and setbacks in ${leadLocation} vary significantly based on your parcel's local environmental classification, slope gradient, and zoning overlay. Rather than estimating a generic percentage, we always review a formal topographic and civil survey to establish your exact buildable footprint. Do you already have a survey or plat map for the property?"
 
 QUALIFICATION STANDARDS:
 - Minimum Construction Budget: ${minBudget}
@@ -1632,7 +1791,7 @@ ${customDirectives}
 
 CURRENT LEAD CONTEXT:
 - Client Name: ${leadName}
-- Project County/City: ${leadCounty}
+- Project County/City: ${leadLocation}
 - Estimated Budget: ${currentMemory.budgetRange || "Not confirmed yet"}
 - Lot/Land Status: ${currentMemory.lotStatus || "Not confirmed yet"}
 - Timeline: ${currentMemory.timeline || "Not confirmed yet"}
@@ -1653,7 +1812,7 @@ You must respond strictly with a valid JSON object matching this schema:
   "leadMemoryUpdate": {
     "budgetRange": string | null, // e.g. "$750k - $1M" or extracted number
     "timeline": string | null, // e.g. "Spring 2027", "Next 4 months"
-    "lotStatus": string | null, // e.g. "Owns 2-acre lot in Travis", "Searching in Cedar Park"
+    "lotStatus": string | null, // e.g. "Owns 2-acre parcel", "Searching in local area"
     "architecturalStyle": string | null, // e.g. "Modern Farmhouse", "Mediterranean Estate"
     "familyLifestyleNeeds": string | null, // e.g. "4 bed, pool, single story for aging parents"
     "objectionsRaised": string[], // List of any hesitations/objections mentioned in this interaction
@@ -1769,7 +1928,7 @@ Do not output any markdown formatting or text outside the raw JSON object.`;
       });
     } else {
       rawResponse = JSON.stringify({
-        replyText: "Thank you for sharing your ideas! We specialize in tailored custom estates throughout Austin. Do you currently have a specific architectural style or floor plan in mind?",
+        replyText: `Thank you for sharing your ideas! We specialize in tailored custom residences with ${companyName}. Do you currently have a specific architectural style or floor plan in mind?`,
         intent: "WARM",
         dealScore: 55,
         dealSummary: "Lead exploring custom home design options.",
@@ -2043,15 +2202,15 @@ Do not output any markdown formatting or text outside the raw JSON object.`;
   };
 }
 export const summarizeConversation = createServerFn({ method: 'POST' })
-  .inputValidator((data: { leadId: string }) => data)
+  .inputValidator((data: { leadId: string; activeRole?: string | null }) => data)
   .handler(async ({ data }) => {
     const { getTenantDb, requireAuth } = await import('./server-utils.server');
-    const session = await requireAuth();
-    const db = await getTenantDb();
-    
     try {
+      const session = await requireAuth(data?.activeRole ?? undefined);
+      const db = await getTenantDb(session);
+      
       const messages = await db.message.findMany({
-        where: { leadId: data.leadId, builderId: session.builderId || '' },
+        where: { leadId: data.leadId },
         orderBy: { createdAt: 'asc' }
       });
 
@@ -2082,12 +2241,12 @@ Format the output clearly using bullet points and bold section headers. Keep it 
       const summary = await callAiEngine([
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
-      ], { maxTokens: 900, temperature: 0.5 });
+      ], { maxTokens: 1600, temperature: 0.5 });
 
       return summary || "Unable to generate chat summary.";
-    } catch (err) {
+    } catch (err: any) {
       console.error("Summarization error:", err);
-      return "Failed to generate summary. Please try again.";
+      return `Failed to generate summary: ${err?.message || "Please try again."}`;
     }
   });
 
@@ -2104,21 +2263,21 @@ export const generateAIScriptUpdate = createServerFn({ method: 'POST' })
     const systemPrompt = `You are a professional copywriting assistant specialized in high-trust outreach and lead nurture campaigns for luxury custom home builders.
 You are tasked with generating a sequence of exactly 3 SMS follow-up nurture messages based on the builder's custom instruction.
 
-CRITICAL CONTEXT: The leads have NOT signed up or contacted the builder. They are identified from public records (specifically newly filed building permit filings or county tax records in Travis/Austin). The messages MUST be professional, highly localized, and build massive trust by referring directly to their newly filed permit/records, instead of claiming "thanks for your interest" or "thanks for connecting" (which would feel like spam and break trust).
+CRITICAL CONTEXT: The leads have NOT signed up or contacted the builder. They are identified from public records (specifically newly filed residential building permit filings or county tax assessment records in the builder's regional market). The messages MUST be professional, highly localized, and build massive trust by referring directly to their newly filed permit/records, instead of claiming "thanks for your interest" or "thanks for connecting" (which would feel like spam and break trust).
 
 Builder Custom Instruction: "${instruction}"
 
 Follow these rules:
 1. Message 1 must be designed for immediate dispatch (<60 seconds after a permit/tax record is filed). It must be direct, refer to the filed permit, and ask a qualifying question (e.g. if they have hired a general builder/contractor yet).
-2. Message 2 should trigger 2 hours later if no reply. It should follow up politely and offer a useful localized resource (e.g., Austin Permitting Checklist, site preparation tips, or HOA zoning reviews).
-3. Message 3 should trigger 24 hours later. It should propose a direct call-to-action (e.g., booking a private walkthrough at our contemporary model home in Lakeway or Dripping Springs).
+2. Message 2 should trigger 2 hours later if no reply. It should follow up politely and offer a useful localized resource (e.g., Local Permitting & Zoning Checklist, site preparation tips, or HOA architectural guidelines review).
+3. Message 3 should trigger 24 hours later. It should propose a direct call-to-action (e.g., booking a private walkthrough at a completed project or architectural consultation).
 4. Do not output anything other than a raw JSON array containing exactly three objects with keys "t" (the timing label) and "body" (the SMS script content).
 
 Example Format:
 [
-  { "t": "Message 1 Â· Immediate (< 60s)", "body": "Hi [Name], I noticed your residential building permit application filed in Travis County. I'm ${primaryContact.split(' ')[0]}'s assistant from ${companyName}. Since custom builds in Austin require complex structural reviews, have you already hired a general builder?" },
-  { "t": "Message 2 Â· 2 hours later (no reply)", "body": "Hey [Name], just checking in! I wanted to send over our Austin Permitting & Zoning Checklist (it saves weeks on site preparation). Do you already own the lot?" },
-  { "t": "Message 3 Â· 24 hours later", "body": "Hi [Name], we are hosting private tours of our completed contemporary estate in Lakeway this Saturday. Let me know if you would like me to reserve a spot for you!" }
+  { "t": "Message 1 · Immediate (< 60s)", "body": "Hi [Name], I noticed your residential building permit application filed recently. I'm ${primaryContact.split(' ')[0]}'s assistant from ${companyName}. Since ground-up custom builds require complex structural planning, have you already hired a principal builder?" },
+  { "t": "Message 2 · 2 hours later (no reply)", "body": "Hey [Name], just checking in! I wanted to send over our Local Permitting & Site Planning Checklist (it saves weeks on site preparation). Do you already own the lot?" },
+  { "t": "Message 3 · 24 hours later", "body": "Hi [Name], we are hosting private site walkthroughs of our completed custom residences this week. Let me know if you would like me to reserve a consultation spot for you!" }
 ]`;
 
     try {
@@ -2144,9 +2303,9 @@ Example Format:
         console.error("Failed to parse AI JSON response, using fallback matching...", pe);
         // Fallback matching
         parsed = [
-          { t: "Message 1 Â· Immediate (< 60s)", body: `Hi [Name]! I'm ${primaryContact.split(' ')[0]}'s assistant from ${companyName}. Are you looking to build your home in Austin in the next 6-12 months? Reply YES/NO.` },
-          { t: "Message 2 Â· 2 hours later", body: "Hey [Name], just following up! Did you have a specific lot in mind in Travis County, or would you like help finding one?" },
-          { t: "Message 3 Â· 24 hours later", body: "Hi [Name], would you like a private walkthrough of our newly completed contemporary estate this Thursday?" }
+          { t: "Message 1 · Immediate (< 60s)", body: `Hi [Name]! I'm ${primaryContact.split(' ')[0]}'s assistant from ${companyName}. Are you looking to break ground on your custom home in the next 6-12 months? Reply YES/NO.` },
+          { t: "Message 2 · 2 hours later", body: "Hey [Name], just following up! Did you have a specific homesite in mind, or would you like help evaluating lot feasibility?" },
+          { t: "Message 3 · 24 hours later", body: "Hi [Name], would you like a private architectural walkthrough of our recently completed showcase residence this Thursday?" }
         ];
       }
 
@@ -2394,24 +2553,6 @@ export const cancelAppointment = createServerFn({ method: 'POST' })
     }
   })
 
-export const generatePortalToken = createServerFn({ method: 'POST' })
-  .inputValidator((data: { leadId: string; activeRole?: string | null }) => data)
-  .handler(async ({ data }) => {
-    const { getTenantDb, requireAuth } = await import('./server-utils.server');
-    const session = await requireAuth(data?.activeRole ?? undefined);
-    const db = await getTenantDb(session);
-    
-    // Generate a random 32 char hex string
-    const token = Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
-    
-    await db.lead.update({
-      where: { id: data.leadId },
-      data: { portalToken: token }
-    });
-    
-    return token;
-  });
-
 export const getConversations = createServerFn({ method: 'POST' })
   .inputValidator((data: { activeRole?: string | null; filter?: 'all' | 'assigned_to_me' | 'unassigned' } | undefined) => data)
   .handler(async ({ data }) => {
@@ -2438,7 +2579,17 @@ export const getConversations = createServerFn({ method: 'POST' })
 
     const leads = await db.lead.findMany({
       where: whereClause,
-      include: {
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        email: true,
+        status: true,
+        scoreTier: true,
+        estimatedBudget: true,
+        createdAt: true,
+        portalToken: true,
+        portalVisitedAt: true,
         assignedTo: {
           select: {
             id: true,
@@ -2449,7 +2600,13 @@ export const getConversations = createServerFn({ method: 'POST' })
         },
         messages: {
           orderBy: { createdAt: 'desc' },
-          take: 1
+          take: 1,
+          select: {
+            id: true,
+            sender: true,
+            createdAt: true,
+            channel: true,
+          }
         },
         _count: {
           select: {
@@ -2464,16 +2621,47 @@ export const getConversations = createServerFn({ method: 'POST' })
       }
     })
 
-    // Self-healing pipeline sync: reconcile any leads with inbound replies
-    await reconcileLeadReplyStatuses(db, leads);
+    // Fetch database-level truncated preview (200 chars) for latest messages.
+    // This completely prevents transferring multi-MB base64 images over the wire from Neon!
+    const latestMessageIds = leads
+      .map((l: any) => l.messages[0]?.id)
+      .filter((id: any): id is string => typeof id === 'string' && id.length > 0);
 
-    const conversations = leads.map((l) => {
+    const previewMap = new Map<string, string>();
+    if (latestMessageIds.length > 0) {
+      try {
+        const rawPreviews = await db.$queryRaw<{ id: string; preview: string }[]>`
+          SELECT id, LEFT(content, 200) as preview 
+          FROM "Message" 
+          WHERE id = ANY(${latestMessageIds}::text[])
+        `;
+        for (const row of rawPreviews) {
+          previewMap.set(row.id, row.preview || '');
+        }
+      } catch (rawErr) {
+        console.warn('[CONVERSATIONS_PREVIEW_QUERY_WARN]:', rawErr);
+      }
+    }
+
+    const conversations = leads.map((l: any) => {
       const lastMsg = l.messages[0]
       const unreadCount = l._count.messages
       
       // Check if lead polled the portal within the last 30 seconds
       const isRecentlyActive = l.portalVisitedAt && 
           (new Date().getTime() - new Date(l.portalVisitedAt).getTime()) < 1000 * 30;
+
+      let previewText = "No messages yet";
+      if (lastMsg?.id) {
+        const raw = previewMap.get(lastMsg.id) || "";
+        if (raw.includes("🖼️ Image Shared:") || raw.includes("📎 File Attachment:")) {
+          previewText = "📎 Photo & Document attached";
+        } else if (raw.length > 0) {
+          previewText = raw.length >= 200 ? raw.slice(0, 200) + "..." : raw;
+        } else {
+          previewText = "Message received";
+        }
+      }
 
       return {
         leadId: l.id,
@@ -2483,7 +2671,7 @@ export const getConversations = createServerFn({ method: 'POST' })
         status: l.status,
         scoreTier: l.scoreTier,
         estimatedBudget: l.estimatedBudget,
-        lastMessage: lastMsg ? lastMsg.content : "No messages yet",
+        lastMessage: previewText,
         lastMessageTime: lastMsg ? lastMsg.createdAt.toISOString() : l.createdAt.toISOString(),
         unreadCount,
         isOnline: !!isRecentlyActive,
@@ -2513,46 +2701,52 @@ export const getMessagesForLead = createServerFn({ method: 'POST' })
     const db = await getTenantDb(session)
     const { leadId } = data
     try {
-      const lead = await db.lead.findUnique({
-        where: { id: leadId },
-        include: {
-          assignedTo: {
-            select: {
-              id: true,
-              displayName: true,
-              email: true,
-              builderRole: true,
+      // 1. Parallel fetch for Lead and Messages in a single database roundtrip
+      const [lead, messages] = await Promise.all([
+        db.lead.findUnique({
+          where: { id: leadId },
+          include: {
+            assignedTo: {
+              select: {
+                id: true,
+                displayName: true,
+                email: true,
+                builderRole: true,
+              }
             }
           }
-        }
-      })
-      if (!lead) throw new Error("Lead not found")
-
-      const messages = await db.message.findMany({
-        where: { leadId, isSimulated: data.isSimulated || false },
-        include: {
-          senderUser: {
-            select: {
-              id: true,
-              displayName: true,
-              builderRole: true,
-              email: true,
+        }),
+        db.message.findMany({
+          where: { leadId, isSimulated: data.isSimulated || false },
+          include: {
+            senderUser: {
+              select: {
+                id: true,
+                displayName: true,
+                builderRole: true,
+                email: true,
+              }
             }
-          }
-        },
-        orderBy: { createdAt: 'asc' }
-      })
+          },
+          orderBy: { createdAt: 'asc' }
+        })
+      ]);
 
+      if (!lead) throw new Error("Lead not found");
+
+      // 2. Fire-and-forget non-blocking unread status update (prevents blocking response)
       if (!data.isSimulated) {
-        await db.message.updateMany({
+        db.message.updateMany({
           where: { leadId, sender: 'lead', isRead: false, isSimulated: false },
           data: { isRead: true }
-        })
+        }).catch((err: any) => {
+          console.warn('[MESSAGES READ UPDATE WARN]:', err);
+        });
       }
 
       return {
         lead,
-        messages: messages.map(m => ({
+        messages: messages.map((m: any) => ({
           id: m.id,
           sender: m.sender,
           subject: m.subject || null,
@@ -2569,10 +2763,10 @@ export const getMessagesForLead = createServerFn({ method: 'POST' })
             email: m.senderUser.email,
           } : null,
         }))
-      }
+      };
     } catch (error) {
-      console.error("Error in getMessagesForLead:", error)
-      throw error
+      console.error("Error in getMessagesForLead:", error);
+      throw error;
     }
   })
 
@@ -2594,6 +2788,10 @@ export const sendMessage = createServerFn({ method: 'POST' })
     try {
       const { leadId, content, subject, isInternal } = data
 
+      // Upload any local base64 attachments to Cloudflare R2 to keep PostgreSQL lightweight
+      const { processAndUploadContentAttachments } = await import('./storage.server');
+      const processedContent = await processAndUploadContentAttachments(content, leadId);
+
       // 1. Create message in DB
       const userMsg = await db.message.create({
         data: {
@@ -2601,7 +2799,7 @@ export const sendMessage = createServerFn({ method: 'POST' })
           leadId,
           sender: 'user',
           subject: subject || null,
-          content,
+          content: processedContent,
           isRead: true,
           isInternal: isInternal === true,
           type: isInternal ? 'internal_note' : 'message',
@@ -2662,30 +2860,35 @@ export const sendMessage = createServerFn({ method: 'POST' })
         })
       }
 
-      // 3. Dispatch Outbound Real Email via Resend if lead has an email address
+      // 3. Dispatch Outbound Real Email via Resend/Google/SMTP if lead has an email address
       if (currentLead && currentLead.email) {
         try {
-          const { sendOutboundEmail, buildArchitecturalEmailHtml } = await import('./email.server');
+          const { sendOutboundEmail, buildArchitecturalEmailHtml, extractAttachmentsAndCleanContent } = await import('./email.server');
           const companyName = session.companyName || currentLead.builder?.companyName || 'Custom Builder';
           const senderName = session.displayName || 'Sales Representative';
           const senderRole = session.builderRole === 'owner' ? 'Founder & Principal Builder' : 'Senior Sales Director';
           const subject = `Re: Architectural Consultation — ${currentLead.county || 'Custom Build'} (${companyName})`;
+
+          const extracted = extractAttachmentsAndCleanContent(content);
 
           const html = buildArchitecturalEmailHtml({
             recipientName: currentLead.name || 'there',
             senderName,
             senderRole,
             companyName,
-            messageContent: content,
+            messageContent: extracted.cleanText || content,
+            links: extracted.links,
+            attachmentsList: extracted.attachments.map(a => ({ name: a.filename, size: a.size })),
           });
 
           await sendOutboundEmail({
             to: currentLead.email,
             subject,
             html,
-            text: content,
+            text: extracted.cleanText || content,
             from: `${senderName} · ${companyName} <onboarding@resend.dev>`,
             replyTo: session.email || currentLead.builder?.email,
+            attachments: extracted.attachments,
           });
 
           // Log activity
@@ -2693,11 +2896,11 @@ export const sendMessage = createServerFn({ method: 'POST' })
             data: {
               builderId: session.builderId || '',
               leadId,
-              action: `📧 Outbound Email sent to ${currentLead.email}: "${content.slice(0, 80)}..."`,
+              action: `📧 Outbound Email sent to ${currentLead.email}: "${(extracted.cleanText || content).slice(0, 80)}..."`,
             }
           }).catch(() => {});
         } catch (emailErr) {
-          console.error('[RESEND DISPATCH ERROR]', emailErr);
+          console.error('[OUTBOUND DISPATCH ERROR]', emailErr);
         }
       }
 
@@ -2723,6 +2926,46 @@ export const sendMessage = createServerFn({ method: 'POST' })
       console.error("Error in sendMessage:", error)
       throw error
     }
+  })
+
+export const markConversationUnread = createServerFn({ method: 'POST' })
+  .inputValidator((data: { leadId: string; activeRole?: string | null }) => data)
+  .handler(async ({ data }) => {
+    const { getTenantDb, requireAuth } = await import('./server-utils.server');
+    const session = await requireAuth(data?.activeRole ?? undefined);
+    const db = await getTenantDb(session);
+    const latestMsg = await db.message.findFirst({
+      where: { leadId: data.leadId },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true }
+    });
+    if (latestMsg) {
+      await db.message.update({
+        where: { id: latestMsg.id },
+        data: { isRead: false }
+      });
+    }
+    return { success: true };
+  });
+
+export const archiveConversation = createServerFn({ method: 'POST' })
+  .inputValidator((data: { leadId: string; activeRole?: string | null }) => data)
+  .handler(async ({ data }) => {
+    const { getTenantDb, requireAuth } = await import('./server-utils.server');
+    const session = await requireAuth(data?.activeRole ?? undefined);
+    const db = await getTenantDb(session);
+    await db.lead.update({
+      where: { id: data.leadId },
+      data: { status: 'Archived' }
+    });
+    await db.activity.create({
+      data: {
+        builderId: session.builderId || '',
+        leadId: data.leadId,
+        action: `📁 Conversation archived by ${session.displayName || 'Team Member'}`
+      }
+    }).catch(() => {});
+    return { success: true };
   })
 
 export const assignLeadToUser = createServerFn({ method: 'POST' })
@@ -2837,7 +3080,7 @@ export const getLatestInboundMessages = createServerFn({ method: 'POST' })
         leadId: m.leadId,
         leadName: m.lead?.name || 'Homeowner Lead',
         leadEmail: m.lead?.email || '',
-        leadCounty: m.lead?.county || 'Travis County',
+        leadCounty: m.lead?.county || m.lead?.city || (m.lead?.state ? `Local (${m.lead.state})` : 'Location Unspecified'),
         scoreTier: m.lead?.scoreTier || 'Warm',
         content: stripEmailQuotedHistory(m.content) || m.content,
         channel: m.channel,
@@ -2991,13 +3234,32 @@ export async function triggerAutonomousAiOutreach(
     const builderProfile = settingsObj.builder_profile || {};
     const brainConfig = settingsObj.ai_brain_config || {};
 
+    // ── SAFETY INTERLOCK: Compulsory AI Knowledge Base / Builder Defaults ──
+    const isKnowledgeBaseConfigured = Boolean(
+      (brainConfig.customDirectives && brainConfig.customDirectives.trim().length >= 20) ||
+      (builderProfile.aiContext && builderProfile.aiContext.trim().length >= 20)
+    );
+
+    if (!isKnowledgeBaseConfigured) {
+      console.warn(`[SAFETY INTERLOCK] Autonomous AI outreach paused for lead ${leadId}. Builder ${builderId} has not completed their AI Knowledge Base / Builder Defaults.`);
+      await db.activity.create({
+        data: {
+          builderId,
+          leadId,
+          action: `⚠️ AI Autonomous Outreach Paused: Builder AI Knowledge Base / Defaults not yet configured in Settings. Please provide your build policies to enable autonomous replies and prevent misinforming leads.`
+        }
+      });
+      return { success: false, reason: 'AI Knowledge Base not configured' };
+    }
+
     const companyName = builderProfile.companyName || builder.companyName || 'Custom Estate Builder';
     const profileEmail = builderProfile.email || builder.email; // e.g. promonth2004@gmail.com
     const personaName = brainConfig.personaName || builderProfile.primaryContact || 'Alex';
 
+    const leadArea = [lead.county, lead.city].filter(Boolean).join(" · ") || 'your area';
     const messagePrompt = initialUserMessage && initialUserMessage.trim().length > 0
       ? initialUserMessage.trim()
-      : `Hello, I submitted an architectural inquiry for a custom build with an estimated budget of $${(lead.estimatedBudget || 1500000).toLocaleString()} in ${lead.county || 'your area'}. What is your current availability and design process?`;
+      : `Hello, I submitted an architectural inquiry for a custom build with an estimated budget of $${(lead.estimatedBudget || 1500000).toLocaleString()} in ${leadArea}. What is your current availability and design process?`;
 
     // 1. Generate bespoke architectural qualification reply (Gemini / Groq engine)
     const aiResponse = await generateAiReplyCore(
@@ -3159,7 +3421,7 @@ export const getReportsData = createServerFn({ method: 'POST' })
     // All Time (use a safe past date)
     const startOfAllTime = new Date(2020, 0, 1)
 
-    // Optimized: Fetch all leads, appointments, review requests, messages, and activities at once to process in-memory
+    // Optimized: Fetch only relevant records with targeted fields to process in-memory
     const [allLeads, allAppointments, allReviewRequests, allMessages, allActivities] = await Promise.all([
       db.lead.findMany({
         select: { id: true, createdAt: true, status: true, source: true, estimatedBudget: true }
@@ -3171,9 +3433,19 @@ export const getReportsData = createServerFn({ method: 'POST' })
         select: { createdAt: true, status: true, rating: true }
       }),
       db.message.findMany({
+        where: { sender: 'system' },
         select: { createdAt: true, sender: true }
       }),
       db.activity.findMany({
+        where: {
+          OR: [
+            { action: { contains: 'AI' } },
+            { action: { contains: 'automated' } },
+            { action: { contains: 'outreach' } },
+            { action: { contains: 'nurture' } },
+            { action: { contains: 'email' } }
+          ]
+        },
         select: { createdAt: true, action: true }
       })
     ])
@@ -3246,7 +3518,7 @@ export const getReportsData = createServerFn({ method: 'POST' })
     // 2. Leads by Source in-memory
     const sourceMap: Record<string, number> = {}
     allLeads.forEach(l => {
-      const src = l.source || "Austin Building Permits"
+      const src = l.source || "Direct Inbound"
       sourceMap[src] = (sourceMap[src] || 0) + 1
     })
     const leadsBySource = Object.keys(sourceMap).map(source => ({
@@ -3438,6 +3710,7 @@ export const saveIntegrationCredentials = createServerFn({ method: 'POST' })
         }
       })
 
+      invalidateCache("dashboard_");
       return { success: true }
     } catch (error) {
       console.error(`Error in saveIntegrationCredentials for ${platformId}:`, error)
@@ -3455,6 +3728,7 @@ export const disconnectIntegration = createServerFn({ method: 'POST' })
       await db.integration.deleteMany({
         where: { platformId }
       })
+      invalidateCache("dashboard_");
       return { success: true }
     } catch (error) {
       console.error(`Error in disconnectIntegration for ${platformId}:`, error)
@@ -3763,6 +4037,7 @@ export async function writeSettingJson(platformId: string, value: Record<string,
     where: { id: builderId },
     data: { settings: JSON.stringify(settingsObj) }
   })
+  invalidateCache("dashboard_");
 }
 
 export const getBuilderProfile = createServerFn({ method: 'POST' })
@@ -3784,15 +4059,15 @@ export const getBuilderProfile = createServerFn({ method: 'POST' })
   const user = builder?.users[0];
   
   return {
-    companyName: builder?.companyName || savedProfile.companyName || "Your Company LLC",
-    primaryContact: builder?.contactName || savedProfile.primaryContact || user?.displayName || "Your Name",
-    email: builder?.email || savedProfile.email || user?.email || "youremail@example.com",
-    phone: builder?.phone || savedProfile.phone || "+1 512-555-0100",
-    businessAddress: savedProfile.businessAddress || "1100 S Lamar Blvd, Austin, TX 78704",
-    targetZipCodes: savedProfile.targetZipCodes || "78704, 78703, 78731, 78613, 78641",
-    avgHomePrice: savedProfile.avgHomePrice || "$700,000",
-    homesPerYear: savedProfile.homesPerYear || "42",
-    timezone: savedProfile.timezone || "Asia/Kolkata",
+    companyName: builder?.companyName || savedProfile.companyName || "",
+    primaryContact: builder?.contactName || savedProfile.primaryContact || user?.displayName || "",
+    email: builder?.email || savedProfile.email || user?.email || "",
+    phone: builder?.phone || savedProfile.phone || "",
+    businessAddress: savedProfile.businessAddress || "",
+    targetZipCodes: savedProfile.targetZipCodes || "",
+    avgHomePrice: savedProfile.avgHomePrice || "$750,000",
+    homesPerYear: savedProfile.homesPerYear || "25",
+    timezone: savedProfile.timezone || "America/Chicago",
     aiContext: savedProfile.aiContext || "",
   };
 })
@@ -3807,6 +4082,11 @@ export const saveBuilderProfile = createServerFn({ method: 'POST' })
       const db = await getDb();
       
       const profileData = data.data || data;
+
+      // ── COMPULSORY ENFORCEMENT: AI Knowledge Base / Builder Defaults ──
+      if (!profileData.aiContext || typeof profileData.aiContext !== 'string' || profileData.aiContext.trim().length < 20) {
+        throw new Error("AI Knowledge Base / Builder Defaults is required (minimum 20 characters). Please provide your operating policies, service region, and build specifications.");
+      }
       
       await writeSettingJson('builder_profile', profileData);
       
@@ -3850,10 +4130,27 @@ export const saveBuilderProfile = createServerFn({ method: 'POST' })
   })
 
 export const getAiBrainConfig = createServerFn({ method: 'GET' }).handler(async () => {
-  const { getTenantDb } = await import('./server-utils.server');
-  const brainConfig = await readSettingJson('ai_brain_config');
-  const legacyQual = await readSettingJson('qualification_rules');
-  const builderProfile = await readSettingJson('builder_profile');
+  const { requireAuth } = await import('./server-utils.server');
+  const { getDb } = await import('./db.server');
+  const session = await requireAuth();
+  const db = await getDb();
+
+  const builderId = session.role === 'admin'
+    ? (session.actingAsBuilderId || session.builderId)
+    : session.builderId;
+
+  const builder = await db.builder.findUnique({
+    where: { id: builderId || '' },
+    select: { settings: true }
+  });
+
+  const settingsObj = builder?.settings
+    ? (typeof builder.settings === 'string' ? JSON.parse(builder.settings) : builder.settings)
+    : {};
+
+  const brainConfig = settingsObj['ai_brain_config'] || {};
+  const legacyQual = settingsObj['qualification_rules'] || {};
+  const builderProfile = settingsObj['builder_profile'] || {};
 
   return {
     primaryGoal: (brainConfig.primaryGoal as string) || 'book_consultation',
@@ -4032,7 +4329,7 @@ export async function checkAndSyncRencastLeads() {
 
     // 1. Read API key and target market from environment variables
     const apiKey = process.env.RENCAST_API_KEY;
-    const targetMarket = process.env.RENCAST_TARGET_MARKET || 'Austin, TX';
+    const targetMarket = process.env.RENCAST_TARGET_MARKET || 'Local Market';
 
     if (!apiKey) {
       return; // Key not set yet â€” user needs to paste it in .env
@@ -4076,16 +4373,25 @@ export async function checkAndSyncRencastLeads() {
       leadsData = generateRealisticPermits(targetMarket, 20);
     }
 
-    // 5. Ingest into DB (deduplicate by name + county)
+    // 5. Ingest into DB (deduplicate by name in a single bulk query)
+    const incomingNames = leadsData.map(item => item.name);
+    const existingLeads = await db.lead.findMany({
+      where: {
+        name: { in: incomingNames },
+        builderId: session.builderId || ''
+      },
+      select: { name: true }
+    });
+    const existingNames = new Set(existingLeads.map((l: any) => l.name));
+    const newItems = leadsData.filter(item => !existingNames.has(item.name));
+
     let leadsIngested = 0;
-    for (const item of leadsData) {
+    for (const item of newItems) {
       const landPrice = item.landPrice || Math.floor(180000 + Math.random() * 220000);
       const estimatedBudget = landPrice * 4;
 
-      const exists = await db.lead.findFirst({
-        where: { name: item.name, county: item.county || targetMarket },
-      });
-      if (exists) continue;
+      const marketStateMatch = targetMarket.match(/,\s*([A-Z]{2})\b/i);
+      const defaultState = marketStateMatch ? marketStateMatch[1].toUpperCase() : '';
 
       const lead = await db.lead.create({
         data: {
@@ -4094,7 +4400,7 @@ export async function checkAndSyncRencastLeads() {
           phone: item.phone || null,
           email: item.email || null,
           county: item.county || targetMarket,
-          state: item.state || 'TX',
+          state: item.state || defaultState,
           landPrice,
           estimatedBudget,
           purchaseDate: item.purchaseDate ? new Date(item.purchaseDate) : new Date(),
@@ -4108,7 +4414,7 @@ export async function checkAndSyncRencastLeads() {
         data: {
           builderId: session.builderId || '',
           leadId: lead.id,
-          action: `Building permit captured via Rencast API â€” ${lead.county}`,
+          action: `Building permit captured via Rencast API — ${lead.county}`,
         },
       });
 
@@ -4129,6 +4435,9 @@ function generateRealisticPermits(targetMarket: string, count: number): any[] {
   const firstNames = ["James", "Robert", "John", "Michael", "David", "William", "Richard", "Joseph", "Thomas", "Charles", "Christopher", "Daniel", "Matthew", "Anthony", "Mark", "Donald", "Steven", "Paul", "Andrew", "Joshua", "Emily", "Sarah", "Jessica", "Amanda", "Ashley", "Taylor", "Megan", "Hannah", "Kayla", "Madison"];
   const lastNames = ["Smith", "Johnson", "Williams", "Brown", "Jones", "Miller", "Davis", "Garcia", "Rodriguez", "Wilson", "Martinez", "Anderson", "Taylor", "Thomas", "Hernandez", "Moore", "Martin", "Jackson", "Thompson", "White", "Lopez", "Lee", "Gonzalez", "Harris", "Clark", "Lewis", "Robinson", "Walker", "Perez", "Hall"];
   
+  const marketStateMatch = targetMarket.match(/,\s*([A-Z]{2})\b/i);
+  const resolvedState = marketStateMatch ? marketStateMatch[1].toUpperCase() : '';
+
   const permits: Array<{ name: string; phone: string; email: string; county: string; state: string; landPrice: number; purchaseDate: Date }> = [];
   const now = new Date();
   
@@ -4137,7 +4446,7 @@ function generateRealisticPermits(targetMarket: string, count: number): any[] {
     const lastName = lastNames[Math.floor(Math.random() * lastNames.length)];
     const fullName = `${firstName} ${lastName}`;
     
-    const areaCode = [512, 737, 830, 210, 817, 214, 972][Math.floor(Math.random() * 7)];
+    const areaCode = [305, 415, 312, 212, 206, 512, 404, 702, 602, 303][Math.floor(Math.random() * 10)];
     const phone = `+1 ${areaCode}-${Math.floor(100 + Math.random() * 900)}-${Math.floor(1000 + Math.random() * 9000)}`;
     const email = `${firstName.toLowerCase()}.${lastName.toLowerCase()}@example.com`;
     
@@ -4150,7 +4459,7 @@ function generateRealisticPermits(targetMarket: string, count: number): any[] {
       phone,
       email,
       county: targetMarket,
-      state: targetMarket.toLowerCase().includes("tx") || targetMarket.toLowerCase().includes("texas") ? "TX" : "US",
+      state: resolvedState || "",
       landPrice,
       purchaseDate,
     });

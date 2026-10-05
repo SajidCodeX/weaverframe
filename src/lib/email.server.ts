@@ -5,6 +5,15 @@ import nodemailer from 'nodemailer';
 // Priority 2: Resend API (via RESEND_API_KEY)
 // Priority 3: Informative Simulation fallback in local dev
 
+export interface EmailAttachment {
+  filename: string;
+  content?: Buffer | string;
+  contentType?: string;
+  path?: string;
+  cid?: string;
+  size?: string;
+}
+
 export interface SendEmailOptions {
   to: string | string[];
   subject: string;
@@ -13,6 +22,8 @@ export interface SendEmailOptions {
   from?: string;
   replyTo?: string;
   tags?: { name: string; value: string }[];
+  attachments?: EmailAttachment[];
+  builderId?: string;
 }
 
 export interface EmailResult {
@@ -71,7 +82,12 @@ export async function sendOutboundEmail(options: SendEmailOptions): Promise<Emai
             html: options.html,
             text: options.text,
             from: senderHeader,
-            replyTo: options.replyTo || googleOAuthToken.email
+            replyTo: options.replyTo || googleOAuthToken.email,
+            attachments: options.attachments?.map(a => ({
+              filename: a.filename,
+              content: a.content || '',
+              contentType: a.contentType,
+            })),
           });
 
           if (oauthResult.success) {
@@ -143,6 +159,28 @@ export async function sendOutboundEmail(options: SendEmailOptions): Promise<Emai
         }
       }
 
+      // Add user attachments if present
+      if (options.attachments && options.attachments.length > 0) {
+        for (const att of options.attachments) {
+          let contentBuf: Buffer | undefined;
+          if (Buffer.isBuffer(att.content)) {
+            contentBuf = att.content;
+          } else if (typeof att.content === 'string') {
+            const raw = att.content.startsWith('data:')
+              ? att.content.replace(/^data:[^;]+;base64,/, '')
+              : att.content;
+            contentBuf = Buffer.from(raw, 'base64');
+          }
+          attachments.push({
+            filename: att.filename,
+            content: contentBuf,
+            contentType: att.contentType,
+            path: att.path,
+            cid: att.cid,
+          });
+        }
+      }
+
       const mailOptions: any = {
         from: `"${senderDisplayName}" <${smtpUser.trim()}>`,
         to: recipient.join(', '),
@@ -199,6 +237,22 @@ export async function sendOutboundEmail(options: SendEmailOptions): Promise<Emai
       if (options.text) payload.text = options.text;
       if (options.replyTo) payload.reply_to = options.replyTo;
       if (options.tags && options.tags.length > 0) payload.tags = options.tags;
+      if (options.attachments && options.attachments.length > 0) {
+        payload.attachments = options.attachments.map(att => {
+          let b64 = '';
+          if (Buffer.isBuffer(att.content)) {
+            b64 = att.content.toString('base64');
+          } else if (typeof att.content === 'string') {
+            b64 = att.content.startsWith('data:')
+              ? att.content.replace(/^data:[^;]+;base64,/, '')
+              : att.content;
+          }
+          return {
+            filename: att.filename,
+            content: b64,
+          };
+        });
+      }
 
       const response = await fetch('https://api.resend.com/emails', {
         method: 'POST',
@@ -248,6 +302,112 @@ export async function sendOutboundEmail(options: SendEmailOptions): Promise<Emai
 }
 
 /**
+ * Extracts attachments, links, and brochures from raw message content and cleans the readable text.
+ */
+export function extractAttachmentsAndCleanContent(rawContent: string | null | undefined): {
+  cleanText: string;
+  attachments: EmailAttachment[];
+  links: Array<{ title: string; url: string; category?: string }>;
+  brochures: Array<{ name: string; size?: string }>;
+  appointments: Array<{ details: string }>;
+} {
+  const attachments: EmailAttachment[] = [];
+  const links: Array<{ title: string; url: string; category?: string }> = [];
+  const brochures: Array<{ name: string; size?: string }> = [];
+  const appointments: Array<{ details: string }> = [];
+  const textLines: string[] = [];
+
+  if (!rawContent) {
+    return { cleanText: '', attachments, links, brochures, appointments };
+  }
+
+  const lines = rawContent.split(/\r?\n/);
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith('🖼️ Image Shared:')) {
+      const metaStr = trimmed.replace('🖼️ Image Shared:', '').trim();
+      const [nameParam, sizeParam, dataUrlParam] = metaStr.split('|');
+      const filename = nameParam || 'image.jpg';
+      const size = sizeParam ? sizeParam.replace('size=', '') : undefined;
+      const dataUrl = dataUrlParam ? dataUrlParam.replace('data=', '') : undefined;
+      let contentType = 'image/jpeg';
+      if (dataUrl?.startsWith('data:image/png')) contentType = 'image/png';
+      else if (dataUrl?.startsWith('data:image/webp')) contentType = 'image/webp';
+      else if (dataUrl?.startsWith('data:image/gif')) contentType = 'image/gif';
+
+      if (dataUrl) {
+        attachments.push({ filename, content: dataUrl, contentType, size });
+      }
+      continue;
+    }
+
+    if (trimmed.startsWith('📎 File Attachment:')) {
+      const metaStr = trimmed.replace('📎 File Attachment:', '').trim();
+      const parts = metaStr.split('|');
+      const filename = parts[0] || 'document.pdf';
+      let size: string | undefined;
+      let contentType = filename.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream';
+      let dataUrl: string | undefined;
+      for (let p = 1; p < parts.length; p++) {
+        if (parts[p].startsWith('size=')) size = parts[p].replace('size=', '');
+        else if (parts[p].startsWith('type=')) contentType = parts[p].replace('type=', '');
+        else if (parts[p].startsWith('data=')) dataUrl = parts[p].replace('data=', '');
+      }
+      if (dataUrl) {
+        attachments.push({ filename, content: dataUrl, contentType, size });
+      }
+      continue;
+    }
+
+    if (trimmed.startsWith('🔗 Link Shared:')) {
+      const metaStr = trimmed.replace('🔗 Link Shared:', '').trim();
+      const parts = metaStr.split('|');
+      const title = parts[0] || 'Shared Link';
+      let url = '#';
+      let category = '';
+      for (let p = 1; p < parts.length; p++) {
+        if (parts[p].startsWith('url=')) url = parts[p].replace('url=', '');
+        else if (parts[p].startsWith('category=')) category = parts[p].replace('category=', '');
+      }
+      links.push({ title, url, category });
+      continue;
+    }
+
+    if (trimmed.startsWith('📄 Document Shared:')) {
+      const metaStr = trimmed.replace('📄 Document Shared:', '').trim();
+      const parts = metaStr.split('|size=');
+      let name = (parts[0] || 'Document').trim();
+      if (!name.toLowerCase().endsWith('.pdf')) name = `${name}.pdf`;
+      const size = parts[1] || '4.8 MB';
+      brochures.push({ name, size });
+      continue;
+    }
+
+    if (trimmed.startsWith('📆 Site Visit Booked:')) {
+      const details = trimmed.replace('📆 Site Visit Booked:', '').trim();
+      appointments.push({ details });
+      continue;
+    }
+
+    // Filter out residual raw placeholder artifacts
+    if (/^\[image:\s*[^\]]+\]$/i.test(trimmed)) {
+      continue;
+    }
+
+    textLines.push(line);
+  }
+
+  return {
+    cleanText: textLines.join('\n').trim(),
+    attachments,
+    links,
+    brochures,
+    appointments,
+  };
+}
+
+/**
  * Generates an executive B2B architectural HTML email template
  */
 export function buildArchitecturalEmailHtml({
@@ -258,6 +418,8 @@ export function buildArchitecturalEmailHtml({
   messageContent,
   ctaText,
   ctaUrl,
+  links,
+  attachmentsList,
 }: {
   recipientName: string;
   senderName: string;
@@ -266,6 +428,8 @@ export function buildArchitecturalEmailHtml({
   messageContent: string;
   ctaText?: string;
   ctaUrl?: string;
+  links?: Array<{ title: string; url: string; category?: string }>;
+  attachmentsList?: Array<{ name: string; size?: string }>;
 }) {
   // Convert newlines to formatted paragraphs
   const formattedParagraphs = messageContent
@@ -274,6 +438,32 @@ export function buildArchitecturalEmailHtml({
     .filter(Boolean)
     .map(p => `<p style="margin: 0 0 16px 0; color: #334155; font-size: 15px; line-height: 1.65;">${p.replace(/\n/g, '<br/>')}</p>`)
     .join('');
+
+  // Format links callout block
+  const formattedLinks = links && links.length > 0 ? `
+    <div style="margin: 24px 0 16px 0; padding: 16px 20px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;">
+      <p style="margin: 0 0 10px 0; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.8px;">Shared Online Resources</p>
+      ${links.map(l => `
+        <div style="margin-top: 8px;">
+          <a href="${l.url}" target="_blank" style="color: #0f172a; text-decoration: none; font-weight: 600; font-size: 14px;">
+            🌐 ${l.title} <span style="color: #64748b; font-size: 12px; font-weight: 400; margin-left: 4px;">(${l.url})</span> &rarr;
+          </a>
+        </div>
+      `).join('')}
+    </div>
+  ` : '';
+
+  // Format attachments callout block
+  const formattedAttachments = attachmentsList && attachmentsList.length > 0 ? `
+    <div style="margin: 20px 0 16px 0; padding: 14px 18px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;">
+      <p style="margin: 0 0 8px 0; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.8px;">Attached Files & Documents</p>
+      ${attachmentsList.map(a => `
+        <div style="margin-top: 6px; font-size: 13px; color: #1e293b; font-weight: 600;">
+          📎 ${a.name} ${a.size ? `<span style="color: #64748b; font-size: 11px; font-weight: 400;">(${a.size})</span>` : ''}
+        </div>
+      `).join('')}
+    </div>
+  ` : '';
 
   return `
 <!DOCTYPE html>
@@ -314,6 +504,8 @@ export function buildArchitecturalEmailHtml({
               </p>
               
               ${formattedParagraphs}
+              ${formattedLinks}
+              ${formattedAttachments}
 
               ${ctaText && ctaUrl ? `
               <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 28px 0 12px 0;">
@@ -567,3 +759,104 @@ export function buildUserDemoConfirmationHtml({
 </html>
   `.trim();
 }
+
+/**
+ * Builds a luxury dark-themed HTML password reset email.
+ */
+export function buildPasswordResetEmailHtml({
+  resetUrl,
+  recipientEmail,
+  displayName,
+}: {
+  resetUrl: string;
+  recipientEmail: string;
+  displayName?: string;
+}): string {
+  const greeting = displayName ? `Hello ${displayName},` : 'Hello,';
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WeaverFrame Security — Password Reset</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #050505; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #050505; padding: 40px 16px;">
+    <tr>
+      <td align="center">
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 580px; background-color: #0e0f15; border: 1px solid rgba(229, 217, 197, 0.15); border-radius: 16px; overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.8);">
+          
+          <!-- Header Banner -->
+          <tr>
+            <td style="padding: 36px 36px 24px 36px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+              <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td>
+                    <span style="font-size: 10px; font-family: monospace; letter-spacing: 2px; text-transform: uppercase; color: #e5d9c5; background: rgba(229, 217, 197, 0.08); padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(229, 217, 197, 0.15);">
+                      Security Dispatch
+                    </span>
+                    <h1 style="margin: 14px 0 0 0; color: #ffffff; font-size: 20px; font-weight: 700; letter-spacing: -0.5px;">
+                      WeaverFrame Executive Authentication
+                    </h1>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Main Content -->
+          <tr>
+            <td style="padding: 32px 36px;">
+              <p style="margin: 0 0 16px 0; color: #ffffff; font-size: 15px; font-weight: 600;">
+                ${greeting}
+              </p>
+              <p style="margin: 0 0 24px 0; color: #94a3b8; font-size: 14px; line-height: 1.6;">
+                We received a request to reset the executive access password for your corporate account associated with <strong style="color: #ffffff;">${recipientEmail}</strong>.
+              </p>
+
+              <!-- CTA Button -->
+              <div style="margin: 32px 0; text-align: center;">
+                <a href="${resetUrl}" style="display: inline-block; background: #e5d9c5; color: #0a0a0c; font-size: 13px; font-weight: 700; text-decoration: none; padding: 14px 32px; border-radius: 10px; letter-spacing: 0.5px; box-shadow: 0 4px 14px rgba(229, 217, 197, 0.3);">
+                  Reset Your Password →
+                </a>
+              </div>
+
+              <!-- Expiry Alert -->
+              <div style="background-color: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 16px 20px; margin: 24px 0;">
+                <p style="margin: 0; color: #cbd5e1; font-size: 12px; line-height: 1.5;">
+                  ⏱️ <strong style="color: #ffffff;">Security Notice:</strong> This authorization link is strictly valid for <strong style="color: #ffffff;">60 minutes</strong>. If you did not initiate this request, you may safely ignore this message — your existing password remains unchanged.
+                </p>
+              </div>
+
+              <p style="margin: 20px 0 0 0; color: #64748b; font-size: 12px; line-height: 1.5; word-break: break-all;">
+                Or copy and paste this URL into your browser:<br>
+                <a href="${resetUrl}" style="color: #e5d9c5; text-decoration: underline;">${resetUrl}</a>
+              </p>
+
+              <!-- Signature -->
+              <div style="margin-top: 32px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.08);">
+                <p style="margin: 0; color: #ffffff; font-size: 13px; font-weight: 600;">WeaverFrame Security Protocols</p>
+                <p style="margin: 2px 0 0 0; color: #64748b; font-size: 11px;">Luxury Architecture Operating System</p>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 16px 36px; background-color: #08090c; border-top: 1px solid rgba(255,255,255,0.06); text-align: center;">
+              <p style="margin: 0; color: #475569; font-size: 11px;">
+                Automated security notification from WeaverFrame System Security.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `.trim();
+}
+

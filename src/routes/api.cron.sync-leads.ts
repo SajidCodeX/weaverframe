@@ -117,17 +117,24 @@ export const Route = createFileRoute('/api/cron/sync-leads')({
 });
 
 function generateMockLeads() {
+  const regions = [
+    { county: 'Orange County', state: 'CA', zip: '92660', areaCode: '949' },
+    { county: 'Palm Beach', state: 'FL', zip: '33480', areaCode: '561' },
+    { county: 'King County', state: 'WA', zip: '98101', areaCode: '206' },
+    { county: 'Westchester', state: 'NY', zip: '10583', areaCode: '914' },
+    { county: 'Travis County', state: 'TX', zip: '78701', areaCode: '512' },
+  ];
   return Array.from({ length: 50 }).map((_, i) => {
-    const zipCode = (78701 + Math.floor(Math.random() * 5)).toString();
+    const loc = regions[i % regions.length];
     return {
-      name: `Test Lead ${Math.floor(Math.random() * 1000)}`,
-      county: 'Travis',
-      state: 'TX',
-      zipCode: zipCode,
+      name: `Inbound Client ${Math.floor(Math.random() * 1000)}`,
+      county: loc.county,
+      state: loc.state,
+      zipCode: loc.zip,
       landPrice: Math.floor(Math.random() * 500000) + 100000,
       estimatedBudget: Math.floor(Math.random() * 1000000) + 500000,
-      phone: `512-555-${String(Math.floor(Math.random() * 9999)).padStart(4, '0')}`,
-      email: `lead${Date.now()}${i}@example.com`,
+      phone: `${loc.areaCode}-555-${String(Math.floor(Math.random() * 9999)).padStart(4, '0')}`,
+      email: `client${Date.now()}${i}@example.com`,
       scoreTier: i % 3 === 0 ? 'Hot' : 'Warm'
     };
   });

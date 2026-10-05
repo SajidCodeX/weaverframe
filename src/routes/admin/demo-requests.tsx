@@ -93,11 +93,11 @@ function AdminDemoRequestsPage() {
     }
   };
 
-  // Poll demo requests every 15s
+  // Poll demo requests every 60s
   useEffect(() => {
     const interval = setInterval(() => {
       router.invalidate();
-    }, 15000);
+    }, 60000);
     return () => clearInterval(interval);
   }, [router]);
 

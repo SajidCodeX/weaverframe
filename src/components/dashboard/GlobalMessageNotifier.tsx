@@ -299,7 +299,7 @@ export function GlobalMessageNotifier() {
     };
 
     poll();
-    const interval = setInterval(poll, 4000);
+    const interval = setInterval(poll, 30000);
     return () => { isMounted = false; clearInterval(interval); };
   }, [pathname, fireNotification]);
 
