@@ -50,18 +50,9 @@ export async function syncInboundMailbox(builderId?: string, force = false): Pro
   const db = await getDb();
 
   try {
-    // 1. Resolve Target Builder (if not passed, find builder with linked mailbox or active builder)
-    let targetBuilderId = builderId;
+    const targetBuilderId = builderId;
     if (!targetBuilderId) {
-      const mailboxIntegration = await db.integration.findFirst({
-        where: { platformId: 'email_mailbox', isConnected: true },
-        select: { builderId: true }
-      });
-      targetBuilderId = mailboxIntegration?.builderId;
-    }
-
-    if (!targetBuilderId) {
-      return { success: false, synced: 0, error: 'No active builder ID found for mailbox sync.' };
+      return { success: false, synced: 0, error: 'Target builder ID is strictly required for mailbox sync.' };
     }
 
     // 2. Throttle: at most once per IMAP_THROTTLE_MS per builder, unless forced

@@ -55,7 +55,7 @@ export const Route = createFileRoute("/settings")({
 
     const activeRole = typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? undefined) : undefined;
     return Promise.all([
-      getIntegrationsStatus(),
+      getIntegrationsStatus({ data: { activeRole } }),
       getBuilderProfile({ data: { activeRole } }),
       getQualificationRules(),
       getNotificationSettings(),
@@ -135,6 +135,7 @@ function SettingsPage() {
   const router = useRouter();
   const routeContext = (Route as any).useRouteContext ? (Route as any).useRouteContext() : {};
   const session = routeContext?.session;
+  const activeRole = typeof window !== 'undefined' ? (sessionStorage.getItem('active_role') ?? undefined) : undefined;
   const isOwner = session?.role === 'admin' || session?.builderRole === 'owner';
   const availableSections = isOwner ? sections : sections.filter(s => s !== "Integrations" && s !== "Billing");
 
@@ -806,7 +807,7 @@ function SettingsPage() {
         useSsl: useSsl ? 'true' : 'false'
       };
       await testIntegrationConnection({
-        data: { platformId: "email_mailbox", credentials: creds }
+        data: { platformId: "email_mailbox", credentials: creds, activeRole }
       });
       toast.success(`Handshake verified! Connected to ${targetEmail}`);
     } catch (err: any) {
@@ -827,7 +828,7 @@ function SettingsPage() {
   const handleConnectGoogle = async () => {
     setIsConnectingGoogle(true);
     try {
-      const res = await getGoogleConnectUrl({ data: { returnTo: '/settings?tab=integrations' } });
+      const res = await getGoogleConnectUrl({ data: { returnTo: '/settings?tab=integrations', activeRole } });
       if (res?.url) {
         window.location.href = res.url;
       }
@@ -856,10 +857,10 @@ function SettingsPage() {
         useSsl: useSsl ? 'true' : 'false'
       };
       await testIntegrationConnection({
-        data: { platformId: "email_mailbox", credentials: creds }
+        data: { platformId: "email_mailbox", credentials: creds, activeRole }
       });
       await saveIntegrationCredentials({
-        data: { platformId: "email_mailbox", credentials: creds }
+        data: { platformId: "email_mailbox", credentials: creds, activeRole }
       });
       setConnectionStatus(prev => ({ ...prev, email_mailbox: true }));
       setCredentials(prev => ({ ...prev, email_mailbox: creds }));
@@ -880,7 +881,7 @@ function SettingsPage() {
     setIsConnectingGoogle(false);
     try {
       await disconnectIntegration({
-        data: { platformId: "email_mailbox" }
+        data: { platformId: "email_mailbox", activeRole }
       });
       setConnectionStatus(prev => ({ ...prev, email_mailbox: false }));
       setCredentials(prev => ({ ...prev, email_mailbox: {} }));
@@ -918,11 +919,11 @@ function SettingsPage() {
       
       // Perform integration connection validation check first
       await testIntegrationConnection({
-        data: { platformId: id, credentials: integrationCreds }
+        data: { platformId: id, credentials: integrationCreds, activeRole }
       });
 
       await saveIntegrationCredentials({
-        data: { platformId: id, credentials: integrationCreds }
+        data: { platformId: id, credentials: integrationCreds, activeRole }
       });
       setConnectionStatus(prev => ({ ...prev, [id]: true }));
       setExpandedIntegration(null);
@@ -944,7 +945,7 @@ function SettingsPage() {
     setIsSaving(prev => ({ ...prev, [id]: true }));
     try {
       await disconnectIntegration({
-        data: { platformId: id }
+        data: { platformId: id, activeRole }
       });
       setConnectionStatus(prev => ({ ...prev, [id]: false }));
       setCredentials(prev => ({ ...prev, [id]: {} }));
@@ -961,15 +962,62 @@ function SettingsPage() {
   };
 
   // ── Inbound Lead Ingestion Hub State ─────────────────────────────────────────
-  const [inboundTab, setInboundTab] = useState<"zapier" | "make" | "wordpress" | "meta" | "webflow" | "html">("zapier");
+  // ── Inbound Lead Ingestion Hub State ─────────────────────────────────────────
+  const [inboundTab, setInboundTab] = useState<"wordpress" | "meta" | "webflow" | "whatsapp" | "zapier" | "make" | "html">("wordpress");
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [isTestingInbound, setIsTestingInbound] = useState(false);
   const [testInboundResult, setTestInboundResult] = useState<{ success: boolean; message: string; leadId?: string; scoreTier?: string; dealScore?: number } | null>(null);
 
   const inboundPlatformOptions = [
     {
+      value: "wordpress",
+      label: "WordPress / Elementor Pro",
+      sourceParam: "WordPress_Elementor",
+      readableName: "WordPress Elementor",
+      icon: (
+        <svg className="size-4 shrink-0" viewBox="0 0 24 24" fill="#21759B">
+          <path d="M12 2C6.486 2 2 6.486 2 12c0 4.418 2.865 8.167 6.839 9.49L4.47 8.358C5.83 5.46 8.7 3.5 12 3.5c1.68 0 3.25.503 4.568 1.368L12 2zm8.53 10c0-1.657-.597-2.808-1.11-3.71-.682-1.11-1.32-2.046-1.32-3.155 0-1.233.937-2.383 2.26-2.383.104 0 .204.01.306.022A9.957 9.957 0 0012 3.5c-3.766 0-7.067 2.09-8.79 5.204l5.748 16.717c.64-1.87 1.312-4.54 1.312-6.657 0-1.657-.597-2.808-1.11-3.71-.682-1.11-1.32-2.046-1.32-3.155 0-1.233.937-2.383 2.26-2.383zM12 22a9.96 9.96 0 005.161-1.425l-5.07-14.73-5.26 14.797A9.97 9.97 0 0012 22z"/>
+        </svg>
+      ),
+    },
+    {
+      value: "meta",
+      label: "Meta (FB & IG) Lead Ads",
+      sourceParam: "Meta_Lead_Ads",
+      readableName: "Meta Lead Ads",
+      icon: (
+        <svg className="size-4 shrink-0" viewBox="0 0 24 24" fill="#0081FB">
+          <path d="M16.96 4C14.74 4 13.06 5.21 12 6.55 10.94 5.21 9.26 4 7.04 4 3.15 4 0 7.22 0 11.23c0 4.88 4.25 9.07 10.63 11.13.88.29 1.86.29 2.74 0C19.75 20.3 24 16.11 24 11.23 24 7.22 20.85 4 16.96 4zm-9.92 9.77c-2.06 0-3.68-1.59-3.68-3.54 0-1.96 1.62-3.55 3.68-3.55 1.51 0 2.59.88 3.32 1.89-1.23 1.58-2.36 3.49-3.32 5.2zm9.92 0c-.96-1.71-2.09-3.62-3.32-5.2.73-1.01 1.81-1.89 3.32-1.89 2.06 0 3.68 1.59 3.68 3.55 0 1.95-1.62 3.54-3.68 3.54z"/>
+        </svg>
+      ),
+    },
+    {
+      value: "webflow",
+      label: "Webflow Forms",
+      sourceParam: "Webflow",
+      readableName: "Webflow Forms",
+      icon: (
+        <svg className="size-4 shrink-0" viewBox="0 0 24 24" fill="#146EF5">
+          <path d="M17.8 7.2c-.3 0-.6.1-.8.4L13.7 13l-2.4-7.8c-.1-.3-.4-.5-.7-.5s-.6.2-.7.5L6.6 15.9 4.3 8.3c-.1-.3-.4-.5-.7-.5H1.4c-.4 0-.7.4-.6.8l3.6 11.9c.1.3.4.5.7.5h2.8c.3 0 .6-.2.7-.5l3.2-9.6 3.2 9.6c.1.3.4.5.7.5h2.8c.3 0 .6-.2.7-.5l4.8-12.7c.1-.4-.2-.8-.6-.8h-1.9z"/>
+        </svg>
+      ),
+    },
+    {
+      value: "whatsapp",
+      label: "WhatsApp Business (Wati / Twilio)",
+      sourceParam: "WhatsApp_Inbound",
+      readableName: "WhatsApp Inbound",
+      icon: (
+        <svg className="size-4 shrink-0" viewBox="0 0 24 24" fill="#25D366">
+          <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91C2.13 13.66 2.59 15.36 3.45 16.86L2.05 22L7.3 20.62C8.75 21.41 10.38 21.83 12.04 21.83C17.5 21.83 21.95 17.38 21.95 11.92C21.95 6.46 17.5 2 12.04 2M12.05 20.15C10.57 20.15 9.12 19.76 7.85 19.01L7.55 18.83L4.43 19.65L5.26 16.61L5.06 16.29C4.24 14.99 3.8 13.47 3.8 11.91C3.8 7.37 7.5 3.67 12.05 3.67C14.25 3.67 16.31 4.53 17.87 6.09C19.42 7.65 20.28 9.72 20.28 11.92C20.28 16.46 16.58 20.15 12.05 20.15M16.56 14.39C16.31 14.26 15.09 13.66 14.86 13.58C14.64 13.5 14.47 13.45 14.31 13.7C14.15 13.95 13.68 14.5 13.53 14.67C13.39 14.84 13.24 14.86 12.99 14.74C12.74 14.61 11.94 14.35 11 13.51C10.26 12.85 9.77 12.04 9.62 11.79C9.48 11.54 9.61 11.4 9.73 11.28C9.84 11.17 9.98 10.99 10.1 10.85C10.23 10.71 10.27 10.6 10.35 10.44C10.43 10.27 10.39 10.13 10.33 10C10.27 9.88 9.77 8.65 9.57 8.15C9.37 7.67 9.16 7.73 9.01 7.72H8.52C8.36 7.72 8.09 7.78 7.87 8.03C7.64 8.27 7 8.87 7 10.09C7 11.31 7.89 12.48 8.01 12.65C8.14 12.81 9.76 15.32 12.24 16.39C12.83 16.65 13.29 16.8 13.64 16.91C14.23 17.1 14.77 17.07 15.2 17.01C15.68 16.94 16.67 16.41 16.88 15.82C17.08 15.23 17.08 14.73 17.02 14.62C16.96 14.52 16.81 14.45 16.56 14.39Z" />
+        </svg>
+      ),
+    },
+    {
       value: "zapier",
       label: "Zapier Webhook (Easiest)",
+      sourceParam: "Zapier",
+      readableName: "Zapier",
       icon: (
         <svg className="size-4 shrink-0" viewBox="0 0 24 24">
           <rect width="24" height="24" rx="5" fill="#FF4F00" />
@@ -981,6 +1029,8 @@ function SettingsPage() {
     {
       value: "make",
       label: "Make.com (Integromat)",
+      sourceParam: "Make",
+      readableName: "Make.com",
       icon: (
         <svg className="size-4 shrink-0" viewBox="0 0 24 24">
           <rect width="24" height="24" rx="5" fill="#6E00F5" />
@@ -991,35 +1041,10 @@ function SettingsPage() {
       ),
     },
     {
-      value: "wordpress",
-      label: "WordPress / Elementor Pro",
-      icon: (
-        <svg className="size-4 shrink-0" viewBox="0 0 24 24" fill="#21759B">
-          <path d="M12 2C6.486 2 2 6.486 2 12c0 4.418 2.865 8.167 6.839 9.49L4.47 8.358C5.83 5.46 8.7 3.5 12 3.5c1.68 0 3.25.503 4.568 1.368L12 2zm8.53 10c0-1.657-.597-2.808-1.11-3.71-.682-1.11-1.32-2.046-1.32-3.155 0-1.233.937-2.383 2.26-2.383.104 0 .204.01.306.022A9.957 9.957 0 0012 3.5c-3.766 0-7.067 2.09-8.79 5.204l5.748 16.717c.64-1.87 1.312-4.54 1.312-6.657 0-1.657-.597-2.808-1.11-3.71-.682-1.11-1.32-2.046-1.32-3.155 0-1.233.937-2.383 2.26-2.383zM12 22a9.96 9.96 0 005.161-1.425l-5.07-14.73-5.26 14.797A9.97 9.97 0 0012 22z"/>
-        </svg>
-      ),
-    },
-    {
-      value: "meta",
-      label: "Meta (FB & IG) Lead Ads",
-      icon: (
-        <svg className="size-4 shrink-0" viewBox="0 0 24 24" fill="#0081FB">
-          <path d="M16.96 4C14.74 4 13.06 5.21 12 6.55 10.94 5.21 9.26 4 7.04 4 3.15 4 0 7.22 0 11.23c0 4.88 4.25 9.07 10.63 11.13.88.29 1.86.29 2.74 0C19.75 20.3 24 16.11 24 11.23 24 7.22 20.85 4 16.96 4zm-9.92 9.77c-2.06 0-3.68-1.59-3.68-3.54 0-1.96 1.62-3.55 3.68-3.55 1.51 0 2.59.88 3.32 1.89-1.23 1.58-2.36 3.49-3.32 5.2zm9.92 0c-.96-1.71-2.09-3.62-3.32-5.2.73-1.01 1.81-1.89 3.32-1.89 2.06 0 3.68 1.59 3.68 3.55 0 1.95-1.62 3.54-3.68 3.54z"/>
-        </svg>
-      ),
-    },
-    {
-      value: "webflow",
-      label: "Webflow Forms",
-      icon: (
-        <svg className="size-4 shrink-0" viewBox="0 0 24 24" fill="#146EF5">
-          <path d="M17.8 7.2c-.3 0-.6.1-.8.4L13.7 13l-2.4-7.8c-.1-.3-.4-.5-.7-.5s-.6.2-.7.5L6.6 15.9 4.3 8.3c-.1-.3-.4-.5-.7-.5H1.4c-.4 0-.7.4-.6.8l3.6 11.9c.1.3.4.5.7.5h2.8c.3 0 .6-.2.7-.5l3.2-9.6 3.2 9.6c.1.3.4.5.7.5h2.8c.3 0 .6-.2.7-.5l4.8-12.7c.1-.4-.2-.8-.6-.8h-1.9z"/>
-        </svg>
-      ),
-    },
-    {
       value: "html",
       label: "Custom HTML / Code Embed",
+      sourceParam: "Custom_HTML_Form",
+      readableName: "Custom Website HTML",
       icon: <Code2 className="size-4 text-emerald-400 shrink-0" />,
     },
   ];
@@ -1034,7 +1059,13 @@ function SettingsPage() {
 
   const builderToken = session?.builderId || loadedProfile?.id || "builder_primary";
   const siteOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://weaverframe.in';
-  const inboundWebhookUrl = `${siteOrigin}/api/leads/inbound?token=${builderToken}`;
+  
+  // High-Security Cryptographic Platform-Scoped Token:
+  // Each marketing platform receives a dedicated cryptographically signed token (e.g. wf_wp_..., wf_meta_..., wf_wa_...).
+  // This prevents cross-channel blast radius and guarantees lead attribution cannot be spoofed.
+  const platformScopedToken = loadedProfile?.platformWebhookTokens?.[inboundTab] || builderToken;
+  const selectedPlatform = inboundPlatformOptions.find(p => p.value === inboundTab) || inboundPlatformOptions[0];
+  const inboundWebhookUrl = `${siteOrigin}/api/leads/inbound?token=${platformScopedToken}`;
   const inboundEmailAddress = `leads+${builderToken.slice(0, 8)}@inbound.weaverframe.in`;
 
   const handleSendTestLead = async () => {
@@ -1053,7 +1084,7 @@ function SettingsPage() {
           county,
           state,
           estimatedBudget: 2200000,
-          source: `${inboundTab.toUpperCase()} Inbound Lead Hub`,
+          source: `${selectedPlatform.readableName}`,
           scoreTier: "Hot",
           notes: `Inquiring about building a 4,800 sqft modern custom residence in ${county}. Lot survey already completed. Requesting consultation with ${profileForm.companyName || 'your design team'}.`,
         }
@@ -1404,7 +1435,7 @@ function SettingsPage() {
                       {/* Visible URL Bar when toggled */}
                       {showWebhookUrl && (
                         <div className="p-3 rounded-lg bg-[#101010] border border-border font-mono text-xs text-foreground select-all overflow-x-auto whitespace-nowrap animate-in fade-in duration-150">
-                          {inboundWebhookUrl}
+                          <span className="font-mono text-xs text-foreground/90">{inboundWebhookUrl}</span>
                         </div>
                       )}
 
@@ -1542,6 +1573,25 @@ function SettingsPage() {
                               <li>In your Webflow project, go to <strong className="text-foreground">Project Settings &rarr; Integrations &rarr; Webhooks</strong>.</li>
                               <li>Click <strong className="text-foreground">"Add Webhook"</strong>, select Trigger: <strong className="text-foreground">"Form Submission"</strong>.</li>
                               <li>Paste your WeaverFrame Webhook URL and click <strong className="text-foreground">Add Webhook</strong>. All website submissions will instantly flow into WeaverFrame!</li>
+                            </ol>
+                          </div>
+                        )}
+
+                        {inboundTab === "whatsapp" && (
+                          <div className="space-y-2.5">
+                            <div className="flex items-center justify-between border-b border-border/40 pb-2">
+                              <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
+                                <svg className="size-4 shrink-0" viewBox="0 0 24 24" fill="#25D366">
+                                  <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91C2.13 13.66 2.59 15.36 3.45 16.86L2.05 22L7.3 20.62C8.75 21.41 10.38 21.83 12.04 21.83C17.5 21.83 21.95 17.38 21.95 11.92C21.95 6.46 17.5 2 12.04 2M12.05 20.15C10.57 20.15 9.12 19.76 7.85 19.01L7.55 18.83L4.43 19.65L5.26 16.61L5.06 16.29C4.24 14.99 3.8 13.47 3.8 11.91C3.8 7.37 7.5 3.67 12.05 3.67C14.25 3.67 16.31 4.53 17.87 6.09C19.42 7.65 20.28 9.72 20.28 11.92C20.28 16.46 16.58 20.15 12.05 20.15M16.56 14.39C16.31 14.26 15.09 13.66 14.86 13.58C14.64 13.5 14.47 13.45 14.31 13.7C14.15 13.95 13.68 14.5 13.53 14.67C13.39 14.84 13.24 14.86 12.99 14.74C12.74 14.61 11.94 14.35 11 13.51C10.26 12.85 9.77 12.04 9.62 11.79C9.48 11.54 9.61 11.4 9.73 11.28C9.84 11.17 9.98 10.99 10.1 10.85C10.23 10.71 10.27 10.6 10.35 10.44C10.43 10.27 10.39 10.13 10.33 10C10.27 9.88 9.77 8.65 9.57 8.15C9.37 7.67 9.16 7.73 9.01 7.72H8.52C8.36 7.72 8.09 7.78 7.87 8.03C7.64 8.27 7 8.87 7 10.09C7 11.31 7.89 12.48 8.01 12.65C8.14 12.81 9.76 15.32 12.24 16.39C12.83 16.65 13.29 16.8 13.64 16.91C14.23 17.1 14.77 17.07 15.2 17.01C15.68 16.94 16.67 16.41 16.88 15.82C17.08 15.23 17.08 14.73 17.02 14.62C16.96 14.52 16.81 14.45 16.56 14.39Z" />
+                                </svg>
+                                <span>WhatsApp Business (Wati / Twilio / Respond.io)</span>
+                              </h4>
+                              <span className="text-[10px] font-mono text-muted-foreground">Inbound Chat Sync</span>
+                            </div>
+                            <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal pl-4 leading-relaxed">
+                              <li>In your WhatsApp Business BSP (e.g. Wati.io, Respond.io, or Twilio Studio flow), go to <strong className="text-foreground">Webhooks / Automations</strong>.</li>
+                              <li>Set Webhook URL to your WeaverFrame Webhook URL (with pre-tagged <code className="text-foreground font-mono">&source=WhatsApp_Inbound</code>).</li>
+                              <li>When a client sends their initial inquiry or message on WhatsApp, their phone number, name, and message are instantly ingested into WeaverFrame and deal readiness score is computed!</li>
                             </ol>
                           </div>
                         )}

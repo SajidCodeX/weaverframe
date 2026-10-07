@@ -51,6 +51,28 @@ const inboundLeadSchema = z.object({
   inquiry: z.string().optional(),
 });
 
+// ── In-Memory Inbound Rate Limiting (Sliding Window per IP + Token) ──
+const inboundRateLimitMap = new Map<string, { count: number; resetAt: number }>();
+
+function checkInboundRateLimit(key: string, limit = 60, windowMs = 60000): boolean {
+  const now = Date.now();
+  if (inboundRateLimitMap.size > 2000) {
+    for (const [k, v] of inboundRateLimitMap.entries()) {
+      if (v.resetAt <= now) inboundRateLimitMap.delete(k);
+    }
+  }
+  const record = inboundRateLimitMap.get(key);
+  if (!record || record.resetAt <= now) {
+    inboundRateLimitMap.set(key, { count: 1, resetAt: now + windowMs });
+    return true;
+  }
+  if (record.count >= limit) {
+    return false;
+  }
+  record.count += 1;
+  return true;
+}
+
 export async function handleInboundLeadDirect(inputData: any = {}, request?: Request) {
   let data = { ...inputData };
   if (request) {
@@ -113,40 +135,83 @@ export async function handleInboundLeadDirect(inputData: any = {}, request?: Req
         };
       }
 
-      // 2. Validate token against DB integrations, users, or builder settings
+      // 1.1 Inbound DoS & Spam Protection: 60 submissions / min per token + IP
+      const clientIp = request?.headers?.get('x-forwarded-for')?.split(',')[0]?.trim() || 
+                       request?.headers?.get('x-real-ip') || 
+                       '127.0.0.1';
+      const rateLimitKey = `${authToken}:${clientIp}`;
+      if (!checkInboundRateLimit(rateLimitKey, 60, 60000)) {
+        return {
+          isResponse: true,
+          status: 429,
+          json: { success: false, error: "Rate limit exceeded. Maximum 60 inbound submissions per minute. Please try again shortly." }
+        };
+      }
+
+      // 2. Validate token against cryptographic platform tokens, DB integrations, users, or builder settings
       let authenticatedBuilderId: string | undefined;
+      let cryptographicallyVerifiedSource: string | null = null;
 
-      const webhookIntegration = await db.integration.findFirst({
-        where: {
-          isConnected: true,
-          configSecure: authToken,
-        },
-        select: { builderId: true }
-      });
-
-      if (webhookIntegration) {
-        authenticatedBuilderId = webhookIntegration.builderId;
+      // 2.A: High-Security Cryptographic Platform-Scoped Token (e.g. wf_wp_..., wf_meta_..., wf_wa_...)
+      if (authToken.startsWith('wf_')) {
+        const { verifyPlatformToken } = await import('@/lib/webhook-tokens.server');
+        const activeBuilders = await db.builder.findMany({
+          where: { isActive: true },
+          select: { id: true, isActive: true }
+        });
+        const verified = verifyPlatformToken(authToken, activeBuilders);
+        if (verified) {
+          authenticatedBuilderId = verified.builderId;
+          cryptographicallyVerifiedSource = verified.readableSource;
+        } else {
+          return {
+            isResponse: true,
+            status: 401,
+            json: { success: false, error: "Unauthorized: Invalid or tampered platform token signature." }
+          };
+        }
       } else {
-        const apiKeyUser = await db.user.findFirst({
-          where: { id: authToken, isActive: true },
+        // 2.B: Fallback validation for direct integrations, user API keys, builder settings, or direct builder ID
+        const webhookIntegration = await db.integration.findFirst({
+          where: {
+            isConnected: true,
+            configSecure: authToken,
+          },
           select: { builderId: true }
         });
-        if (apiKeyUser?.builderId) {
-          authenticatedBuilderId = apiKeyUser.builderId;
+
+        if (webhookIntegration) {
+          authenticatedBuilderId = webhookIntegration.builderId;
         } else {
-          const buildersWithSettings = await db.builder.findMany({
-            where: { isActive: true },
-            select: { id: true, settings: true }
+          const apiKeyUser = await db.user.findFirst({
+            where: { id: authToken, isActive: true },
+            select: { builderId: true }
           });
-          for (const b of buildersWithSettings) {
-            if (b.settings) {
-              try {
-                const s = typeof b.settings === 'string' ? JSON.parse(b.settings) : b.settings;
-                if (s.webhook_token === authToken || s.api_key === authToken || s.integration_token === authToken) {
-                  authenticatedBuilderId = b.id;
-                  break;
+          if (apiKeyUser?.builderId) {
+            authenticatedBuilderId = apiKeyUser.builderId;
+          } else {
+            const directBuilder = await db.builder.findFirst({
+              where: { id: authToken, isActive: true },
+              select: { id: true }
+            });
+            if (directBuilder) {
+              authenticatedBuilderId = directBuilder.id;
+            } else {
+              const buildersWithSettings = await db.builder.findMany({
+                where: { isActive: true },
+                select: { id: true, settings: true }
+              });
+              for (const b of buildersWithSettings) {
+                if (b.settings) {
+                  try {
+                    const s = typeof b.settings === 'string' ? JSON.parse(b.settings) : b.settings;
+                    if (s.webhook_token === authToken || s.api_key === authToken || s.integration_token === authToken) {
+                      authenticatedBuilderId = b.id;
+                      break;
+                    }
+                  } catch {}
                 }
-              } catch {}
+              }
             }
           }
         }
@@ -176,20 +241,45 @@ export async function handleInboundLeadDirect(inputData: any = {}, request?: Req
         (data.first_name ? `${data.first_name} ${data.last_name || ''}`.trim() : null) || "Inbound Prospective Buyer";
       const name = sanitizeMetadataField(rawName, 80);
 
-      const rawEmail = data.email || data.emailAddress || data.email_address;
-      if (!rawEmail || !rawEmail.includes('@')) {
+      const rawEmail = (data.email || data.emailAddress || data.email_address || '').trim();
+      const rawPhone = (data.phone || data.phoneNumber || data.phone_number || data.cell || '').trim();
+
+      const hasValidEmail = rawEmail.length > 0 && rawEmail.includes('@') && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail);
+      const hasValidPhone = rawPhone.length >= 7 && /[0-9]/.test(rawPhone);
+
+      if (!hasValidEmail && !hasValidPhone) {
         return {
           isResponse: true,
           status: 400,
-          json: { success: false, error: "Valid client email address is required." }
+          json: { success: false, error: "At least one valid contact method (email address or phone number) is required." }
         };
       }
-      const email = rawEmail.trim().toLowerCase();
 
-      const phone = data.phone || data.phoneNumber || data.phone_number || data.cell || null;
+      const email = hasValidEmail ? rawEmail.toLowerCase() : null;
+      const phone = hasValidPhone ? rawPhone : null;
       const estimatedBudget = parseBudgetString(data.estimatedBudget || data.budget);
       const landPrice = Math.round(estimatedBudget * 0.25);
-      const source = sanitizeMetadataField(data.source || "Website Inbound Webhook", 60);
+
+      // Tamper-Proof Source Resolution:
+      // If a cryptographic platform token was used, source is mathematically locked and cannot be manipulated
+      let resolvedSource = cryptographicallyVerifiedSource || "Website Inbound Webhook";
+      if (!cryptographicallyVerifiedSource) {
+        const querySource = request?.url ? new URL(request.url).searchParams.get('source') : null;
+        if (querySource && data.source && querySource.toLowerCase() !== String(data.source).toLowerCase()) {
+          const cleanQuery = querySource.replace(/_/g, ' ').trim();
+          const cleanData = String(data.source).replace(/_/g, ' ').trim();
+          resolvedSource = `${cleanQuery} - ${cleanData}`;
+        } else if (querySource) {
+          resolvedSource = querySource.replace(/_/g, ' ').trim();
+        } else if (data.source) {
+          resolvedSource = String(data.source).replace(/_/g, ' ').trim();
+        }
+      } else if (data.source && String(data.source).trim() && String(data.source).toLowerCase() !== cryptographicallyVerifiedSource.toLowerCase()) {
+        const cleanSubForm = String(data.source).replace(/_/g, ' ').trim();
+        resolvedSource = `${cryptographicallyVerifiedSource} - ${cleanSubForm}`;
+      }
+      const source = sanitizeMetadataField(resolvedSource, 60);
+
       const county = sanitizeMetadataField(data.county || data.city || data.location || data.projectType || "Local Region", 60);
       const state = sanitizeMetadataField(data.state || "", 10);
       const rawMessage = data.message || data.notes || data.comment || data.comments || data.inquiry || "";
@@ -200,12 +290,16 @@ export async function handleInboundLeadDirect(inputData: any = {}, request?: Req
       const dealScore = isHot ? 88 : 65;
 
       // 4. Check duplicate lead for this builder (Idempotency protection)
-      const existing = await db.lead.findFirst({
+      const duplicateConditions: any[] = [];
+      if (email) duplicateConditions.push({ email });
+      if (phone) duplicateConditions.push({ phone });
+
+      const existing = duplicateConditions.length > 0 ? await db.lead.findFirst({
         where: {
           builderId: targetBuilderId,
-          email
+          OR: duplicateConditions
         }
-      });
+      }) : null;
 
       if (existing) {
         // Replay Protection: If the exact message was received within the last 60 seconds, skip duplicate processing
@@ -250,10 +344,12 @@ export async function handleInboundLeadDirect(inputData: any = {}, request?: Req
             }
           });
 
-          // Trigger AI autonomous response to the new message
-          triggerAutonomousAiOutreach(existing.id, targetBuilderId, message).catch((aiErr: any) => {
-            console.error('[EXISTING LEAD AI OUTREACH ERROR]:', aiErr?.message || aiErr);
-          });
+          // Trigger AI autonomous response to the new message if email is present
+          if (email) {
+            triggerAutonomousAiOutreach(existing.id, targetBuilderId, message).catch((aiErr: any) => {
+              console.error('[EXISTING LEAD AI OUTREACH ERROR]:', aiErr?.message || aiErr);
+            });
+          }
         }
 
         invalidateCache("dashboard_");
@@ -265,7 +361,7 @@ export async function handleInboundLeadDirect(inputData: any = {}, request?: Req
             success: true,
             leadId: existing.id,
             isExisting: true,
-            message: "Existing lead updated and AI autonomous reply dispatched."
+            message: "Existing lead updated and conversation synchronized."
           }
         };
       }
@@ -313,10 +409,20 @@ export async function handleInboundLeadDirect(inputData: any = {}, request?: Req
         }
       });
 
-      // ── Trigger Instant AI Autonomous Outreach & Resend Email ───────────
-      triggerAutonomousAiOutreach(lead.id, targetBuilderId, message).catch((aiErr) => {
-        console.error('[INBOUND AI OUTREACH ERROR]:', aiErr);
-      });
+      // ── Trigger Instant AI Autonomous Outreach & Resend Email (if email present) ──
+      if (email) {
+        triggerAutonomousAiOutreach(lead.id, targetBuilderId, message).catch((aiErr) => {
+          console.error('[INBOUND AI OUTREACH ERROR]:', aiErr);
+        });
+      } else {
+        await db.activity.create({
+          data: {
+            builderId: targetBuilderId,
+            leadId: lead.id,
+            action: `Inbound phone contact captured via ${source} (${phone}). Ready for WhatsApp / SMS follow-up.`,
+          }
+        });
+      }
 
       // ── Forward immediately to Connected CRMs (HubSpot & GoHighLevel) ────
       import('@/lib/crm.server').then(({ syncLeadToConnectedCrms }) => {
@@ -369,10 +475,7 @@ export const Route = createFileRoute('/api/leads/inbound')({
     const request = (ctx as any)?.request as Request | undefined;
     if (request?.method === 'POST') {
       const result = await handleInboundLeadDirect({}, request);
-      return new Response(JSON.stringify(result.json || result), {
-        status: result.status || 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return result.json || result;
     }
 
     // Meta Webhook Handshake Verification (GET request with hub.challenge)
@@ -381,19 +484,16 @@ export const Route = createFileRoute('/api/leads/inbound')({
         const url = new URL(request.url);
         if (url.searchParams.get('hub.mode') === 'subscribe') {
           const challenge = url.searchParams.get('hub.challenge') || '';
-          return new Response(challenge, {
-            status: 200,
-            headers: { 'Content-Type': 'text/plain' },
-          });
+          return challenge;
         }
       } catch {}
     }
 
-    const payloadInfo = {
+    return {
       endpoint: "/api/leads/inbound",
       methods: ["POST", "GET"],
       description: "Submit new inbound website or ad leads into WeaverFrame",
-      supportedPlatforms: ["WordPress / Elementor / WPForms", "Meta Lead Ads (FB/IG)", "Webflow", "Wix", "Squarespace", "Zapier", "Make.com", "Custom HTML Forms"],
+      supportedPlatforms: ["WordPress / Elementor / WPForms", "Meta Lead Ads (FB/IG)", "Webflow", "Wix", "Squarespace", "Zapier", "Make.com", "WhatsApp Business", "Custom HTML Forms"],
       payloadExample: {
         name: "Harrison Vance",
         email: "harrison.vance@example.com",
@@ -401,15 +501,10 @@ export const Route = createFileRoute('/api/leads/inbound')({
         county: "Local County",
         state: "CA",
         estimatedBudget: 1800000,
-        source: "Website Contact Form",
+        source: "WordPress Elementor",
         message: "Looking for a 4,500 sqft modern luxury estate."
       }
     };
-
-    return new Response(JSON.stringify(payloadInfo, null, 2), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
   },
 });
 

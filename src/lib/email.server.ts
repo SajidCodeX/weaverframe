@@ -56,10 +56,15 @@ export async function sendOutboundEmail(options: SendEmailOptions): Promise<Emai
     const { getDb } = await import('./db.server');
     const db = await getDb();
     const targetBuilderId = (options as any).builderId;
-    const integrationWhere: any = { platformId: 'email_mailbox', isConnected: true };
-    if (targetBuilderId) integrationWhere.builderId = targetBuilderId;
 
-    const integration = await db.integration.findFirst({ where: integrationWhere });
+    if (targetBuilderId) {
+      const integration = await db.integration.findFirst({
+        where: {
+          builderId: targetBuilderId,
+          platformId: 'email_mailbox',
+          isConnected: true
+        }
+      });
     if (integration && integration.configSecure) {
       const { decrypt } = await import('./crypto');
       const creds = JSON.parse(decrypt(integration.configSecure));
@@ -109,7 +114,8 @@ export async function sendOutboundEmail(options: SendEmailOptions): Promise<Emai
         }
       }
     }
-  } catch (authInspectErr) {
+  }
+} catch (authInspectErr) {
     console.warn('[EMAIL] Failed to inspect integration for OAuth:', authInspectErr);
   }
 

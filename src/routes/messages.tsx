@@ -97,7 +97,7 @@ export const Route = createFileRoute("/messages")({
       const [conversations, aiToggleMap, integrationsStatus, builderProfile, teamMembers] = await Promise.all([
         getConversations({ data: { activeRole } }),
         getAiToggleMap(),
-        getIntegrationsStatus(),
+        getIntegrationsStatus({ data: { activeRole } }),
         getBuilderProfile({ data: { activeRole } }).catch(() => ({})),
         getTeamData({ data: { activeRole } }).catch(() => []),
       ]);

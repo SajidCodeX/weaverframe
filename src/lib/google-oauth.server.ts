@@ -29,6 +29,61 @@ export function getGoogleOAuthConfig(): GoogleOAuthConfig {
   return { clientId, clientSecret, redirectUri };
 }
 
+import crypto from 'crypto';
+
+const OAUTH_STATE_SECRET = process.env.SESSION_SECRET || process.env.ENCRYPTION_KEY || 'weaverframe_oauth_state_secret_2026';
+
+/**
+ * Cryptographically signs OAuth state payload using HMAC-SHA256 to prevent CSRF / account linking attacks.
+ */
+export function signOAuthState(payload: { builderId: string; returnTo?: string; ts: number; nonce: string }): string {
+  const json = JSON.stringify(payload);
+  const dataB64 = Buffer.from(json, 'utf8').toString('base64url');
+  const hmac = crypto.createHmac('sha256', OAUTH_STATE_SECRET);
+  hmac.update(dataB64);
+  const sig = hmac.digest('base64url');
+  return `${dataB64}.${sig}`;
+}
+
+/**
+ * Validates cryptographic signature and 15-minute expiration of OAuth state parameter.
+ */
+export function verifyOAuthState(state: string): { builderId: string; returnTo?: string } | null {
+  if (!state || typeof state !== 'string') return null;
+
+  if (state.includes('.')) {
+    const [dataB64, sig] = state.split('.');
+    if (!dataB64 || !sig) return null;
+
+    const hmac = crypto.createHmac('sha256', OAUTH_STATE_SECRET);
+    hmac.update(dataB64);
+    const expectedSig = hmac.digest('base64url');
+
+    const sigBuf = Buffer.from(sig);
+    const expectedBuf = Buffer.from(expectedSig);
+
+    if (
+      sigBuf.length !== expectedBuf.length ||
+      !crypto.timingSafeEqual(sigBuf, expectedBuf)
+    ) {
+      return null;
+    }
+
+    try {
+      const payload = JSON.parse(Buffer.from(dataB64, 'base64url').toString('utf8'));
+      // Strict 15-minute TTL to prevent replay attacks
+      if (!payload.ts || Date.now() - payload.ts > 15 * 60 * 1000) {
+        return null;
+      }
+      return payload;
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
 /**
  * Generates the Google OAuth 2.0 consent screen URL.
  * Requests offline access (refresh token) and Gmail read/send scopes.
@@ -40,14 +95,14 @@ export function generateGoogleAuthUrl(builderId: string, returnTo: string = '/se
     throw new Error('GOOGLE_CLIENT_ID is not configured in environment variables.');
   }
 
-  const statePayload = JSON.stringify({
+  const statePayload = {
     builderId,
     returnTo,
     ts: Date.now(),
-    nonce: Math.random().toString(36).substring(2, 15)
-  });
+    nonce: crypto.randomBytes(16).toString('hex')
+  };
 
-  const state = Buffer.from(statePayload).toString('base64url');
+  const state = signOAuthState(statePayload);
 
   const scopes = [
     'https://www.googleapis.com/auth/userinfo.email',
