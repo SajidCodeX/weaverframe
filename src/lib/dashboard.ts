@@ -1,5 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
-import { getDb } from './db'
+import { resolveBookingDateTime, checkAppointmentAvailability, bookAppointmentAtomically } from './date-utils'
+import { sanitizeInboundEmail, sanitizeMetadataField } from './sanitizer'
+import { sendAlert } from './alerting'
 
 
 
@@ -15,7 +17,7 @@ export const getDashboardData = createServerFn({ method: 'POST' })
   const cached = getCache(cacheKey);
   if (cached) return cached;
 
-  // Pass session in — getTenantDb will skip its own requireAuth() call
+  // Pass session in â€” getTenantDb will skip its own requireAuth() call
   const db = await getTenantDb(session)
   const now = new Date()
   const startOfLast30Days = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
@@ -91,7 +93,7 @@ export const getDashboardData = createServerFn({ method: 'POST' })
     const formatBudgetK = (avgValue: number) => `$${Math.round(avgValue / 1000)}K`
 
     // Sparklines: 7 daily snapshots, each showing cumulative counts per score tier.
-    // Using parallel Prisma groupBy — safe, tenant-scoped via middleware, no raw SQL risk.
+    // Using parallel Prisma groupBy â€” safe, tenant-scoped via middleware, no raw SQL risk.
     const sparklineDates = Array.from({ length: 7 }, (_, i) => {
       const d = new Date()
       d.setDate(d.getDate() - (6 - i))
@@ -174,7 +176,7 @@ export const getDashboardData = createServerFn({ method: 'POST' })
       pipelineValueStr = `$${Math.round(qualifiedSumBudget / 1000)}K`
     }
     const avgBudgetStr = avgBudget >= 1000000 ? `$${(avgBudget / 1000000).toFixed(1)}M` : `$${Math.round(avgBudget / 1000)}K`
-    const pipelineSub = `Avg ${avgBudgetStr} · ${qualifiedLeads} active prospects`
+    const pipelineSub = `Avg ${avgBudgetStr} Â· ${qualifiedLeads} active prospects`
 
     let avgDaysToBook = 14
     if (appointmentsActivities.length > 0) {
@@ -204,6 +206,122 @@ export const getDashboardData = createServerFn({ method: 'POST' })
       city: a.lead.county,
     }))
 
+    // Compute 5-Step Luxury Activation Checklist
+    const builderId = session.role === 'admin' ? (session.actingAsBuilderId || session.builderId) : session.builderId;
+    const [builderRecord, connectedIntegrationsCount] = await Promise.all([
+      builderId ? db.builder.findUnique({
+        where: { id: builderId },
+        select: { companyName: true, contactName: true, phone: true, email: true, settings: true }
+      }).catch(() => null) : null,
+      builderId ? db.integration.count({
+        where: { isConnected: true }
+      }).catch(() => 0) : 0,
+    ]);
+
+    let parsedSettings: Record<string, any> = {};
+    if (builderRecord?.settings) {
+      try {
+        parsedSettings = typeof builderRecord.settings === 'string'
+          ? JSON.parse(builderRecord.settings)
+          : builderRecord.settings;
+      } catch {}
+    }
+
+    const profileSettings = parsedSettings['builder_profile'] || {};
+    const qualSettings = parsedSettings['qualification_rules'] || {};
+    const aiBrainConfig = parsedSettings['ai_brain_config'] || {};
+    const aiSettings = parsedSettings['ai_brain_config'] || parsedSettings['ai_instructions'] || parsedSettings['brain_voice'] || {};
+    const mailboxSettings = parsedSettings['email_mailbox'] || {};
+
+    // 1. Profile: builder has saved their profile or customized name/contact/address
+    const hasProfile = Boolean(
+      profileSettings.businessAddress ||
+      profileSettings.companyName ||
+      profileSettings.primaryContact ||
+      profileSettings.phone ||
+      (builderRecord?.companyName && builderRecord.companyName.trim() !== '' && builderRecord.companyName !== 'Horizon Homes LLC') ||
+      (builderRecord?.contactName && builderRecord?.phone)
+    );
+
+    // 2. Mailbox: connected integration in DB or saved mailbox credentials
+    const hasMailbox = Boolean(
+      (connectedIntegrationsCount || 0) > 0 ||
+      (mailboxSettings.email && (mailboxSettings.password || mailboxSettings.provider === 'google_oauth' || mailboxSettings.provider === 'google'))
+    );
+
+    // 3. Buyer Rules: qualification criteria configured in qualification_rules or ai_brain_config
+    const hasQual = Boolean(
+      qualSettings.minBudget ||
+      qualSettings.maxTimeline ||
+      qualSettings.minLeadScore !== undefined ||
+      aiBrainConfig.minBudget ||
+      aiBrainConfig.maxTimeline ||
+      aiBrainConfig.lotRequirement ||
+      aiBrainConfig.plansRequirement
+    );
+
+    // 4. AI Voice: calibrated tone, persona name, or directives in ai_brain_config
+    const hasAi = Boolean(
+      aiBrainConfig.brandVoice ||
+      aiBrainConfig.primaryGoal ||
+      aiBrainConfig.personaName ||
+      aiBrainConfig.customDirectives ||
+      aiSettings.brandVoice ||
+      aiSettings.rules ||
+      aiSettings.customPrompt ||
+      aiSettings.tone
+    );
+
+    // 5. Leads: at least one lead ingested
+    const hasLeads = (totalLeads || 0) > 0;
+
+    const activationChecklist = {
+      steps: [
+        {
+          id: 'profile',
+          title: 'Establish Brand Identity & Territory',
+          description: 'Set your luxury builder name, primary metropolitan markets, and contact details.',
+          isCompleted: hasProfile,
+          href: '/settings?tab=Builder+Profile&highlight=profile',
+          actionText: 'Configure Profile',
+        },
+        {
+          id: 'mailbox',
+          title: 'Connect Client Reception Mailbox',
+          description: 'Link Google Workspace or IMAP for autonomous 2-way client concierge communication.',
+          isCompleted: hasMailbox,
+          href: '/settings?tab=Integrations&highlight=mailbox',
+          actionText: 'Connect Mailbox',
+        },
+        {
+          id: 'qualification',
+          title: 'Establish Buyer Qualification Criteria',
+          description: 'Define minimum build budget ($1M+), land status preference, and construction timeline.',
+          isCompleted: hasQual,
+          href: '/ai-activity?focus=rules',
+          actionText: 'Set Criteria',
+        },
+        {
+          id: 'brain',
+          title: 'Tune Architectural AI Brand Voice',
+          description: 'Calibrate design specifications, luxury finishes, and executive tone of voice.',
+          isCompleted: hasAi,
+          href: '/ai-activity?focus=voice',
+          actionText: 'Tune AI Brain',
+        },
+        {
+          id: 'leads',
+          title: 'Ingest Your First Luxury Lead',
+          description: 'Capture website inquiries via webhook or add your first prospective client.',
+          isCompleted: hasLeads,
+          href: '/leads?action=add',
+          actionText: 'Add First Lead',
+        },
+      ],
+      completedCount: [hasProfile, hasMailbox, hasQual, hasAi, hasLeads].filter(Boolean).length,
+      totalCount: 5,
+    };
+
     const result = {
       totalLeads,
       qualifiedLeads,
@@ -211,6 +329,7 @@ export const getDashboardData = createServerFn({ method: 'POST' })
       funnel,
       scoreData,
       activityFeed,
+      activationChecklist,
       allLeads: allLeadsRaw.map((l: any) => ({
         id: l.id,
         name: l.name,
@@ -256,23 +375,57 @@ export const getLastSyncTime = createServerFn({ method: 'POST' })
     const session = await requireAuth(data?.activeRole ?? undefined);
     const db = await getTenantDb(session);
     try {
-      const syncStatus = await db.systemSync.findUnique({ where: { id: 'rencast_leads' } });
-      if (syncStatus) {
-        return syncStatus.lastSyncAt.toISOString();
+      // Find the most recent sync event across active channels (Mailbox Sync, latest message, or activity)
+      const [mailboxSync, latestMsg, latestActivity] = await Promise.all([
+        db.systemSync.findUnique({ where: { id: 'mailbox_sync' } }).catch(() => null),
+        db.message.findFirst({
+          orderBy: { createdAt: 'desc' },
+          select: { createdAt: true }
+        }).catch(() => null),
+        db.activity.findFirst({
+          orderBy: { createdAt: 'desc' },
+          select: { createdAt: true }
+        }).catch(() => null),
+      ]);
+
+      const timestamps: number[] = [];
+      if (mailboxSync?.lastSyncAt) timestamps.push(new Date(mailboxSync.lastSyncAt).getTime());
+      if (latestMsg?.createdAt) timestamps.push(new Date(latestMsg.createdAt).getTime());
+      if (latestActivity?.createdAt) timestamps.push(new Date(latestActivity.createdAt).getTime());
+
+      if (timestamps.length > 0) {
+        return new Date(Math.max(...timestamps)).toISOString();
       }
-      const latestLead = await db.lead.findFirst({
-        orderBy: { createdAt: 'desc' },
-        select: { createdAt: true }
-      });
-      return latestLead ? latestLead.createdAt.toISOString() : null;
+      return new Date().toISOString();
     } catch (e) {
       return null;
     }
   });
 
-// FIX-5: Converted to POST so we can accept activeRole and pass it to requireAuth/getTenantDb.
-// A GET server function cannot receive input params. Without activeRole, multi-cookie sessions
-// (jwt_admin + jwt_builder both present) cause getTenantDb to silently fail with UNAUTHORIZED.
+export function cleanMojibake(text: string): string {
+  if (!text) return "";
+  return text
+    .replace(/ðŸš¨/g, "🚨")
+    .replace(/ðŸ“…/g, "📅")
+    .replace(/ðŸ“†/g, "🗓️")
+    .replace(/ðŸš€/g, "🚀")
+    .replace(/ðŸ”¥/g, "🔥")
+    .replace(/ðŸ‘¤/g, "👤")
+    .replace(/ðŸ’¬/g, "💬")
+    .replace(/ðŸ¤–/g, "🤖")
+    .replace(/ðŸ¤—/g, "🤖")
+    .replace(/ðŸ§ /g, "🧠")
+    .replace(/ðŸ”„/g, "🔄")
+    .replace(/ðŸ”‘/g, "🔑")
+    .replace(/ðŸ“‹/g, "📋")
+    .replace(/ðŸ’°/g, "💰")
+    .replace(/ðŸŽ¯/g, "🎯")
+    .replace(/ðŸ“¤/g, "📤")
+    .replace(/ðŸ ¢/g, "🏢")
+    .replace(/â€”/g, "—")
+    .replace(/â€/g, "—");
+}
+
 export const getNotificationsData = createServerFn({ method: 'POST' })
   .inputValidator((data: { activeRole?: string | null } | undefined) => data)
   .handler(async ({ data }) => {
@@ -282,7 +435,7 @@ export const getNotificationsData = createServerFn({ method: 'POST' })
     // Super Admin Notifications Handler
     if (session.role === 'admin' && !session.actingAsBuilderId) {
       try {
-        const { getDb } = await import('./db');
+        const { getDb } = await import('./db.server');
         const db = await getDb();
         
         const [demoLeads, recentBuilders] = await Promise.all([
@@ -345,24 +498,35 @@ export const getNotificationsData = createServerFn({ method: 'POST' })
         include: { lead: true }
       });
       return activities.map(act => {
-        let title = "Lead Activity";
-        if (act.action.includes("🚨 High Alert")) {
+        const rawAction = act.action || '';
+        const cleanedAction = cleanMojibake(rawAction);
+        const lower = cleanedAction.toLowerCase();
+
+        let title = "📌 Lead Activity";
+        if (lower.includes("human takeover") || lower.includes("takeover")) {
+          title = "👤 Human Takeover";
+        } else if (lower.includes("high alert")) {
           title = "🚨 High Priority Alert";
-        } else if (act.action.toLowerCase().includes("schedule") || act.action.toLowerCase().includes("appointment") || act.action.toLowerCase().includes("site visit")) {
+        } else if (lower.includes("schedule") || lower.includes("appointment") || lower.includes("site visit")) {
           title = "📅 Meeting Scheduled";
-        } else if (act.action.toLowerCase().includes("demo") || act.action.toLowerCase().includes("walkthrough")) {
-          title = "🚀 Inbound Demo Request";
-        } else if (act.action.toLowerCase().includes("hot lead") || act.action.toLowerCase().includes("qualif")) {
-          title = "🔥 Hot Lead";
-        } else if (act.action.toLowerCase().includes("added") || act.action.toLowerCase().includes("manually")) {
-          title = "👤 New Lead Added";
-        } else if (act.action.toLowerCase().includes("replied") || act.action.toLowerCase().includes("response")) {
+        } else if (lower.includes("inbound email reply") || lower.includes("homeowner replied")) {
           title = "💬 Lead Replied";
+        } else if (lower.includes("outreach") || lower.includes("qualification email") || lower.includes("dispatched")) {
+          title = "📧 AI Outreach Sent";
+        } else if (lower.includes("hot lead") || lower.includes("marked lead as hot")) {
+          title = "🔥 Hot Lead Qualified";
+        } else if (lower.includes("marked lead as warm")) {
+          title = "🟡 Lead Engaged";
+        } else if (lower.includes("toggled on") || lower.includes("toggled off")) {
+          title = "🤖 AI Status Changed";
+        } else if (lower.includes("added") || lower.includes("manually")) {
+          title = "👤 New Lead Added";
         }
+
         return {
           id: act.id,
           title,
-          desc: `${act.lead?.name || 'Lead'}: ${act.action}`,
+          desc: `${act.lead?.name || 'Lead'}: ${cleanedAction}`,
           time: act.createdAt.toISOString(),
           unread: new Date().getTime() - act.createdAt.getTime() < 3600000
         };
@@ -389,7 +553,7 @@ export async function createHighAlertNotification({
   type?: 'hot_lead' | 'booking' | 'urgent_inquiry';
 }) {
   try {
-    const { getDb } = await import('./db');
+    const { getDb } = await import('./db.server');
     const db = await getDb();
     await db.activity.create({
       data: {
@@ -405,10 +569,47 @@ export async function createHighAlertNotification({
 }
 
 export function determineLeadSource(lead: { source?: string | null; county?: string | null }) {
-  if (lead.source && lead.source.trim() && lead.source !== "Austin Building Permits") {
+  if (lead.source && lead.source.trim()) {
     return lead.source.trim();
   }
-  return lead.source || "Website Contact Form";
+  return "Website Contact Form";
+}
+
+/**
+ * Self-Healing Pipeline Reconciliation Engine:
+ * Automatically syncs lead statuses if a homeowner reply arrived but status remained 'New' / 'Emailed' / 'Opened'.
+ * Idempotent, non-blocking, and updates in-memory array so the UI renders the correct stage immediately.
+ */
+export async function reconcileLeadReplyStatuses(
+  db: any,
+  leads: Array<{ id: string; status: string; messages?: Array<{ sender: string }> }>
+) {
+  try {
+    const staleLeadIds: string[] = [];
+    for (const lead of leads) {
+      const latestMsg = lead.messages?.[0];
+      if (
+        latestMsg &&
+        latestMsg.sender === 'lead' &&
+        ['New', 'Emailed', 'Opened', 'Outreach', 'contacted'].includes(lead.status)
+      ) {
+        staleLeadIds.push(lead.id);
+      }
+    }
+    if (staleLeadIds.length > 0) {
+      await db.lead.updateMany({
+        where: { id: { in: staleLeadIds } },
+        data: { status: 'Replied' }
+      });
+      for (const lead of leads) {
+        if (staleLeadIds.includes(lead.id)) {
+          lead.status = 'Replied';
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[RECONCILIATION NON-BLOCKING ERROR]:', err);
+  }
 }
 
 export const getLeadsData = createServerFn({ method: 'POST' })
@@ -425,17 +626,44 @@ export const getLeadsData = createServerFn({ method: 'POST' })
     const leads = await db.lead.findMany({
       where: whereClause,
       orderBy: { createdAt: 'desc' },
-      include: {
+      select: {
+        id: true,
+        builderId: true,
+        name: true,
+        email: true,
+        phone: true,
+        county: true,
+        state: true,
+        landPrice: true,
+        estimatedBudget: true,
+        purchaseDate: true,
+        status: true,
+        scoreTier: true,
+        dealScore: true,
+        source: true,
+        assignedToId: true,
+        portalToken: true,
+        portalVisitedAt: true,
+        lastAiSummary: true,
+        smsUsed: true,
+        smsQuota: true,
+        createdAt: true,
+        assignedTo: {
+          select: { id: true, displayName: true, email: true, builderRole: true }
+        },
         appointments: {
           orderBy: { dateTime: 'desc' },
-          take: 1
+          take: 1,
+          select: { id: true, type: true, dateTime: true, status: true, location: true }
         },
         messages: {
           orderBy: { createdAt: 'desc' },
-          take: 5
+          take: 1,
+          select: { id: true, sender: true, createdAt: true, isRead: true, channel: true }
         }
       }
     })
+
     return leads.map(lead => ({
       ...lead,
       source: determineLeadSource(lead)
@@ -530,7 +758,7 @@ export const addManualLead = createServerFn({ method: 'POST' })
         });
       }
 
-      // ── Autonomous AI Outreach & Qualification Trigger ──────────────────
+      // â”€â”€ Autonomous AI Outreach & Qualification Trigger â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       if (data.email && data.email.includes('@') && (status === 'New' || status === 'Emailed')) {
         // Run AI outreach in background with safe error handling
         triggerAutonomousAiOutreach(lead.id, session.builderId || '', data.notes).catch((err) => {
@@ -933,7 +1161,7 @@ export const submitClientReview = createServerFn({ method: 'POST' })
             rating: rating,
             reviewText: feedback || `Incredible custom building experience with ${session.companyName || 'our team'}! Extremely satisfied with their professionalism and quality.`,
             projectType: "Custom Home Build",
-            location: "Austin, TX",
+            location: existing.lead?.city ? `${existing.lead.city}${existing.lead.state ? `, ${existing.lead.state}` : ''}` : "Verified Client",
             status: "Unanswered"
           }
         })
@@ -1060,7 +1288,7 @@ export const getBillingProfile = createServerFn({ method: 'GET' }).handler(async
                     amount: `$${(inv.amount_paid / 100).toFixed(0)}`,
                     status: inv.status === 'paid' ? 'Paid' : inv.status === 'open' ? 'Open' : 'Pending',
                     planName: planInfo.name,
-                    paymentMethod: builder.paymentMethod && builder.paymentMethod !== "None" ? builder.paymentMethod : "Stripe Card (•••• 4242)",
+                    paymentMethod: builder.paymentMethod && builder.paymentMethod !== "None" ? builder.paymentMethod : "Stripe Card (â€¢â€¢â€¢â€¢ 4242)",
                     pdfUrl: inv.invoice_pdf || null,
                   };
                 });
@@ -1089,7 +1317,7 @@ export const getBillingProfile = createServerFn({ method: 'GET' }).handler(async
           amount: planInfo.price,
           status: "Paid",
           planName: planInfo.name,
-          paymentMethod: builder.paymentMethod && builder.paymentMethod !== "None" ? builder.paymentMethod : "Stripe Card (•••• 4242)",
+          paymentMethod: builder.paymentMethod && builder.paymentMethod !== "None" ? builder.paymentMethod : "Stripe Card (â€¢â€¢â€¢â€¢ 4242)",
           pdfUrl: null
         }
       ];
@@ -1138,76 +1366,145 @@ export async function callAiEngine(
 ): Promise<string> {
   const geminiKey = process.env.GEMINI_API_KEY;
   const groqKey = process.env.GROQ_API_KEY;
-  const geminiModel = process.env.GEMINI_MODEL || "gemini-3.5-flash";
-  const groqModel = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
+  const primaryGeminiModel = process.env.GEMINI_MODEL || "gemini-3.5-flash";
+  const defaultGroqModel = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
   const maxTokens = options?.maxTokens || 800;
   const temperature = options?.temperature ?? 0.1;
 
-  // 1. Prioritize Google Gemini Flash if GEMINI_API_KEY is configured
+  // 1. PRIMARY ROUTE: Google Gemini Flash (gemini-3.5-flash)
   if (geminiKey && geminiKey.trim() !== "") {
-    const modelsToTry = [geminiModel, "gemini-3.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"].filter((v, i, a) => a.indexOf(v) === i);
+    const modelsToTry = [primaryGeminiModel, "gemini-3.5-flash", "gemini-3.5-flash-lite"].filter((v, i, a) => a.indexOf(v) === i);
+    let shouldSkipGemini = false;
     for (const m of modelsToTry) {
-      try {
-        const res = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${geminiKey}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            model: m,
-            messages: messages,
-            temperature: temperature,
-            max_tokens: maxTokens,
-            ...(options?.isJson ? { response_format: { type: "json_object" } } : {})
-          })
-        });
+      if (shouldSkipGemini) break;
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          console.log(`[AI ROUTING] Executing primary model: Google Gemini (${m}) (attempt ${attempt}/2)...`);
+          const res = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${geminiKey}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              model: m,
+              messages: messages,
+              temperature: temperature,
+              max_tokens: maxTokens,
+              ...(options?.isJson ? { response_format: { type: "json_object" } } : {})
+            }),
+            signal: AbortSignal.timeout(15000)
+          });
 
-        if (res.ok) {
-          const data = await res.json();
-          const content = data.choices?.[0]?.message?.content;
-          if (content) return content;
-        } else {
-          const errText = await res.text();
-          console.warn(`Gemini model ${m} returned ${res.status}: ${errText}. Trying fallback...`);
+          if (res.ok) {
+            const data = await res.json();
+            const content = data.choices?.[0]?.message?.content;
+            if (content) {
+              console.log(`[AI ROUTING] Primary provider Gemini (${m}) succeeded.`);
+              return content;
+            }
+          }
+
+          const is503Or404 = res.status === 503 || res.status === 404;
+          const isTransient = res.status === 429 || (res.status >= 500 && res.status !== 503);
+          const errText = await res.text().catch(() => "");
+          console.warn(`[AI ROUTING] Gemini model ${m} returned HTTP ${res.status}: ${errText.slice(0, 160)}`);
+
+          if (is503Or404 && groqKey) {
+            console.log(`[AI ROUTING] Google capacity spike (${res.status}). Instantly handing over to Groq fallback...`);
+            shouldSkipGemini = true;
+            break;
+          }
+
+          if (isTransient && attempt === 1) {
+            console.log(`[AI ROUTING RETRY] Transient ${res.status} on ${m}. Backing off 1.2s before retry...`);
+            await new Promise(r => setTimeout(r, 1200));
+            continue;
+          }
+          break;
+        } catch (geminiErr: any) {
+          console.warn(`[AI ROUTING] Gemini model ${m} network/timeout error: ${geminiErr?.message || geminiErr}`);
+          if (groqKey) {
+            console.log(`[AI ROUTING] Gemini network timeout. Handing over to Groq fallback immediately...`);
+            shouldSkipGemini = true;
+            break;
+          }
+          if (attempt === 1) {
+            console.log(`[AI ROUTING RETRY] Network glitch on ${m}. Backing off 1.2s before retry...`);
+            await new Promise(r => setTimeout(r, 1200));
+            continue;
+          }
+          break;
         }
-      } catch (geminiErr) {
-        console.warn(`Gemini model ${m} network error:`, geminiErr);
       }
     }
   }
 
-  // 2. Fallback to Groq if GROQ_API_KEY is configured
+  // 2. FALLBACK ROUTE: Groq Cloud (openai/gpt-oss-120b)
   if (groqKey && groqKey.trim() !== "") {
-    try {
-      const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${groqKey}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          model: groqModel,
-          messages: messages,
-          temperature: temperature,
-          max_tokens: maxTokens,
-          ...(options?.isJson ? { response_format: { type: "json_object" } } : {})
-        })
-      });
+    const groqModelsToTry = [defaultGroqModel, "openai/gpt-oss-120b"].filter((v, i, a) => a.indexOf(v) === i);
+    for (const gm of groqModelsToTry) {
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          console.log(`[AI ROUTING FALLBACK] Executing secondary provider: Groq (${gm}) (attempt ${attempt}/2)...`);
+          const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${groqKey}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              model: gm,
+              messages: messages,
+              temperature: temperature,
+              max_tokens: maxTokens,
+              ...(options?.isJson ? { response_format: { type: "json_object" } } : {})
+            }),
+            signal: AbortSignal.timeout(25000)
+          });
 
-      if (groqRes.ok) {
-        const groqData = await groqRes.json();
-        return groqData.choices?.[0]?.message?.content || "";
-      } else {
-        const errText = await groqRes.text();
-        console.error(`Groq API returned ${groqRes.status}: ${errText}`);
+          if (groqRes.ok) {
+            const groqData = await groqRes.json();
+            const content = groqData.choices?.[0]?.message?.content || "";
+            if (content) {
+              console.log(`[AI ROUTING FALLBACK] Secondary provider Groq (${gm}) succeeded.`);
+              return content;
+            }
+          }
+
+          const isTransient = groqRes.status === 429 || groqRes.status >= 500;
+          const errText = await groqRes.text().catch(() => "");
+          console.error(`[AI ROUTING FALLBACK] Groq (${gm}) returned HTTP ${groqRes.status}: ${errText.slice(0, 160)}`);
+
+          if (isTransient && attempt === 1) {
+            console.log(`[AI ROUTING RETRY] Transient ${groqRes.status} on Groq ${gm}. Backing off 1.2s before retry...`);
+            await new Promise(r => setTimeout(r, 1200));
+            continue;
+          }
+          break;
+        } catch (groqErr: any) {
+          console.error(`[AI ROUTING FALLBACK] Groq (${gm}) network/timeout error: ${groqErr?.message || groqErr}`);
+          if (attempt === 1) {
+            console.log(`[AI ROUTING RETRY] Network glitch on Groq ${gm}. Backing off 1.2s before retry...`);
+            await new Promise(r => setTimeout(r, 1200));
+            continue;
+          }
+          break;
+        }
       }
-    } catch (groqErr) {
-      console.error("Groq API fallback encountered network error:", groqErr);
     }
   }
 
-  throw new Error("No AI API keys configured or all AI providers failed.");
+  // Dispatch Operational Alert on critical exhaustion of all providers
+  await sendAlert({
+    type: 'provider_failure',
+    severity: 'critical',
+    title: 'All AI Providers Failed',
+    message: 'Both Gemini and Groq model fallback chains failed across all retry attempts.',
+    metadata: { options }
+  }).catch(() => {});
+
+    throw new Error("No AI API keys configured or all AI providers failed.");
 }
 
 export const generateGroqCompletion = createServerFn({ method: 'POST' })
@@ -1231,7 +1528,7 @@ export const generateGroqCompletion = createServerFn({ method: 'POST' })
 
       const lower = lastUserMsg.toLowerCase();
       if (lower.includes("budget") || lower.includes("price") || lower.includes("cost")) {
-        reply = "Absolutely! Our custom home projects in Austin typically start at $500K for semi-custom builds and range upwards of $1.5M+ for full luxury estates. Does that range align with your investment plans?";
+        reply = `Absolutely! Our custom home projects with ${session.companyName || "our team"} typically start at $500K for semi-custom builds and range upwards of $1.5M+ for full luxury estates. Does that range align with your investment plans?`;
       } else if (lower.includes("saturday") || lower.includes("meet") || lower.includes("schedule") || lower.includes("tour")) {
         reply = "I would be delighted to schedule a walkthrough! Saturday morning at 10:30 AM works perfectly. Should I lock that slot in and send over the directions?";
       } else if (lower.includes("basement") || lower.includes("sloping") || lower.includes("terrain")) {
@@ -1240,9 +1537,9 @@ export const generateGroqCompletion = createServerFn({ method: 'POST' })
         reply = "Premium finishes are our signature! We craft custom architectural finishes. I can send you some photos of our recent projects!";
       } else if (lower.includes("script") || lower.includes("message")) {
         reply = JSON.stringify([
-          { t: "Message 1 · Immediate (< 60s)", body: "Hi [Name]! Thanks for connecting. Are you looking to build in the next 6-12 months? Reply YES or NO." },
-          { t: "Message 2 · 2 hours later", body: "Hey [Name], just checking in! Most of our clients prefer custom cabinets over stock options. Do you have a design style you love?" },
-          { t: "Message 3 · 24 hours later", body: "Hi [Name], we can schedule a private tour of our design site this Thursday. Let me know if you would like me to book your spot!" }
+          { t: "Message 1 Â· Immediate (< 60s)", body: "Hi [Name]! Thanks for connecting. Are you looking to build in the next 6-12 months? Reply YES or NO." },
+          { t: "Message 2 Â· 2 hours later", body: "Hey [Name], just checking in! Most of our clients prefer custom cabinets over stock options. Do you have a design style you love?" },
+          { t: "Message 3 Â· 24 hours later", body: "Hi [Name], we can schedule a private tour of our design site this Thursday. Let me know if you would like me to book your spot!" }
         ]);
       }
 
@@ -1390,14 +1687,19 @@ export async function generateAiReplyCore(
 
   // Fetch lead to personalize prompt and load existing Lead Memory Graph
   const lead = await db.lead.findUnique({ where: { id: leadId } });
-  const leadName = lead ? lead.name : "Client";
-  const leadCounty = lead ? lead.county : "your area";
+  const leadName = lead ? sanitizeMetadataField(lead.name, 60) || "Client" : "Client";
+  const rawLeadLocation = [lead?.city, lead?.county, lead?.state].filter(Boolean).map((s: string) => sanitizeMetadataField(s, 60)).join(", ");
+  const builderServiceLocation = builderProfile.businessAddress || builderProfile.city || "";
+  const leadLocation = rawLeadLocation || builderServiceLocation || "your local area";
+  const leadCounty = (lead?.county ? sanitizeMetadataField(lead.county, 60) : "") 
+    || (lead?.city ? sanitizeMetadataField(lead.city, 60) : "") 
+    || leadLocation;
 
   // Parse existing Lead Memory Graph
   let currentMemory: Record<string, any> = {
     budgetRange: lead?.estimatedBudget ? `$${(lead.estimatedBudget / 1000).toFixed(0)}k` : null,
     timeline: null,
-    lotStatus: lead?.landPrice && lead.landPrice > 0 ? `Owns land in ${lead.county} ($${(lead.landPrice / 1000).toFixed(0)}k)` : null,
+    lotStatus: lead?.landPrice && lead.landPrice > 0 ? `Owns land in ${leadCounty} ($${(lead.landPrice / 1000).toFixed(0)}k)` : null,
     architecturalStyle: null,
     familyLifestyleNeeds: null,
     objectionsRaised: [],
@@ -1429,26 +1731,52 @@ export async function generateAiReplyCore(
     ? upcomingAppts.map((a: any) => `- ${new Date(a.dateTime).toLocaleString('en-US', { timeZone: timezone, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}: ${a.type} with ${a.lead?.name || 'Client'} (${a.location})`).join('\n')
     : "No upcoming booked meetings currently in calendar.";
 
-  const systemPrompt = `You are ${personaName}, the Senior Architectural Advisor & Concierge representing ${companyName}.
+  const systemPrompt = `You are ${personaName}, the Senior Architectural Advisor representing ${companyName}.
 Your builder principal is ${contactName}.
 
 MISSION & MINDSET:
-- You are a knowledgeable, warm, and highly authentic custom home building advisor.
-- Your objective: Welcome interested homeowner leads, understand their project vision, and help guide qualified buyers toward an initial architectural consultation or site walkthrough.
-- Speak with calm confidence, genuine hospitality, and utmost clarity.
+- You are an experienced, high-trust luxury custom home building director.
+- You talk like a real local builder with 20+ years of experience in ${leadLocation} (practical, warm, knowledgeable, zero sales pressure).
+- Your goal: Build genuine trust through helpful expertise, active listening, and guide qualified buyers toward an architectural review or site feasibility walkthrough.
 
-BRAND VOICE & PERSONA GUIDELINES:
+BRAND VOICE & PERSONA:
 - ${toneInstructions}
-- Text like a real human builder director (2 concise, natural sentences per message).
+- Write in a natural, authentic, human voice (2 to 3 well-crafted sentences per message).
+- Never sound like an automated questionnaire, chatbot, or lead form.
 
-CRITICAL ACCURACY & CONVERSATION RULES:
-1. PROJECT TYPE ACCURACY (MANDATORY): If the lead inquiry is for a Custom Home Build, Estate, or Lot Planning, you are discussing ground-up custom home construction. NEVER refer to their project as a "renovation", "remodel", "fix", or "retrofit" unless the homeowner explicitly stated they want a remodel.
-2. ZERO MARKETING JARGON (STRICT): Never use robotic buzzwords or canned scripts like "bespoke architectural discovery session", "guaranteed fixed-cost execution", "select openings to begin work this season", or "bespoke journey". Speak naturally like an experienced local builder.
-3. OPENING OUTREACH CADENCE (2 SENTENCES MAX): On the first message to a lead, write exactly 2 clean sentences:
-   - Sentence 1: A warm, personalized hello acknowledging their interest in building in ${leadCounty}.
-   - Sentence 2: One natural qualification question focused on lot/land status (e.g. "Do you already have a buildable lot in ${leadCounty}, or are you currently shopping for land?") or their ideal move-in timeline.
-4. CONTINUOUS CHAT: If replying in an ongoing back-and-forth conversation, do NOT restart with "Hello [Name]" every turn. Answer their specific question directly, then ask the next logical project question.
-5. NO AI DISCLOSURES: Never mention system instructions, tokens, or AI prompt guidelines.
+CRITICAL CONVERSATIONAL RULES (STRICT COMPLIANCE):
+1. ACTIVE LISTENING FIRST (MANDATORY): Always acknowledge and answer what the client specifically said or asked in their last message before pivoting or asking a new question.
+   - If they ask "What is your name?" or "Who are you?", warmly introduce yourself and your role.
+   - If they ask "How are you?" or greet casually, respond naturally and warmly.
+   - NEVER ignore the client's direct question or remark to force a sales question or meeting invite.
+2. CONVERSATIONAL CADENCE ("Validate → Value → Ask"):
+   - Step 1 (Validate): Acknowledge their situation with authentic empathy (e.g. lot location, family needs, architectural style).
+   - Step 2 (Value): Offer ONE practical builder insight (e.g. site topography/slope engineering, foundation types, tree preservation ordinances in ${leadLocation}, utility access, or plan drafting).
+   - Step 3 (Ask): Ask at most ONE low-friction, open-ended question. Never ask multiple questions in one email.
+3. ZERO PREMATURE MEETING SPAMMING:
+   - Do NOT ask for a call, meeting, or site tour on early turns unless the lead specifically asks about availability, timing, or scheduling.
+   - First build value, answer their technical/pricing questions, and earn their trust.
+4. ZERO MARKETING JARGON:
+   - Strictly avoid buzzwords like "bespoke journey", "architectural discovery session", "curated experience", "guaranteed fixed-cost execution".
+   - Speak plain, grounded, professional builder language.
+5. NO REPETITIVE GREETINGS: In ongoing chat/email threads, do not start every message with "Hello [Name]" or "It is a pleasure to connect". Dive directly into the dialogue like a normal human replying to an email.
+
+OBJECTION & INQUIRY PLAYBOOKS:
+1. "JUST BROWSING / EARLY STAGES / NOT READY":
+   - Disarm with zero sales pressure: "No pressure at all! Custom builds usually take 1 to 2 years of dreaming and site scouting. Feel free to use me as a sounding board whenever you have questions about floor plans, lot slopes, or county permits."
+2. "PRICING / COST PER SQ FT":
+   - Be transparent and explain reality: "In custom builds across ${leadLocation}, square foot pricing varies widely depending on lot topography, slope engineering, and finish specs. Our custom homes typically start around ${minBudget} for ground-up bespoke construction. Does that investment range align with what you had in mind?"
+3. "ALREADY WORKING WITH AN ARCHITECT / BUILDER":
+   - Be gracious and professional: "That's fantastic! Having architectural drafts underway is a huge milestone. If you ever need a builder's constructability review or preliminary engineering budget check, we're always happy to offer a second set of eyes."
+4. "ARE YOU AN AI / BOT?":
+   - Be disarmingly honest and transparent: "I'm the AI assistant for ${companyName}'s executive team to make sure inquiries get fast, thoughtful answers, but our principal builder ${contactName} reviews every project detail personally. Would you like me to have ${contactName} connect with you directly?"
+5. "LOT / SITE FEASIBILITY":
+   - Reassure engineering competence: "Lot feasibility—especially soil testing, slope setbacks, and utility hookups—is where most critical planning happens before drawing blueprints. We walk sites with clients before finalizing design."
+6. "ZONING, SETBACKS & IMPERVIOUS COVERAGE (MANDATORY NON-NUMERIC GUARDRAIL)":
+   - NEVER quote, invent, or guess exact municipal impervious-cover percentages, setback footage, or tree preservation numbers for any city, county, or state.
+   - Impervious-cover and setback regulations vary drastically parcel-by-parcel based on local watershed classifications, environmental overlays, slope gradients, and municipal/HOA deed restrictions in ${leadLocation}.
+   - If a client asks for exact code limits or percentages, provide safe qualitative guidance (e.g. "environmentally sensitive zones and steep slopes restrict the buildable footprint") and state clearly that an authoritative civil/topographical survey and local municipal review are required to calculate the exact legal coverage for their specific parcel.
+   - Sample phrasing: "Impervious-cover limits and setbacks in ${leadLocation} vary significantly based on your parcel's local environmental classification, slope gradient, and zoning overlay. Rather than estimating a generic percentage, we always review a formal topographic and civil survey to establish your exact buildable footprint. Do you already have a survey or plat map for the property?"
 
 QUALIFICATION STANDARDS:
 - Minimum Construction Budget: ${minBudget}
@@ -1460,17 +1788,10 @@ CUSTOM BUILDER DIRECTIVES & POLICIES (HIGHEST PRIORITY - STRICT ADHERENCE REQUIR
 The builder has configured the following custom directives, warranties, and business policies. You MUST honor every rule and incorporate these specific details into your advice and answers:
 ${customDirectives}
 ` : ''}
-OBJECTION HANDLING:
-1. "PRICING / BUDGET QUESTIONS":
-   - Be transparent: "Our custom estates in ${leadCounty} typically start around ${minBudget}, with full fixed-price scope transparency and high-end architectural craftsmanship. Does that range align with your vision?"
-2. "LAND / LOT QUESTIONS":
-   - Reassure feasibility: "We provide complete lot feasibility and topography assessments to ensure your site is ideal before finalizing architectural drafts."
-3. "READY TO PROCEED / VISIT":
-   - Offer a low-friction consultation: "We'd love to host you at our studio or meet at your site to review your layout ideas. What day this week works best for a quick chat?"
 
 CURRENT LEAD CONTEXT:
 - Client Name: ${leadName}
-- Project County/City: ${leadCounty}
+- Project County/City: ${leadLocation}
 - Estimated Budget: ${currentMemory.budgetRange || "Not confirmed yet"}
 - Lot/Land Status: ${currentMemory.lotStatus || "Not confirmed yet"}
 - Timeline: ${currentMemory.timeline || "Not confirmed yet"}
@@ -1484,14 +1805,14 @@ ${apptScheduleStr}
 STRUCTURED OUTPUT FORMAT:
 You must respond strictly with a valid JSON object matching this schema:
 {
-  "replyText": string, // Natural, authentic message (2 concise sentences max)
+  "replyText": string, // Natural, authentic message (2 to 3 concise, warm sentences max)
   "intent": "HOT" | "WARM" | "COLD", // HOT: ready to build/meet, WARM: researching/interested, COLD: not interested/disqualified
   "dealScore": number, // 0 to 100 buyer readiness score based on budget, land ownership, timeline, and engagement
   "dealSummary": string, // 1-sentence executive summary of the lead's current readiness state
   "leadMemoryUpdate": {
     "budgetRange": string | null, // e.g. "$750k - $1M" or extracted number
     "timeline": string | null, // e.g. "Spring 2027", "Next 4 months"
-    "lotStatus": string | null, // e.g. "Owns 2-acre lot in Travis", "Searching in Cedar Park"
+    "lotStatus": string | null, // e.g. "Owns 2-acre parcel", "Searching in local area"
     "architecturalStyle": string | null, // e.g. "Modern Farmhouse", "Mediterranean Estate"
     "familyLifestyleNeeds": string | null, // e.g. "4 bed, pool, single story for aging parents"
     "objectionsRaised": string[], // List of any hesitations/objections mentioned in this interaction
@@ -1508,7 +1829,13 @@ You must respond strictly with a valid JSON object matching this schema:
   "nextBestAction": string, // Recommended next step for builder team, e.g. "Send 3D elevation lookbook" or "Call within 15 mins"
   "escalationRequired": boolean, // Set to true if lead is ready to sign, has $1.5M+ budget, or requests owner
   "escalationReason": string | null, // e.g. "High ticket $2M lead ready for in-person architectural contract"
-  "bookingDetails": { "isoDateTime": string, "type": string } | null // ONLY set if lead agrees to a specific day/time
+  "bookingDetails": {
+    "relativeDay": string | null, // e.g. "tomorrow", "today", "day after tomorrow", "in 3 days", or null
+    "dayOfWeek": string | null, // e.g. "Monday", "next Tuesday", "this Friday", or null
+    "specificDateStr": string | null, // e.g. "Sep 15", "October 3rd", or null if relative
+    "timeStr": string | null, // e.g. "10:00 AM", "2:30 PM", "noon", or null
+    "type": string // e.g. "Site visit", "Architectural consultation", "Design studio meeting"
+  } | null // ONLY set if lead agrees to a specific day/time. STRICT PROHIBITION: NEVER output an isoDateTime field or full year timestamp. Date calculations are handled deterministically in code.
 }
 
 Lead Context:
@@ -1532,7 +1859,7 @@ Do not output any markdown formatting or text outside the raw JSON object.`;
 
   if (hasKeys) {
     try {
-      rawResponse = await callAiEngine(formattedMessages, { isJson: true, maxTokens: 1200, temperature: 0.1 });
+      rawResponse = await callAiEngine(formattedMessages, { isJson: true, maxTokens: 1200, temperature: 0.45 });
     } catch (aiError) {
       console.error("AI API error in generateAiReplyCore:", aiError);
       throw aiError;
@@ -1601,7 +1928,7 @@ Do not output any markdown formatting or text outside the raw JSON object.`;
       });
     } else {
       rawResponse = JSON.stringify({
-        replyText: "Thank you for sharing your ideas! We specialize in tailored custom estates throughout Austin. Do you currently have a specific architectural style or floor plan in mind?",
+        replyText: `Thank you for sharing your ideas! We specialize in tailored custom residences with ${companyName}. Do you currently have a specific architectural style or floor plan in mind?`,
         intent: "WARM",
         dealScore: 55,
         dealSummary: "Lead exploring custom home design options.",
@@ -1643,7 +1970,7 @@ Do not output any markdown formatting or text outside the raw JSON object.`;
     overallStatus: "Nurturing"
   };
   let objectionStrategyUsed: string | null = null;
-  let nextBestAction = "Follow up with homeowner.";
+    let nextBestAction = "Follow up with homeowner.";
   let escalationRequired = false;
   let escalationReason: string | null = null;
   let bookingDetails: { isoDateTime: string; type: string } | null = null;
@@ -1662,7 +1989,26 @@ Do not output any markdown formatting or text outside the raw JSON object.`;
       nextBestAction = parsed.nextBestAction || nextBestAction;
       escalationRequired = !!parsed.escalationRequired;
       escalationReason = parsed.escalationReason || null;
-      bookingDetails = parsed.bookingDetails || null;
+
+      // Deterministically resolve appointment date in TypeScript code (LLM cannot set isoDateTime directly)
+      if (parsed.bookingDetails && typeof parsed.bookingDetails === 'object') {
+        const resolution = resolveBookingDateTime(parsed.bookingDetails, {
+          currentDate: new Date(),
+          timeZone: timezone || 'America/Chicago'
+        });
+        if (resolution.valid && resolution.isoDateTime) {
+          bookingDetails = {
+            isoDateTime: resolution.isoDateTime,
+            type: resolution.type || 'Site visit'
+          };
+          console.log(`[BOOKING RESOLVED DETERMINISTICALLY]: ${resolution.isoDateTime} (${bookingDetails.type}) from intent:`, parsed.bookingDetails);
+        } else {
+          console.warn(`[BOOKING DATE RESOLUTION REJECTED]: ${resolution.failureReason}`, parsed.bookingDetails);
+          bookingDetails = null;
+        }
+      } else {
+        bookingDetails = null;
+      }
     }
   } catch (e) {
     console.warn("JSON.parse error, activating regex extractor fallback:", e);
@@ -1708,7 +2054,8 @@ Do not output any markdown formatting or text outside the raw JSON object.`;
     lastUpdated: new Date().toISOString()
   };
 
-  // Determine DB status & tier
+  // Determine DB status & tier with hierarchy protection (never downgrade advanced leads)
+  const currentStatus = lead?.status || "New";
   let dbStatus = "Emailed";
   let dbScoreTier = "Warm";
   let activityText = "";
@@ -1717,6 +2064,11 @@ Do not output any markdown formatting or text outside the raw JSON object.`;
     dbStatus = "Appointment";
     dbScoreTier = "Hot";
     activityText = `📅 AI Concierge scheduled an appointment with ${leadName}.`;
+  } else if (currentStatus === "Appointment") {
+    // Preserve booked appointment status
+    dbStatus = "Appointment";
+    dbScoreTier = "Hot";
+    activityText = `💬 AI Concierge continued conversation with booked client (${dealScore}/100).`;
   } else if (intent === 'HOT') {
     dbStatus = "Qualified";
     dbScoreTier = "Hot";
@@ -1725,8 +2077,16 @@ Do not output any markdown formatting or text outside the raw JSON object.`;
     dbStatus = "Closed Lost";
     dbScoreTier = "Cold";
     activityText = `🔴 AI Sales Engine marked Lead as Cold (${dealScore}/100) — Disqualified or competitor chosen.`;
+  } else if (currentStatus === "Qualified") {
+    // Preserve Qualified status unless lead explicitly became COLD or booked
+    dbStatus = "Qualified";
+    dbScoreTier = dealScore >= 70 ? "Hot" : "Warm";
+    activityText = `💬 AI Sales Engine continued conversation with qualified buyer (${dealScore}/100).`;
   } else {
-    const hasLeadReplied = chatHistory && chatHistory.some(m => m.role === 'user' && m.content && m.content !== userMessage);
+    const hasLeadReplied = Boolean(
+      (chatHistory && chatHistory.some(m => m.role === 'user' && m.content && m.content !== userMessage)) ||
+      currentStatus === 'Replied'
+    );
     dbStatus = hasLeadReplied ? "Replied" : "Emailed";
     dbScoreTier = "Warm";
     activityText = `🟡 AI Sales Engine marked Lead as Warm (${dealScore}/100) — ${hasLeadReplied ? 'Engaged' : 'Outreach sent'}.`;
@@ -1772,29 +2132,54 @@ Do not output any markdown formatting or text outside the raw JSON object.`;
       }
     });
 
-    // Auto-Book Appointment if confirmed
+    // Auto-Book Appointment if confirmed with double-booking collision prevention
     if (bookingDetails && bookingDetails.isoDateTime) {
       try {
         const bookingDate = new Date(bookingDetails.isoDateTime);
         if (!isNaN(bookingDate.getTime())) {
-          await db.appointment.create({
-            data: {
+          // Concurrency-safe atomic appointment reservation (Serializable isolation check + create)
+          const reservation = await bookAppointmentAtomically(db, {
+            builderId,
+            leadId,
+            bookingDate,
+            type: bookingDetails.type || 'Site visit',
+            notes: `Auto-booked by AI Sales Concierge. Next step: ${nextBestAction}`,
+            windowMinutes: 45,
+          });
+
+          if (!reservation.success) {
+            console.warn(`[BOOKING COLLISION PREVENTED] Slot ${bookingDate.toISOString()} conflicts with appt ${reservation.conflictingAppointment?.id}`);
+
+            await sendAlert({
+              type: 'booking_failure',
+              severity: 'warning',
+              title: 'Appointment Collision Prevented',
+              message: `Lead requested slot ${bookingDate.toLocaleTimeString()} which conflicts with an existing booking.`,
               builderId,
               leadId,
-              type: bookingDetails.type || 'Site visit',
-              dateTime: bookingDate,
-              location: 'TBD — Confirmed via AI Concierge',
-              status: 'Pending',
-              notes: `Auto-booked by AI Sales Concierge. Next step: ${nextBestAction}`
-            }
-          });
-          await db.activity.create({
-            data: {
-              builderId,
-              leadId,
-              action: `📅 AI Concierge auto-booked a ${bookingDetails.type || 'Site visit'} on ${bookingDate.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}.`
-            }
-          });
+              metadata: { requestedDate: bookingDate.toISOString(), conflictingApptId: reservation.conflictingAppointment?.id }
+            });
+
+            const altTime = reservation.proposedAlternate || new Date(bookingDate.getTime() + 2 * 60 * 60 * 1000);
+            const altTimeStr = altTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+            replyText = `${replyText}\n\n[Note]: It looks like our calendar has a consultation scheduled around that exact time. Would ${altTimeStr} or earlier that morning work better for you?`;
+
+            await db.activity.create({
+              data: {
+                builderId,
+                leadId,
+                action: `⚠️ AI Concierge detected calendar collision for ${bookingDate.toLocaleTimeString()}. Proposed alternate time ${altTimeStr}.`
+              }
+            });
+          } else {
+            await db.activity.create({
+              data: {
+                builderId,
+                leadId,
+                action: `📅 AI Concierge auto-booked a ${bookingDetails.type || 'Site visit'} on ${bookingDate.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}.`
+              }
+            });
+          }
         }
       } catch (bookingErr) {
         console.error('Failed to auto-create appointment from AI confirmation:', bookingErr);
@@ -1816,28 +2201,24 @@ Do not output any markdown formatting or text outside the raw JSON object.`;
     bookingDetails
   };
 }
-
 export const summarizeConversation = createServerFn({ method: 'POST' })
-  .inputValidator((data: { leadId: string }) => data)
+  .inputValidator((data: { leadId: string; activeRole?: string | null }) => data)
   .handler(async ({ data }) => {
     const { getTenantDb, requireAuth } = await import('./server-utils.server');
-    const session = await requireAuth();
-    const db = await getTenantDb();
-    
     try {
+      const session = await requireAuth(data?.activeRole ?? undefined);
+      const db = await getTenantDb(session);
+      
       const messages = await db.message.findMany({
-        where: { leadId: data.leadId, builderId: session.builderId || '' },
+        where: { leadId: data.leadId },
         orderBy: { createdAt: 'asc' }
       });
 
       if (!messages || messages.length === 0) return "No conversation history available.";
 
       const chatLog = messages.map(m => `${m.sender.toUpperCase()}: ${m.content}`).join('\n');
-      
-      const apiKey = process.env.GROQ_API_KEY?.replace(/['"]/g, '').trim();
-      if (!apiKey) return "Groq API key not configured.";
 
-      const prompt = `You are an expert AI Builder Sales Strategist preparing an Executive Pre-Meeting Briefing Sheet for a custom home builder before they meet or call a lead.
+      const systemPrompt = `You are an expert AI Builder Sales Strategist preparing an Executive Pre-Meeting Briefing Sheet for a custom home builder before they meet or call a lead.
 
 Analyze the entire conversation log and construct a detailed, highly structured Pre-Meeting Briefing covering these 4 core categories:
 
@@ -1853,16 +2234,19 @@ Analyze the entire conversation log and construct a detailed, highly structured 
 🎯 ACTION PLAN & MEETING DELIVERABLES:
 • Summarize scheduled meeting/call date, time, phone number, and exact documents requested (e.g. site evaluation report, floor plan proposals, estimate sheets).
 
-Format the output clearly using bullet points and bold section headers. Keep it professional, highly detailed, clear, and actionable for the builder.
+Format the output clearly using bullet points and bold section headers. Keep it professional, highly detailed, clear, and actionable for the builder.`;
 
-Conversation Log:
-${chatLog}`;
+      const userPrompt = `Please generate the Pre-Meeting Briefing Sheet for the following conversation:\n\nConversation Log:\n${chatLog}`;
 
-      const summary = await callAiEngine([{ role: 'system', content: prompt }], { maxTokens: 300, temperature: 0.5 });
+      const summary = await callAiEngine([
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ], { maxTokens: 1600, temperature: 0.5 });
+
       return summary || "Unable to generate chat summary.";
-    } catch (err) {
+    } catch (err: any) {
       console.error("Summarization error:", err);
-      return "Failed to generate summary. Please try again.";
+      return `Failed to generate summary: ${err?.message || "Please try again."}`;
     }
   });
 
@@ -1876,24 +2260,24 @@ export const generateAIScriptUpdate = createServerFn({ method: 'POST' })
     const companyName = session.companyName || "Your Company";
     const primaryContact = session.displayName || "Your Name";
 
-    const systemPrompt = `You are a professional copywriting assistant specialized in high-trust outreach and lead nurture campaigns for luxury custom home builders. 
+    const systemPrompt = `You are a professional copywriting assistant specialized in high-trust outreach and lead nurture campaigns for luxury custom home builders.
 You are tasked with generating a sequence of exactly 3 SMS follow-up nurture messages based on the builder's custom instruction.
 
-CRITICAL CONTEXT: The leads have NOT signed up or contacted the builder. They are identified from public records (specifically newly filed building permit filings or county tax records in Travis/Austin). The messages MUST be professional, highly localized, and build massive trust by referring directly to their newly filed permit/records, instead of claiming "thanks for your interest" or "thanks for connecting" (which would feel like spam and break trust).
+CRITICAL CONTEXT: The leads have NOT signed up or contacted the builder. They are identified from public records (specifically newly filed residential building permit filings or county tax assessment records in the builder's regional market). The messages MUST be professional, highly localized, and build massive trust by referring directly to their newly filed permit/records, instead of claiming "thanks for your interest" or "thanks for connecting" (which would feel like spam and break trust).
 
 Builder Custom Instruction: "${instruction}"
 
 Follow these rules:
 1. Message 1 must be designed for immediate dispatch (<60 seconds after a permit/tax record is filed). It must be direct, refer to the filed permit, and ask a qualifying question (e.g. if they have hired a general builder/contractor yet).
-2. Message 2 should trigger 2 hours later if no reply. It should follow up politely and offer a useful localized resource (e.g., Austin Permitting Checklist, site preparation tips, or HOA zoning reviews).
-3. Message 3 should trigger 24 hours later. It should propose a direct call-to-action (e.g., booking a private walkthrough at our contemporary model home in Lakeway or Dripping Springs).
+2. Message 2 should trigger 2 hours later if no reply. It should follow up politely and offer a useful localized resource (e.g., Local Permitting & Zoning Checklist, site preparation tips, or HOA architectural guidelines review).
+3. Message 3 should trigger 24 hours later. It should propose a direct call-to-action (e.g., booking a private walkthrough at a completed project or architectural consultation).
 4. Do not output anything other than a raw JSON array containing exactly three objects with keys "t" (the timing label) and "body" (the SMS script content).
 
 Example Format:
 [
-  { "t": "Message 1 · Immediate (< 60s)", "body": "Hi [Name], I noticed your residential building permit application filed in Travis County. I'm ${primaryContact.split(' ')[0]}'s assistant from ${companyName}. Since custom builds in Austin require complex structural reviews, have you already hired a general builder?" },
-  { "t": "Message 2 · 2 hours later (no reply)", "body": "Hey [Name], just checking in! I wanted to send over our Austin Permitting & Zoning Checklist (it saves weeks on site preparation). Do you already own the lot?" },
-  { "t": "Message 3 · 24 hours later", "body": "Hi [Name], we are hosting private tours of our completed contemporary estate in Lakeway this Saturday. Let me know if you would like me to reserve a spot for you!" }
+  { "t": "Message 1 · Immediate (< 60s)", "body": "Hi [Name], I noticed your residential building permit application filed recently. I'm ${primaryContact.split(' ')[0]}'s assistant from ${companyName}. Since ground-up custom builds require complex structural planning, have you already hired a principal builder?" },
+  { "t": "Message 2 · 2 hours later (no reply)", "body": "Hey [Name], just checking in! I wanted to send over our Local Permitting & Site Planning Checklist (it saves weeks on site preparation). Do you already own the lot?" },
+  { "t": "Message 3 · 24 hours later", "body": "Hi [Name], we are hosting private site walkthroughs of our completed custom residences this week. Let me know if you would like me to reserve a consultation spot for you!" }
 ]`;
 
     try {
@@ -1919,9 +2303,9 @@ Example Format:
         console.error("Failed to parse AI JSON response, using fallback matching...", pe);
         // Fallback matching
         parsed = [
-          { t: "Message 1 · Immediate (< 60s)", body: `Hi [Name]! I'm ${primaryContact.split(' ')[0]}'s assistant from ${companyName}. Are you looking to build your home in Austin in the next 6-12 months? Reply YES/NO.` },
-          { t: "Message 2 · 2 hours later", body: "Hey [Name], just following up! Did you have a specific lot in mind in Travis County, or would you like help finding one?" },
-          { t: "Message 3 · 24 hours later", body: "Hi [Name], would you like a private walkthrough of our newly completed contemporary estate this Thursday?" }
+          { t: "Message 1 · Immediate (< 60s)", body: `Hi [Name]! I'm ${primaryContact.split(' ')[0]}'s assistant from ${companyName}. Are you looking to break ground on your custom home in the next 6-12 months? Reply YES/NO.` },
+          { t: "Message 2 · 2 hours later", body: "Hey [Name], just following up! Did you have a specific homesite in mind, or would you like help evaluating lot feasibility?" },
+          { t: "Message 3 · 24 hours later", body: "Hi [Name], would you like a private architectural walkthrough of our recently completed showcase residence this Thursday?" }
         ];
       }
 
@@ -2009,7 +2393,7 @@ export const bookAppointment = createServerFn({ method: 'POST' })
         data: {
           builderId: session.builderId || '',
           leadId: data.leadId,
-          action: `📆 Appointment booked: ${data.type} - ${data.location} scheduled for ${formattedDate}.`,
+          action: `🗓️ Appointment booked: ${data.type} - ${data.location} scheduled for ${formattedDate}.`,
         }
       })
 
@@ -2019,7 +2403,7 @@ export const bookAppointment = createServerFn({ method: 'POST' })
           builderId: session.builderId || '',
           leadId: data.leadId,
           sender: 'system',
-          content: `📆 Site Visit Booked: ${data.type} scheduled for ${formattedDate} at ${data.location}.`,
+          content: `🗓️ Site Visit Booked: ${data.type} scheduled for ${formattedDate} at ${data.location}.`,
           channel: 'portal',
           isRead: true
         }
@@ -2158,7 +2542,7 @@ export const cancelAppointment = createServerFn({ method: 'POST' })
         data: {
           builderId: session.builderId || '',
           leadId: existing.leadId,
-          action: `❌ Appointment cancelled: ${existing.type} for ${formattedDate} has been removed.`,
+          action: `âŒ Appointment cancelled: ${existing.type} for ${formattedDate} has been removed.`,
         }
       })
 
@@ -2169,26 +2553,8 @@ export const cancelAppointment = createServerFn({ method: 'POST' })
     }
   })
 
-export const generatePortalToken = createServerFn({ method: 'POST' })
-  .inputValidator((data: { leadId: string; activeRole?: string | null }) => data)
-  .handler(async ({ data }) => {
-    const { getTenantDb, requireAuth } = await import('./server-utils.server');
-    const session = await requireAuth(data?.activeRole ?? undefined);
-    const db = await getTenantDb(session);
-    
-    // Generate a random 32 char hex string
-    const token = Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
-    
-    await db.lead.update({
-      where: { id: data.leadId },
-      data: { portalToken: token }
-    });
-    
-    return token;
-  });
-
 export const getConversations = createServerFn({ method: 'POST' })
-  .inputValidator((data: { activeRole?: string | null } | undefined) => data)
+  .inputValidator((data: { activeRole?: string | null; filter?: 'all' | 'assigned_to_me' | 'unassigned' } | undefined) => data)
   .handler(async ({ data }) => {
   const { getTenantDb, requireAuth } = await import('./server-utils.server');
   try {
@@ -2196,9 +2562,6 @@ export const getConversations = createServerFn({ method: 'POST' })
     const db = await getTenantDb(session)
 
     // Trigger Inbound Mailbox Sync (IMAP) — truly fire-and-forget.
-    // IMPORTANT: No `await` here. The DB query runs immediately and the response
-    // is returned to the client without waiting for the IMAP network round-trip.
-    // The throttle inside syncInboundMailbox prevents spam (max once per 2 min per builder).
     import('./mailbox.server').then(({ syncInboundMailbox }) => {
       syncInboundMailbox(session.builderId || '').catch((e) => {
         console.warn('[MAILBOX SYNC NON-BLOCKING ERROR]:', e?.message || e);
@@ -2208,13 +2571,42 @@ export const getConversations = createServerFn({ method: 'POST' })
     const whereClause: any = {}
     if (session.role === 'builder' && session.builderRole === 'sales') {
       whereClause.assignedToId = session.userId
+    } else if (data?.filter === 'assigned_to_me') {
+      whereClause.assignedToId = session.userId
+    } else if (data?.filter === 'unassigned') {
+      whereClause.assignedToId = null
     }
+
     const leads = await db.lead.findMany({
       where: whereClause,
-      include: {
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        email: true,
+        status: true,
+        scoreTier: true,
+        estimatedBudget: true,
+        createdAt: true,
+        portalToken: true,
+        portalVisitedAt: true,
+        assignedTo: {
+          select: {
+            id: true,
+            displayName: true,
+            email: true,
+            builderRole: true,
+          }
+        },
         messages: {
           orderBy: { createdAt: 'desc' },
-          take: 1
+          take: 1,
+          select: {
+            id: true,
+            sender: true,
+            createdAt: true,
+            channel: true,
+          }
         },
         _count: {
           select: {
@@ -2229,13 +2621,47 @@ export const getConversations = createServerFn({ method: 'POST' })
       }
     })
 
-    const conversations = leads.map((l) => {
+    // Fetch database-level truncated preview (200 chars) for latest messages.
+    // This completely prevents transferring multi-MB base64 images over the wire from Neon!
+    const latestMessageIds = leads
+      .map((l: any) => l.messages[0]?.id)
+      .filter((id: any): id is string => typeof id === 'string' && id.length > 0);
+
+    const previewMap = new Map<string, string>();
+    if (latestMessageIds.length > 0) {
+      try {
+        const rawPreviews = await db.$queryRaw<{ id: string; preview: string }[]>`
+          SELECT id, LEFT(content, 200) as preview 
+          FROM "Message" 
+          WHERE id = ANY(${latestMessageIds}::text[])
+        `;
+        for (const row of rawPreviews) {
+          previewMap.set(row.id, row.preview || '');
+        }
+      } catch (rawErr) {
+        console.warn('[CONVERSATIONS_PREVIEW_QUERY_WARN]:', rawErr);
+      }
+    }
+
+    const conversations = leads.map((l: any) => {
       const lastMsg = l.messages[0]
       const unreadCount = l._count.messages
       
       // Check if lead polled the portal within the last 30 seconds
       const isRecentlyActive = l.portalVisitedAt && 
           (new Date().getTime() - new Date(l.portalVisitedAt).getTime()) < 1000 * 30;
+
+      let previewText = "No messages yet";
+      if (lastMsg?.id) {
+        const raw = previewMap.get(lastMsg.id) || "";
+        if (raw.includes("🖼️ Image Shared:") || raw.includes("📎 File Attachment:")) {
+          previewText = "📎 Photo & Document attached";
+        } else if (raw.length > 0) {
+          previewText = raw.length >= 200 ? raw.slice(0, 200) + "..." : raw;
+        } else {
+          previewText = "Message received";
+        }
+      }
 
       return {
         leadId: l.id,
@@ -2245,11 +2671,17 @@ export const getConversations = createServerFn({ method: 'POST' })
         status: l.status,
         scoreTier: l.scoreTier,
         estimatedBudget: l.estimatedBudget,
-        lastMessage: lastMsg ? lastMsg.content : "No messages yet",
+        lastMessage: previewText,
         lastMessageTime: lastMsg ? lastMsg.createdAt.toISOString() : l.createdAt.toISOString(),
         unreadCount,
         isOnline: !!isRecentlyActive,
         portalToken: l.portalToken,
+        assignedTo: l.assignedTo ? {
+          id: l.assignedTo.id,
+          displayName: l.assignedTo.displayName,
+          email: l.assignedTo.email,
+          builderRole: l.assignedTo.builderRole,
+        } : null,
       }
     })
 
@@ -2269,36 +2701,72 @@ export const getMessagesForLead = createServerFn({ method: 'POST' })
     const db = await getTenantDb(session)
     const { leadId } = data
     try {
-      const lead = await db.lead.findUnique({
-        where: { id: leadId }
-      })
-      if (!lead) throw new Error("Lead not found")
+      // 1. Parallel fetch for Lead and Messages in a single database roundtrip
+      const [lead, messages] = await Promise.all([
+        db.lead.findUnique({
+          where: { id: leadId },
+          include: {
+            assignedTo: {
+              select: {
+                id: true,
+                displayName: true,
+                email: true,
+                builderRole: true,
+              }
+            }
+          }
+        }),
+        db.message.findMany({
+          where: { leadId, isSimulated: data.isSimulated || false },
+          include: {
+            senderUser: {
+              select: {
+                id: true,
+                displayName: true,
+                builderRole: true,
+                email: true,
+              }
+            }
+          },
+          orderBy: { createdAt: 'asc' }
+        })
+      ]);
 
-      const messages = await db.message.findMany({
-        where: { leadId, isSimulated: data.isSimulated || false },
-        orderBy: { createdAt: 'asc' }
-      })
+      if (!lead) throw new Error("Lead not found");
 
+      // 2. Fire-and-forget non-blocking unread status update (prevents blocking response)
       if (!data.isSimulated) {
-        await db.message.updateMany({
+        db.message.updateMany({
           where: { leadId, sender: 'lead', isRead: false, isSimulated: false },
           data: { isRead: true }
-        })
+        }).catch((err: any) => {
+          console.warn('[MESSAGES READ UPDATE WARN]:', err);
+        });
       }
 
       return {
         lead,
-        messages: messages.map(m => ({
+        messages: messages.map((m: any) => ({
           id: m.id,
           sender: m.sender,
+          subject: m.subject || null,
           content: m.content,
           createdAt: m.createdAt.toISOString(),
-          isRead: m.isRead
+          isRead: m.isRead,
+          isInternal: m.isInternal,
+          type: m.type,
+          senderUserId: m.senderUserId,
+          senderUser: m.senderUser ? {
+            id: m.senderUser.id,
+            displayName: m.senderUser.displayName,
+            builderRole: m.senderUser.builderRole,
+            email: m.senderUser.email,
+          } : null,
         }))
-      }
+      };
     } catch (error) {
-      console.error("Error in getMessagesForLead:", error)
-      throw error
+      console.error("Error in getMessagesForLead:", error);
+      throw error;
     }
   })
 
@@ -2312,26 +2780,44 @@ export const triggerMailboxSync = createServerFn({ method: 'POST' })
   });
 
 export const sendMessage = createServerFn({ method: 'POST' })
-  .inputValidator((data: { leadId: string; content: string }) => data)
+  .inputValidator((data: { leadId: string; content: string; subject?: string | null; isInternal?: boolean; activeRole?: string | null }) => data)
   .handler(async ({ data }) => {
     const { getTenantDb, requireAuth } = await import('./server-utils.server');
-    const session = await requireAuth()
-    const db = await getTenantDb()
+    const session = await requireAuth(data?.activeRole ?? undefined)
+    const db = await getTenantDb(session)
     try {
-      const { leadId, content } = data
+      const { leadId, content, subject, isInternal } = data
 
-      // 1. Create user's message in DB
+      // Upload any local base64 attachments to Cloudflare R2 to keep PostgreSQL lightweight
+      const { processAndUploadContentAttachments } = await import('./storage.server');
+      const processedContent = await processAndUploadContentAttachments(content, leadId);
+
+      // 1. Create message in DB
       const userMsg = await db.message.create({
         data: {
           builderId: session.builderId || '',
           leadId,
           sender: 'user',
-          content,
-          isRead: true
+          subject: subject || null,
+          content: processedContent,
+          isRead: true,
+          isInternal: isInternal === true,
+          type: isInternal ? 'internal_note' : 'message',
+          senderUserId: session.userId || null,
+        },
+        include: {
+          senderUser: {
+            select: {
+              id: true,
+              displayName: true,
+              builderRole: true,
+              email: true,
+            }
+          }
         }
       })
 
-      // 2. Fetch full lead and builder details for Outbound Resend Email
+      // Fetch full lead and builder details
       const currentLead = await db.lead.findUnique({
         where: { id: leadId },
         select: {
@@ -2349,37 +2835,60 @@ export const sendMessage = createServerFn({ method: 'POST' })
         }
       })
 
-      if (currentLead && currentLead.status !== 'Appointment') {
+      // If INTERNAL NOTE: strictly log internal team activity and skip outbound client notifications
+      if (isInternal) {
+        await db.activity.create({
+          data: {
+            builderId: session.builderId || '',
+            leadId,
+            action: `📝 Internal Note added by ${session.displayName || 'Team Member'}: "${content.slice(0, 80)}${content.length > 80 ? '...' : ''}"`,
+          }
+        }).catch(() => {});
+
+        return {
+          userMessage: userMsg,
+          aiAutoMuted: false,
+          leadName: currentLead?.name
+        }
+      }
+
+      // 2. Outbound Client Reply logic (only runs for client-facing messages)
+      if (currentLead && !['Appointment', 'Qualified', 'Scheduled', 'Closed Won'].includes(currentLead.status)) {
         await db.lead.update({
           where: { id: leadId },
           data: { status: 'Replied' }
         })
       }
 
-      // 3. Dispatch Outbound Real Email via Resend if lead has an email address
+      // 3. Dispatch Outbound Real Email via Resend/Google/SMTP if lead has an email address
       if (currentLead && currentLead.email) {
         try {
-          const { sendOutboundEmail, buildArchitecturalEmailHtml } = await import('./email.server');
+          const { sendOutboundEmail, buildArchitecturalEmailHtml, extractAttachmentsAndCleanContent } = await import('./email.server');
           const companyName = session.companyName || currentLead.builder?.companyName || 'Custom Builder';
           const senderName = session.displayName || 'Sales Representative';
           const senderRole = session.builderRole === 'owner' ? 'Founder & Principal Builder' : 'Senior Sales Director';
           const subject = `Re: Architectural Consultation — ${currentLead.county || 'Custom Build'} (${companyName})`;
+
+          const extracted = extractAttachmentsAndCleanContent(content);
 
           const html = buildArchitecturalEmailHtml({
             recipientName: currentLead.name || 'there',
             senderName,
             senderRole,
             companyName,
-            messageContent: content,
+            messageContent: extracted.cleanText || content,
+            links: extracted.links,
+            attachmentsList: extracted.attachments.map(a => ({ name: a.filename, size: a.size })),
           });
 
           await sendOutboundEmail({
             to: currentLead.email,
             subject,
             html,
-            text: content,
+            text: extracted.cleanText || content,
             from: `${senderName} · ${companyName} <onboarding@resend.dev>`,
             replyTo: session.email || currentLead.builder?.email,
+            attachments: extracted.attachments,
           });
 
           // Log activity
@@ -2387,20 +2896,200 @@ export const sendMessage = createServerFn({ method: 'POST' })
             data: {
               builderId: session.builderId || '',
               leadId,
-              action: `📧 Outbound Email sent to ${currentLead.email}: "${content.slice(0, 80)}..."`,
+              action: `📧 Outbound Email sent to ${currentLead.email}: "${(extracted.cleanText || content).slice(0, 80)}..."`,
             }
           }).catch(() => {});
         } catch (emailErr) {
-          console.error('[RESEND DISPATCH ERROR]', emailErr);
+          console.error('[OUTBOUND DISPATCH ERROR]', emailErr);
         }
       }
 
+      // 4. Cancel pending delayed AI reply and auto-mute AI for this lead
+      let aiAutoMuted = false;
+      try {
+        const { cancelPendingAiReply } = await import('./ai-queue.server');
+        cancelPendingAiReply(leadId, 'Human builder manual message sent');
+        const toggleMap = await readSettingJson('ai_toggle_map');
+        if (toggleMap && toggleMap[leadId] !== false) {
+          aiAutoMuted = true;
+          toggleMap[leadId] = false;
+          await writeSettingJson('ai_toggle_map', toggleMap);
+        }
+      } catch {}
+
       return {
-        userMessage: userMsg
+        userMessage: userMsg,
+        aiAutoMuted,
+        leadName: currentLead?.name
       }
     } catch (error) {
       console.error("Error in sendMessage:", error)
       throw error
+    }
+  })
+
+export const markConversationUnread = createServerFn({ method: 'POST' })
+  .inputValidator((data: { leadId: string; activeRole?: string | null }) => data)
+  .handler(async ({ data }) => {
+    const { getTenantDb, requireAuth } = await import('./server-utils.server');
+    const session = await requireAuth(data?.activeRole ?? undefined);
+    const db = await getTenantDb(session);
+    const latestMsg = await db.message.findFirst({
+      where: { leadId: data.leadId },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true }
+    });
+    if (latestMsg) {
+      await db.message.update({
+        where: { id: latestMsg.id },
+        data: { isRead: false }
+      });
+    }
+    return { success: true };
+  });
+
+export const archiveConversation = createServerFn({ method: 'POST' })
+  .inputValidator((data: { leadId: string; activeRole?: string | null }) => data)
+  .handler(async ({ data }) => {
+    const { getTenantDb, requireAuth } = await import('./server-utils.server');
+    const session = await requireAuth(data?.activeRole ?? undefined);
+    const db = await getTenantDb(session);
+    await db.lead.update({
+      where: { id: data.leadId },
+      data: { status: 'Archived' }
+    });
+    await db.activity.create({
+      data: {
+        builderId: session.builderId || '',
+        leadId: data.leadId,
+        action: `📁 Conversation archived by ${session.displayName || 'Team Member'}`
+      }
+    }).catch(() => {});
+    return { success: true };
+  })
+
+export const assignLeadToUser = createServerFn({ method: 'POST' })
+  .inputValidator((data: { leadId: string; userId: string | null; activeRole?: string | null }) => data)
+  .handler(async ({ data }) => {
+    const { getTenantDb, requireAuth } = await import('./server-utils.server');
+    const session = await requireAuth(data?.activeRole ?? undefined);
+    const db = await getTenantDb(session);
+    try {
+      const { leadId, userId } = data;
+
+      const lead = await db.lead.findUnique({
+        where: { id: leadId },
+        select: { id: true, name: true, assignedToId: true }
+      });
+      if (!lead) throw new Error("Lead not found");
+
+      let assignedUser: { id: string; displayName: string | null; email: string; builderRole: string } | null = null;
+      if (userId) {
+        assignedUser = await db.user.findUnique({
+          where: { id: userId },
+          select: { id: true, displayName: true, email: true, builderRole: true }
+        });
+      }
+
+      await db.lead.update({
+        where: { id: leadId },
+        data: { assignedToId: userId }
+      });
+
+      const assigneeLabel = assignedUser ? (assignedUser.displayName || assignedUser.email) : 'Unassigned';
+      await db.activity.create({
+        data: {
+          builderId: session.builderId || '',
+          leadId,
+          action: `👤 Lead assigned to ${assigneeLabel} by ${session.displayName || 'Team Member'}`,
+        }
+      }).catch(() => {});
+
+      return {
+        success: true,
+        leadId,
+        assignedToId: userId,
+        assignedTo: assignedUser ? {
+          id: assignedUser.id,
+          displayName: assignedUser.displayName,
+          email: assignedUser.email,
+          builderRole: assignedUser.builderRole,
+        } : null,
+      };
+    } catch (error) {
+      console.error("Error in assignLeadToUser:", error);
+      throw error;
+    }
+  })
+
+export const getLatestInboundMessages = createServerFn({ method: 'POST' })
+  .inputValidator((data?: { since?: string; activeRole?: string | null }) => data)
+  .handler(async ({ data }) => {
+    const { getTenantDb, requireAuth } = await import('./server-utils.server');
+    const session = await requireAuth(data?.activeRole ?? undefined);
+    const db = await getTenantDb(session);
+
+    // Non-blocking IMAP mailbox sync in background (throttled automatically)
+    import('./mailbox.server').then(({ syncInboundMailbox }) => {
+      syncInboundMailbox(session.builderId || '').catch(() => {});
+    }).catch(() => {});
+
+    try {
+      // Default to last 3 minutes if no 'since' provided
+      const sinceDate = data?.since 
+        ? new Date(data.since) 
+        : new Date(Date.now() - 180000);
+
+      const whereClause: any = {
+        sender: 'lead',
+        OR: [
+          { createdAt: { gt: sinceDate } },
+          { isRead: false, createdAt: { gt: new Date(Date.now() - 3600000) } }
+        ]
+      };
+
+      if (session.role === 'builder' && session.builderId) {
+        whereClause.builderId = session.builderId;
+        if (session.builderRole === 'sales') {
+          whereClause.lead = { assignedToId: session.userId };
+        }
+      }
+
+      const messages = await db.message.findMany({
+        where: whereClause,
+        include: {
+          lead: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+              scoreTier: true,
+              county: true,
+            }
+          }
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 5
+      });
+
+      const { stripEmailQuotedHistory } = await import('./mailbox.server');
+
+      return messages.map(m => ({
+        id: m.id,
+        leadId: m.leadId,
+        leadName: m.lead?.name || 'Homeowner Lead',
+        leadEmail: m.lead?.email || '',
+        leadCounty: m.lead?.county || m.lead?.city || (m.lead?.state ? `Local (${m.lead.state})` : 'Location Unspecified'),
+        scoreTier: m.lead?.scoreTier || 'Warm',
+        content: stripEmailQuotedHistory(m.content) || m.content,
+        channel: m.channel,
+        isSimulated: m.isSimulated,
+        createdAt: m.createdAt.toISOString()
+      }));
+    } catch (error) {
+      console.error("Error in getLatestInboundMessages:", error);
+      return [];
     }
   })
 
@@ -2475,7 +3164,7 @@ export const simulateLeadMessage = createServerFn({ method: 'POST' })
             try {
               const { sendOutboundEmail, buildArchitecturalEmailHtml } = await import('./email.server');
               const companyName = session.companyName || targetLead.builder?.companyName || 'Custom Builder';
-              const subject = `Re: Custom Architectural Consultation — ${companyName}`;
+              const subject = `Re: Custom Architectural Consultation â€” ${companyName}`;
               const senderDisplayName = session.displayName || 'Sajid Ali';
               const html = buildArchitecturalEmailHtml({
                 recipientName: targetLead.name || 'there',
@@ -2490,7 +3179,7 @@ export const simulateLeadMessage = createServerFn({ method: 'POST' })
                 subject,
                 html,
                 text: aiResponse.replyText,
-                from: `${senderDisplayName} · ${companyName} <${session.email || targetLead.builder?.email || 'onboarding@resend.dev'}>`,
+                from: `${senderDisplayName} Â· ${companyName} <${session.email || targetLead.builder?.email || 'onboarding@resend.dev'}>`,
                 replyTo: session.email || targetLead.builder?.email,
               });
             } catch (err) {
@@ -2508,7 +3197,7 @@ export const simulateLeadMessage = createServerFn({ method: 'POST' })
   });
 
 /**
- * ─── AUTONOMOUS AI OUTREACH & QUALIFICATION ENGINE ───────────────────────────
+ * â”€â”€â”€ AUTONOMOUS AI OUTREACH & QUALIFICATION ENGINE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
  * Triggered automatically when a lead enters via Inbound Webhooks, Forms, or Manual Entry.
  * 
  * Works completely independent of logged-in sessions by reading builder settings directly from the DB,
@@ -2520,7 +3209,7 @@ export async function triggerAutonomousAiOutreach(
   builderId: string,
   initialUserMessage?: string
 ) {
-  const { getDb } = await import('./db');
+  const { getDb } = await import('./db.server');
   const db = await getDb();
 
   try {
@@ -2538,20 +3227,39 @@ export async function triggerAutonomousAiOutreach(
       return { success: false, reason: 'Builder is not active' };
     }
 
-    // Direct DB settings extraction — zero session / requireAuth dependency
+    // Direct DB settings extraction â€” zero session / requireAuth dependency
     const settingsObj = builder.settings
       ? (typeof builder.settings === 'string' ? JSON.parse(builder.settings) : builder.settings)
       : {};
     const builderProfile = settingsObj.builder_profile || {};
     const brainConfig = settingsObj.ai_brain_config || {};
 
+    // ── SAFETY INTERLOCK: Compulsory AI Knowledge Base / Builder Defaults ──
+    const isKnowledgeBaseConfigured = Boolean(
+      (brainConfig.customDirectives && brainConfig.customDirectives.trim().length >= 20) ||
+      (builderProfile.aiContext && builderProfile.aiContext.trim().length >= 20)
+    );
+
+    if (!isKnowledgeBaseConfigured) {
+      console.warn(`[SAFETY INTERLOCK] Autonomous AI outreach paused for lead ${leadId}. Builder ${builderId} has not completed their AI Knowledge Base / Builder Defaults.`);
+      await db.activity.create({
+        data: {
+          builderId,
+          leadId,
+          action: `⚠️ AI Autonomous Outreach Paused: Builder AI Knowledge Base / Defaults not yet configured in Settings. Please provide your build policies to enable autonomous replies and prevent misinforming leads.`
+        }
+      });
+      return { success: false, reason: 'AI Knowledge Base not configured' };
+    }
+
     const companyName = builderProfile.companyName || builder.companyName || 'Custom Estate Builder';
     const profileEmail = builderProfile.email || builder.email; // e.g. promonth2004@gmail.com
     const personaName = brainConfig.personaName || builderProfile.primaryContact || 'Alex';
 
+    const leadArea = [lead.county, lead.city].filter(Boolean).join(" · ") || 'your area';
     const messagePrompt = initialUserMessage && initialUserMessage.trim().length > 0
       ? initialUserMessage.trim()
-      : `Hello, I submitted an architectural inquiry for a custom build with an estimated budget of $${(lead.estimatedBudget || 1500000).toLocaleString()} in ${lead.county || 'your area'}. What is your current availability and design process?`;
+      : `Hello, I submitted an architectural inquiry for a custom build with an estimated budget of $${(lead.estimatedBudget || 1500000).toLocaleString()} in ${leadArea}. What is your current availability and design process?`;
 
     // 1. Generate bespoke architectural qualification reply (Gemini / Groq engine)
     const aiResponse = await generateAiReplyCore(
@@ -2583,7 +3291,7 @@ export async function triggerAutonomousAiOutreach(
 
       try {
         const { sendOutboundEmail, buildArchitecturalEmailHtml } = await import('./email.server');
-        const subject = `Re: Custom Architectural Consultation & Build — ${companyName}`;
+        const subject = `Re: Custom Architectural Consultation & Build â€” ${companyName}`;
         const senderDisplayName = personaName || builderProfile.primaryContact || 'Sajid Ali';
         const html = buildArchitecturalEmailHtml({
           recipientName: lead.name || 'there',
@@ -2598,7 +3306,7 @@ export async function triggerAutonomousAiOutreach(
           subject,
           html,
           text: aiResponse.replyText,
-          from: `${senderDisplayName} · ${companyName} <${profileEmail || 'onboarding@resend.dev'}>`,
+          from: `${senderDisplayName} Â· ${companyName} <${profileEmail || 'onboarding@resend.dev'}>`,
           replyTo: profileEmail,
         });
 
@@ -2713,7 +3421,7 @@ export const getReportsData = createServerFn({ method: 'POST' })
     // All Time (use a safe past date)
     const startOfAllTime = new Date(2020, 0, 1)
 
-    // Optimized: Fetch all leads, appointments, review requests, messages, and activities at once to process in-memory
+    // Optimized: Fetch only relevant records with targeted fields to process in-memory
     const [allLeads, allAppointments, allReviewRequests, allMessages, allActivities] = await Promise.all([
       db.lead.findMany({
         select: { id: true, createdAt: true, status: true, source: true, estimatedBudget: true }
@@ -2725,9 +3433,19 @@ export const getReportsData = createServerFn({ method: 'POST' })
         select: { createdAt: true, status: true, rating: true }
       }),
       db.message.findMany({
+        where: { sender: 'system' },
         select: { createdAt: true, sender: true }
       }),
       db.activity.findMany({
+        where: {
+          OR: [
+            { action: { contains: 'AI' } },
+            { action: { contains: 'automated' } },
+            { action: { contains: 'outreach' } },
+            { action: { contains: 'nurture' } },
+            { action: { contains: 'email' } }
+          ]
+        },
         select: { createdAt: true, action: true }
       })
     ])
@@ -2800,7 +3518,7 @@ export const getReportsData = createServerFn({ method: 'POST' })
     // 2. Leads by Source in-memory
     const sourceMap: Record<string, number> = {}
     allLeads.forEach(l => {
-      const src = l.source || "Austin Building Permits"
+      const src = l.source || "Direct Inbound"
       sourceMap[src] = (sourceMap[src] || 0) + 1
     })
     const leadsBySource = Object.keys(sourceMap).map(source => ({
@@ -2899,7 +3617,7 @@ export const getIntegrationsStatus = createServerFn({ method: 'GET' }).handler(a
           Object.keys(parsed).forEach(key => {
             const lowerKey = key.toLowerCase()
             if (lowerKey.includes("secret") || lowerKey.includes("token") || lowerKey.includes("key")) {
-              config[key] = "••••••••••••••••"
+              config[key] = "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
             } else {
               config[key] = parsed[key]
             }
@@ -2941,7 +3659,7 @@ export const saveIntegrationCredentials = createServerFn({ method: 'POST' })
     const db = await getTenantDb()
     try {
       // First, if there's an existing configuration, let's load it to preserve unchanged masked passwords!
-      // If the user saves and keeps the "••••••••••••••••" mask, we should not overwrite it with the actual secret value!
+      // If the user saves and keeps the "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" mask, we should not overwrite it with the actual secret value!
       let finalCredentials = { ...credentials }
       
       const existing = await db.integration.findUnique({
@@ -2961,7 +3679,7 @@ export const saveIntegrationCredentials = createServerFn({ method: 'POST' })
           
           // Overwrite any keys that came in as the standard mask with their original values
           Object.keys(finalCredentials).forEach(key => {
-            if (finalCredentials[key] === "••••••••••••••••" && parsed[key]) {
+            if (finalCredentials[key] === "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" && parsed[key]) {
               finalCredentials[key] = parsed[key]
             }
           })
@@ -2992,6 +3710,7 @@ export const saveIntegrationCredentials = createServerFn({ method: 'POST' })
         }
       })
 
+      invalidateCache("dashboard_");
       return { success: true }
     } catch (error) {
       console.error(`Error in saveIntegrationCredentials for ${platformId}:`, error)
@@ -3009,10 +3728,107 @@ export const disconnectIntegration = createServerFn({ method: 'POST' })
       await db.integration.deleteMany({
         where: { platformId }
       })
+      invalidateCache("dashboard_");
       return { success: true }
     } catch (error) {
       console.error(`Error in disconnectIntegration for ${platformId}:`, error)
       throw error
+    }
+  })
+
+export const getGoogleConnectUrl = createServerFn({ method: 'POST' })
+  .inputValidator((data?: { returnTo?: string }) => data)
+  .handler(async ({ data }) => {
+    const { requireAuth } = await import('./server-utils.server');
+    const session = await requireAuth();
+    const builderId = session.actingAsBuilderId || session.builderId;
+    if (!builderId) throw new Error("No active builder session found. Please sign in.");
+    const { generateGoogleAuthUrl } = await import('./google-oauth.server');
+    const returnTo = data?.returnTo || '/settings?tab=integrations';
+    return generateGoogleAuthUrl(builderId, returnTo);
+  })
+
+export const handleGoogleOAuthCallback = createServerFn({ method: 'GET' })
+  .inputValidator((data: { code: string; state: string; error?: string }) => data)
+  .handler(async ({ data }) => {
+    const { code, state, error } = data;
+    if (error) {
+      return { success: false, redirectUrl: `/settings?tab=integrations&error=google_cancelled` };
+    }
+    if (!code || !state) {
+      return { success: false, redirectUrl: `/settings?tab=integrations&error=missing_oauth_params` };
+    }
+
+    let builderId = '';
+    let returnTo = '/settings?tab=integrations';
+    try {
+      const statePayload = JSON.parse(Buffer.from(state, 'base64url').toString('utf8'));
+      builderId = statePayload.builderId;
+      returnTo = statePayload.returnTo || returnTo;
+    } catch {
+      return { success: false, redirectUrl: `/settings?tab=integrations&error=invalid_oauth_state` };
+    }
+
+    if (!builderId) {
+      return { success: false, redirectUrl: `/settings?tab=integrations&error=unauthorized_builder` };
+    }
+
+    try {
+      const { exchangeGoogleAuthCode, getGoogleUserProfile } = await import('./google-oauth.server');
+      const { getDb } = await import('./db.server');
+      const { encrypt } = await import('./crypto');
+
+      const { accessToken, refreshToken, expiresIn } = await exchangeGoogleAuthCode(code);
+      const profile = await getGoogleUserProfile(accessToken);
+      const db = await getDb();
+
+      const configData = {
+        provider: 'google_oauth',
+        email: profile.email,
+        name: profile.name,
+        picture: profile.picture,
+        accessToken,
+        refreshToken,
+        expiryDate: Date.now() + (expiresIn * 1000)
+      };
+
+      const encryptedConfig = encrypt(JSON.stringify(configData));
+
+      await db.integration.upsert({
+        where: {
+          builderId_platformId: {
+            builderId,
+            platformId: 'email_mailbox'
+          }
+        },
+        create: {
+          builderId,
+          platformId: 'email_mailbox',
+          configSecure: encryptedConfig,
+          isConnected: true
+        },
+        update: {
+          configSecure: encryptedConfig,
+          isConnected: true
+        }
+      });
+
+      await db.activity.create({
+        data: {
+          builderId,
+          action: `Google Workspace connected via OAuth 2.0 (${profile.email}).`
+        }
+      }).catch(() => {});
+
+      const separator = returnTo.includes('?') ? '&' : '?';
+      return {
+        success: true,
+        redirectUrl: `${returnTo}${separator}connected=google&email=${encodeURIComponent(profile.email)}`
+      };
+    } catch (err: any) {
+      console.error('[GOOGLE OAUTH CALLBACK EXCEPTION]:', err);
+      const errMsg = encodeURIComponent(err?.message || 'Failed to complete Google OAuth');
+      return { success: false, redirectUrl: `/settings?tab=integrations&error=${errMsg}` };
     }
   })
 
@@ -3029,7 +3845,7 @@ export const testIntegrationConnection = createServerFn({ method: 'POST' })
       if (!credentials.clientId || !credentials.clientSecret || !credentials.locationId) {
         throw new Error("Missing required credentials for Google Business API.");
       }
-      if (credentials.clientSecret !== "••••••••••••••••" && credentials.clientSecret.length < 10) {
+      if (credentials.clientSecret !== "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" && credentials.clientSecret.length < 10) {
         throw new Error("Invalid Google Client Secret. Secret key must be at least 10 characters.");
       }
     }
@@ -3038,10 +3854,10 @@ export const testIntegrationConnection = createServerFn({ method: 'POST' })
       if (!credentials.accountSid || !credentials.authToken || !credentials.phoneNumber) {
         throw new Error("Missing required credentials for Twilio SMS Outreach Gateway.");
       }
-      if (credentials.accountSid !== "••••••••••••••••" && !credentials.accountSid.startsWith("AC")) {
+      if (credentials.accountSid !== "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" && !credentials.accountSid.startsWith("AC")) {
         throw new Error("Invalid Twilio Account SID format. Must start with 'AC'.");
       }
-      if (credentials.authToken !== "••••••••••••••••" && credentials.authToken.length < 16) {
+      if (credentials.authToken !== "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" && credentials.authToken.length < 16) {
         throw new Error("Invalid Twilio Auth Token. Must be at least 16 characters.");
       }
     }
@@ -3063,6 +3879,24 @@ export const testIntegrationConnection = createServerFn({ method: 'POST' })
     }
 
     else if (platformId === "email_mailbox") {
+      const provider = credentials.provider || 'google';
+
+      // If testing a Google OAuth 2.0 connection
+      if (provider === 'google_oauth' || (!credentials.password && credentials.email)) {
+        try {
+          const { requireAuth } = await import('./server-utils.server');
+          const session = await requireAuth();
+          const { getValidGoogleAccessToken, getGoogleUserProfile } = await import('./google-oauth.server');
+          const oauthData = await getValidGoogleAccessToken(session.builderId || '');
+          if (oauthData) {
+            const profile = await getGoogleUserProfile(oauthData.accessToken);
+            return { success: true, email: profile.email };
+          }
+        } catch (oauthTestErr: any) {
+          throw new Error(`Google OAuth verification failed: ${oauthTestErr?.message || oauthTestErr}`);
+        }
+      }
+
       const email = credentials.email || credentials.username || '';
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!email || !emailRegex.test(email.trim())) {
@@ -3070,7 +3904,7 @@ export const testIntegrationConnection = createServerFn({ method: 'POST' })
       }
       const rawPassword = credentials.password || '';
       if (!rawPassword) {
-        throw new Error("Missing App Password. Please enter your 16-character Google App Password.");
+        throw new Error("Missing App Password. Please enter your 16-character Google App Password or connect via Google Workspace Authorization.");
       }
 
       // If user provided an actual password (not the masked placeholder), perform REAL live Google authentication check
@@ -3160,13 +3994,13 @@ export const exportLeadsToCsv = createServerFn({ method: 'POST' })
   })
 
 
-// ─── Settings persistence helpers ────────────────────────────────────────────
+// â”€â”€â”€ Settings persistence helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // We reuse the Integration table with reserved platformId keys so no new
 // Prisma migration is required.
 
 export async function readSettingJson(platformId: string, preResolvedSession?: any): Promise<Record<string, any>> {
   const { requireAuth } = await import('./server-utils.server');
-  const { getDb } = await import('./db');
+  const { getDb } = await import('./db.server');
   try {
     const session = preResolvedSession ?? await requireAuth()
     const db = await getDb()
@@ -3185,7 +4019,7 @@ export async function readSettingJson(platformId: string, preResolvedSession?: a
 
 export async function writeSettingJson(platformId: string, value: Record<string, any>, preResolvedSession?: any) {
   const { requireAuth } = await import('./server-utils.server');
-  const { getDb } = await import('./db');
+  const { getDb } = await import('./db.server');
   const session = preResolvedSession ?? await requireAuth()
   const db = await getDb()
   
@@ -3203,12 +4037,13 @@ export async function writeSettingJson(platformId: string, value: Record<string,
     where: { id: builderId },
     data: { settings: JSON.stringify(settingsObj) }
   })
+  invalidateCache("dashboard_");
 }
 
 export const getBuilderProfile = createServerFn({ method: 'POST' })
   .inputValidator((data: { activeRole?: string | null } | undefined) => data)
   .handler(async ({ data }) => {
-  const { getDb } = await import('./db');
+  const { getDb } = await import('./db.server');
   const { requireAuth } = await import('./server-utils.server');
   const session = await requireAuth(data?.activeRole ?? undefined);
   const db = await getDb();
@@ -3224,15 +4059,15 @@ export const getBuilderProfile = createServerFn({ method: 'POST' })
   const user = builder?.users[0];
   
   return {
-    companyName: builder?.companyName || savedProfile.companyName || "Your Company LLC",
-    primaryContact: builder?.contactName || savedProfile.primaryContact || user?.displayName || "Your Name",
-    email: builder?.email || savedProfile.email || user?.email || "youremail@example.com",
-    phone: builder?.phone || savedProfile.phone || "+1 512-555-0100",
-    businessAddress: savedProfile.businessAddress || "1100 S Lamar Blvd, Austin, TX 78704",
-    targetZipCodes: savedProfile.targetZipCodes || "78704, 78703, 78731, 78613, 78641",
-    avgHomePrice: savedProfile.avgHomePrice || "$700,000",
-    homesPerYear: savedProfile.homesPerYear || "42",
-    timezone: savedProfile.timezone || "Asia/Kolkata",
+    companyName: builder?.companyName || savedProfile.companyName || "",
+    primaryContact: builder?.contactName || savedProfile.primaryContact || user?.displayName || "",
+    email: builder?.email || savedProfile.email || user?.email || "",
+    phone: builder?.phone || savedProfile.phone || "",
+    businessAddress: savedProfile.businessAddress || "",
+    targetZipCodes: savedProfile.targetZipCodes || "",
+    avgHomePrice: savedProfile.avgHomePrice || "$750,000",
+    homesPerYear: savedProfile.homesPerYear || "25",
+    timezone: savedProfile.timezone || "America/Chicago",
     aiContext: savedProfile.aiContext || "",
   };
 })
@@ -3241,12 +4076,17 @@ export const saveBuilderProfile = createServerFn({ method: 'POST' })
   .inputValidator((data: any) => data)
   .handler(async ({ data }) => {
     try {
-      const { getDb } = await import('./db');
+      const { getDb } = await import('./db.server');
       const { requireAuth, setAuthCookie } = await import('./server-utils.server');
       const session = await requireAuth();
       const db = await getDb();
       
       const profileData = data.data || data;
+
+      // ── COMPULSORY ENFORCEMENT: AI Knowledge Base / Builder Defaults ──
+      if (!profileData.aiContext || typeof profileData.aiContext !== 'string' || profileData.aiContext.trim().length < 20) {
+        throw new Error("AI Knowledge Base / Builder Defaults is required (minimum 20 characters). Please provide your operating policies, service region, and build specifications.");
+      }
       
       await writeSettingJson('builder_profile', profileData);
       
@@ -3290,10 +4130,27 @@ export const saveBuilderProfile = createServerFn({ method: 'POST' })
   })
 
 export const getAiBrainConfig = createServerFn({ method: 'GET' }).handler(async () => {
-  const { getTenantDb } = await import('./server-utils.server');
-  const brainConfig = await readSettingJson('ai_brain_config');
-  const legacyQual = await readSettingJson('qualification_rules');
-  const builderProfile = await readSettingJson('builder_profile');
+  const { requireAuth } = await import('./server-utils.server');
+  const { getDb } = await import('./db.server');
+  const session = await requireAuth();
+  const db = await getDb();
+
+  const builderId = session.role === 'admin'
+    ? (session.actingAsBuilderId || session.builderId)
+    : session.builderId;
+
+  const builder = await db.builder.findUnique({
+    where: { id: builderId || '' },
+    select: { settings: true }
+  });
+
+  const settingsObj = builder?.settings
+    ? (typeof builder.settings === 'string' ? JSON.parse(builder.settings) : builder.settings)
+    : {};
+
+  const brainConfig = settingsObj['ai_brain_config'] || {};
+  const legacyQual = settingsObj['qualification_rules'] || {};
+  const builderProfile = settingsObj['builder_profile'] || {};
 
   return {
     primaryGoal: (brainConfig.primaryGoal as string) || 'book_consultation',
@@ -3362,23 +4219,106 @@ export const saveWebhookUrl = createServerFn({ method: 'POST' })
     return { success: true }
   })
 
-// ─── Per-lead AI Concierge toggle persistence ─────────────────────────────────
+// â”€â”€â”€ Per-lead AI Concierge toggle persistence â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Stores { [leadId]: boolean } map in the Integration table under 'ai_toggle_map'
 
 export const getAiToggleMap = createServerFn({ method: 'GET' }).handler(async () => {
-    const { getTenantDb } = await import('./server-utils.server');
   const row = await readSettingJson('ai_toggle_map')
   return row as Record<string, boolean>
 })
 
+export async function setLeadAiToggleDirect(leadId: string, active: boolean, callerSession?: any) {
+  if (!callerSession || !callerSession.builderId) {
+    throw new Error('UNAUTHORIZED: Explicit tenant context required for AI toggle modification');
+  }
+
+  const { getDb } = await import('./db.server');
+  const db = await getDb();
+  
+  // Verify lead exists and strictly belongs to the specified tenant
+  const lead = await db.lead.findUnique({
+    where: { id: leadId },
+    select: { id: true, builderId: true }
+  });
+
+  if (!lead || lead.builderId !== callerSession.builderId) {
+    throw new Error('FORBIDDEN: Lead does not belong to authorized tenant');
+  }
+
+  const current = await readSettingJson('ai_toggle_map', callerSession);
+  current[leadId] = active;
+  await writeSettingJson('ai_toggle_map', current, callerSession);
+
+  // Smart AI Re-activation Hook:
+  // If toggled ON, check if the latest message is an unreplied homeowner message.
+  // If so, reconcile status to 'Replied' and auto-queue a delayed AI response.
+  if (active) {
+    try {
+      const latestMsg = await db.message.findFirst({
+        where: { leadId },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, sender: true, content: true }
+      });
+
+      if (latestMsg && latestMsg.sender === 'lead') {
+        // 1. Ensure lead status is at least 'Replied'
+        await db.lead.updateMany({
+          where: {
+            id: leadId,
+            status: { in: ['New', 'Emailed', 'Opened', 'Outreach', 'contacted'] }
+          },
+          data: { status: 'Replied' }
+        });
+
+        // 2. Queue authentic delayed reply
+        const { queueDelayedAiReply } = await import('./ai-queue.server');
+        const queueRes = await queueDelayedAiReply(leadId, callerSession.builderId, latestMsg.content);
+        const minutes = (queueRes.delaySeconds / 60).toFixed(1);
+        await db.activity.create({
+          data: {
+            builderId: callerSession.builderId,
+            leadId,
+            action: `⏳ AI Concierge resumed: response queued (~${minutes} min authentic delay to preserve human trust).`,
+          }
+        }).catch(() => {});
+      }
+    } catch (queueErr) {
+      console.warn('[AI TOGGLE RE-ACTIVATION QUEUE WARNING]:', queueErr);
+    }
+  }
+
+  return { success: true };
+}
+
 export const setLeadAiToggle = createServerFn({ method: 'POST' })
   .inputValidator((data: { leadId: string; active: boolean }) => data)
   .handler(async ({ data }) => {
-    const { getTenantDb } = await import('./server-utils.server');
-    const current = await readSettingJson('ai_toggle_map')
-    current[data.leadId] = data.active
-    await writeSettingJson('ai_toggle_map', current)
-    return { success: true }
+    const { requireAuth, getTenantDb } = await import('./server-utils.server');
+    const session = await requireAuth();
+    const db = await getTenantDb(session);
+
+    // Verify ownership through tenant-isolated db
+    const lead = await db.lead.findUnique({
+      where: { id: data.leadId },
+      select: { id: true, builderId: true, name: true }
+    });
+
+    if (!lead) {
+      throw new Error('FORBIDDEN: Lead not found or not owned by your organization');
+    }
+
+    const res = await setLeadAiToggleDirect(data.leadId, data.active, session);
+
+    // Audit trail
+    await db.activity.create({
+      data: {
+        builderId: session.builderId || '',
+        leadId: data.leadId,
+        action: `🤖 AI Concierge manually toggled ${data.active ? 'ON' : 'OFF'} for ${lead.name || 'lead'} by ${session.displayName || session.userId || 'staff'}.`,
+      }
+    }).catch(() => {});
+
+    return res;
   })
 
 export async function checkAndSyncRencastLeads() {
@@ -3389,20 +4329,20 @@ export async function checkAndSyncRencastLeads() {
 
     // 1. Read API key and target market from environment variables
     const apiKey = process.env.RENCAST_API_KEY;
-    const targetMarket = process.env.RENCAST_TARGET_MARKET || 'Austin, TX';
+    const targetMarket = process.env.RENCAST_TARGET_MARKET || 'Local Market';
 
     if (!apiKey) {
-      return; // Key not set yet — user needs to paste it in .env
+      return; // Key not set yet â€” user needs to paste it in .env
     }
 
-    // 2. Check if already run today (YYYY-MM-DD) — stored in DB to survive restarts
+    // 2. Check if already run today (YYYY-MM-DD) â€” stored in DB to survive restarts
     const today = new Date().toISOString().split('T')[0];
     const syncMeta = await readSettingJson('rencast_sync_meta');
     if (syncMeta.lastSyncDate === today) {
       return; // Already ran today
     }
 
-    console.log(`[Rencast Sync] Running daily sync — date: ${today}, market: ${targetMarket}`);
+    console.log(`[Rencast Sync] Running daily sync â€” date: ${today}, market: ${targetMarket}`);
 
     // 3. Fetch up to 20 permits from Rencast API
     let leadsData: any[] = [];
@@ -3425,7 +4365,7 @@ export async function checkAndSyncRencastLeads() {
         console.warn(`[Rencast Sync] API returned ${response.status}. Using realistic permit fallback.`);
       }
     } catch (apiErr) {
-      console.error('[Rencast Sync] Network error — using realistic permit fallback.', apiErr);
+      console.error('[Rencast Sync] Network error â€” using realistic permit fallback.', apiErr);
     }
 
     // 4. Fallback: generate realistic permits if API unavailable
@@ -3433,16 +4373,25 @@ export async function checkAndSyncRencastLeads() {
       leadsData = generateRealisticPermits(targetMarket, 20);
     }
 
-    // 5. Ingest into DB (deduplicate by name + county)
+    // 5. Ingest into DB (deduplicate by name in a single bulk query)
+    const incomingNames = leadsData.map(item => item.name);
+    const existingLeads = await db.lead.findMany({
+      where: {
+        name: { in: incomingNames },
+        builderId: session.builderId || ''
+      },
+      select: { name: true }
+    });
+    const existingNames = new Set(existingLeads.map((l: any) => l.name));
+    const newItems = leadsData.filter(item => !existingNames.has(item.name));
+
     let leadsIngested = 0;
-    for (const item of leadsData) {
+    for (const item of newItems) {
       const landPrice = item.landPrice || Math.floor(180000 + Math.random() * 220000);
       const estimatedBudget = landPrice * 4;
 
-      const exists = await db.lead.findFirst({
-        where: { name: item.name, county: item.county || targetMarket },
-      });
-      if (exists) continue;
+      const marketStateMatch = targetMarket.match(/,\s*([A-Z]{2})\b/i);
+      const defaultState = marketStateMatch ? marketStateMatch[1].toUpperCase() : '';
 
       const lead = await db.lead.create({
         data: {
@@ -3451,7 +4400,7 @@ export async function checkAndSyncRencastLeads() {
           phone: item.phone || null,
           email: item.email || null,
           county: item.county || targetMarket,
-          state: item.state || 'TX',
+          state: item.state || defaultState,
           landPrice,
           estimatedBudget,
           purchaseDate: item.purchaseDate ? new Date(item.purchaseDate) : new Date(),
@@ -3486,6 +4435,9 @@ function generateRealisticPermits(targetMarket: string, count: number): any[] {
   const firstNames = ["James", "Robert", "John", "Michael", "David", "William", "Richard", "Joseph", "Thomas", "Charles", "Christopher", "Daniel", "Matthew", "Anthony", "Mark", "Donald", "Steven", "Paul", "Andrew", "Joshua", "Emily", "Sarah", "Jessica", "Amanda", "Ashley", "Taylor", "Megan", "Hannah", "Kayla", "Madison"];
   const lastNames = ["Smith", "Johnson", "Williams", "Brown", "Jones", "Miller", "Davis", "Garcia", "Rodriguez", "Wilson", "Martinez", "Anderson", "Taylor", "Thomas", "Hernandez", "Moore", "Martin", "Jackson", "Thompson", "White", "Lopez", "Lee", "Gonzalez", "Harris", "Clark", "Lewis", "Robinson", "Walker", "Perez", "Hall"];
   
+  const marketStateMatch = targetMarket.match(/,\s*([A-Z]{2})\b/i);
+  const resolvedState = marketStateMatch ? marketStateMatch[1].toUpperCase() : '';
+
   const permits: Array<{ name: string; phone: string; email: string; county: string; state: string; landPrice: number; purchaseDate: Date }> = [];
   const now = new Date();
   
@@ -3494,7 +4446,7 @@ function generateRealisticPermits(targetMarket: string, count: number): any[] {
     const lastName = lastNames[Math.floor(Math.random() * lastNames.length)];
     const fullName = `${firstName} ${lastName}`;
     
-    const areaCode = [512, 737, 830, 210, 817, 214, 972][Math.floor(Math.random() * 7)];
+    const areaCode = [305, 415, 312, 212, 206, 512, 404, 702, 602, 303][Math.floor(Math.random() * 10)];
     const phone = `+1 ${areaCode}-${Math.floor(100 + Math.random() * 900)}-${Math.floor(1000 + Math.random() * 9000)}`;
     const email = `${firstName.toLowerCase()}.${lastName.toLowerCase()}@example.com`;
     
@@ -3507,7 +4459,7 @@ function generateRealisticPermits(targetMarket: string, count: number): any[] {
       phone,
       email,
       county: targetMarket,
-      state: targetMarket.toLowerCase().includes("tx") || targetMarket.toLowerCase().includes("texas") ? "TX" : "US",
+      state: resolvedState || "",
       landPrice,
       purchaseDate,
     });
@@ -3846,7 +4798,7 @@ export const submitDemoRequest = createServerFn({ method: 'POST' })
       throw new Error('Please enter a valid phone number.');
     }
 
-    const { getDb } = await import('./db');
+    const { getDb } = await import('./db.server');
     const db = await getDb();
     const { sendOutboundEmail, buildAdminDemoNotificationHtml, buildUserDemoConfirmationHtml } = await import('./email.server');
     const crypto = await import('crypto');
@@ -3890,7 +4842,7 @@ export const submitDemoRequest = createServerFn({ method: 'POST' })
       const baseUrl = (typeof process !== 'undefined' ? process.env.APP_BASE_URL : '') || 'https://weaverframe.in';
       const dashboardUrl = `${baseUrl}/admin/demo-requests`;
 
-      // 6. Dispatch Email 1: Notification to Admin — fire-and-forget (non-blocking)
+      // 6. Dispatch Email 1: Notification to Admin â€” fire-and-forget (non-blocking)
       if (adminEmail) {
         sendOutboundEmail({
           to: adminEmail,
@@ -3909,10 +4861,10 @@ export const submitDemoRequest = createServerFn({ method: 'POST' })
         });
       }
 
-      // 7. Dispatch Email 2: Confirmation Receipt to Prospect — fire-and-forget (non-blocking)
+      // 7. Dispatch Email 2: Confirmation Receipt to Prospect â€” fire-and-forget (non-blocking)
       sendOutboundEmail({
         to: data.email.trim(),
-        subject: `WeaverFrame — Private OS Demonstration Request Received`,
+        subject: `WeaverFrame â€” Private OS Demonstration Request Received`,
         html: buildUserDemoConfirmationHtml({
           recipientName: data.name.trim(),
           company: data.company.trim(),
@@ -3940,10 +4892,11 @@ export const submitDemoRequest = createServerFn({ method: 'POST' })
 
 export const prewarmConnection = createServerFn({ method: 'GET' })
   .handler(async () => {
-    const { warmDb } = await import('./db');
+    const { warmDb } = await import('./db.server');
     await warmDb();
     return { status: 'warm' };
   });
+
 
 
 

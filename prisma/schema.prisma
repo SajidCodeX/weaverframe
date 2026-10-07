@@ -60,8 +60,10 @@ model User {
 
   builder       Builder?  @relation(fields: [builderId], references: [id], onDelete: Cascade)
   assignedLeads Lead[]    @relation("AssignedUserLeads")
+  authoredMessages Message[] @relation("UserAuthoredMessages")
 
   @@index([builderId])
+  @@index([resetToken])
 }
 
 // ─── LEADS ───────────────────────────────────────────────────────────────────
@@ -115,6 +117,7 @@ model Lead {
   @@index([status, createdAt])
   @@index([assignedToId])
   @@index([builderId, status])
+  @@index([builderId, email])
 }
 
 // ─── REVIEW PLATFORMS ────────────────────────────────────────────────────────
@@ -196,6 +199,7 @@ model Appointment {
   @@index([createdAt])
   @@index([builderId, createdAt])
   @@index([builderId, dateTime])
+  @@index([builderId, status, dateTime])
 }
 
 // ─── MESSAGES ────────────────────────────────────────────────────────────────
@@ -206,18 +210,30 @@ model Message {
   
   leadId    String
   sender    String   // "lead" | "user" | "system"
+  subject   String?  // Email subject line (e.g. "Testing subject UI")
   content   String
   channel   String   @default("portal")  // "portal" | "sms"
   isRead    Boolean  @default(false)
   isSimulated Boolean @default(false) // True if this was generated via the Simulate Lead feature
+  
+  // ─── Team Collaboration & Internal Notes ─────────────────────────────────
+  senderUserId String?
+  senderUser   User?    @relation("UserAuthoredMessages", fields: [senderUserId], references: [id], onDelete: SetNull)
+  isInternal   Boolean  @default(false)
+  type         String   @default("message") // "message" | "internal_note" | "system_event"
+  
   createdAt DateTime @default(now())
   
   lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
   @@index([builderId])
   @@index([leadId])
+  @@index([leadId, isInternal])
   @@index([builderId, leadId])
   @@index([createdAt])
+  @@index([builderId, sender, createdAt])
+  @@index([leadId, sender, isRead])
+  @@index([leadId, sender, createdAt])
 }
 
 // ─── INTEGRATIONS ────────────────────────────────────────────────────────────
@@ -233,6 +249,7 @@ model Integration {
   createdAt    DateTime @default(now())
   
   @@unique([builderId, platformId])
+  @@index([platformId, isConnected])
 }
 
 // ─── PUBLIC REVIEWS (EXTERNAL SITES) ─────────────────────────────────────────
@@ -254,6 +271,7 @@ model PublicReview {
 
   @@index([builderId])
   @@index([builderId, createdAt])
+  @@index([sentAt])
 }
 
 // ─── PLATFORM SETTINGS ───────────────────────────────────────────────────────
@@ -293,5 +311,26 @@ model DemoRequest {
   @@index([status])
   @@index([createdAt])
   @@index([email])
+}
+
+// ─── PERSISTENT AI DELAY QUEUE (DURABLE WORKER JOBS) ──────────────────────────
+model ScheduledAiReply {
+  id             String    @id @default(uuid())
+  builderId      String
+  leadId         String
+  conversationId String?
+  scheduledFor   DateTime
+  status         String    @default("pending") // "pending" | "processing" | "sent" | "cancelled" | "failed"
+  payload        String    @db.Text             // JSON string: { userMessage, senderEmail, attempts }
+  attempts       Int       @default(0)
+  lastError      String?   @db.Text
+  sentAt         DateTime?
+  cancelledAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([status, scheduledFor])
+  @@index([leadId, status])
+  @@index([builderId])
 }
 

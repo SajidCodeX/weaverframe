@@ -1,6 +1,3 @@
-import pkg from '@prisma/client'
-const { PrismaClient } = pkg
-
 const globalForPrisma = globalThis as unknown as { 
   prisma?: any
   pgPool?: any
@@ -78,6 +75,8 @@ export const getDb = async (): Promise<any> => {
 
   const adapter = new PrismaPg(pool)
 
+  const pkg = await import('@prisma/client')
+  const PrismaClient = pkg.PrismaClient || (pkg as any).default?.PrismaClient
   const prisma = new PrismaClient({ adapter })
   globalForPrisma.prisma = prisma
   return prisma

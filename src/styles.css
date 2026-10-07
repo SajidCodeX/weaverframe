@@ -64,33 +64,33 @@
 }
 
 :root {
-  /* WeaverFrame Luxury Architecture OS Design System - Pure Obsidian & Champagne */
+  /* WeaverFrame Luxury Architecture OS Design System - Pure Neutral Dark Charcoal & Champagne */
   --radius: 0.75rem;
-  --background: #060608;
+  --background: #0d0d0d;
   --foreground: #F5F5F7;
-  --card: #0a0a0d;
+  --card: #141414;
   --card-foreground: #F5F5F7;
-  --popover: #0a0a0d;
+  --popover: #161616;
   --popover-foreground: #F5F5F7;
   --primary: #e5d9c5;
   --primary-foreground: #000000;
-  --secondary: #101014;
+  --secondary: #181818;
   --secondary-foreground: #F5F5F7;
-  --muted: #0d0d10;
+  --muted: #151515;
   --muted-foreground: #9ca3af;
-  --accent: #141418;
+  --accent: #1c1c1c;
   --accent-foreground: #e5d9c5;
   --destructive: #f87171;
   --destructive-foreground: #F5F5F7;
   --border: rgba(255, 255, 255, 0.08);
-  --input: #101014;
+  --input: #181818;
   --ring: rgba(229, 217, 197, 0.35);
   --success: #34d399;
   --warning: #fbbf24;
   --danger: #f87171;
   --cold: #9ca3af;
-  --row-hover: #101013;
-  --sidebar: #060608;
+  --row-hover: #1c1c1c;
+  --sidebar: #0d0d0d;
 }
 
 @layer base {

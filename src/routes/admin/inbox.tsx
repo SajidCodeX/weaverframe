@@ -8,6 +8,7 @@ import {
   sendAdminMessage,
   createAdminConversation,
 } from "@/lib/admin";
+import { parseMessageContent, formatMessagePreview } from "@/routes/messages";
 import {
   Search,
   Send,
@@ -24,6 +25,13 @@ import {
   ShieldCheck,
   X,
   CheckCheck,
+  FileText,
+  Download,
+  ExternalLink,
+  Globe,
+  Calendar,
+  BookOpen,
+  Image as ImageIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -79,13 +87,33 @@ function AdminInboxPage() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Poll conversations every 15s
+  // Poll conversations every 60s
   useEffect(() => {
     const interval = setInterval(() => {
       router.invalidate();
-    }, 15000);
+    }, 60000);
     return () => clearInterval(interval);
   }, [router]);
+
+  // Support instant deep-link selection from notifications
+  useEffect(() => {
+    const handleSelect = (e: any) => {
+      const targetId = e.detail?.leadId;
+      if (targetId) {
+        setSelectedLeadId(targetId);
+      }
+    };
+    window.addEventListener('weaver_select_lead', handleSelect);
+    return () => window.removeEventListener('weaver_select_lead', handleSelect);
+  }, []);
+
+  // Broadcast active lead ID to suppress duplicate alerts for the current open chat
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('weaver_active_lead_changed', { detail: { leadId: selectedLeadId } }));
+    return () => {
+      window.dispatchEvent(new CustomEvent('weaver_active_lead_changed', { detail: { leadId: null } }));
+    };
+  }, [selectedLeadId]);
 
   // Load chat when selected
   useEffect(() => {
@@ -150,6 +178,19 @@ function AdminInboxPage() {
 
     try {
       const res = await sendAdminMessage({ data: { leadId: activeChat.id, content } });
+      
+      // If sending a manual message auto-muted the AI, pop up Slack-style card (silent)
+      if ((res as any)?.aiAutoMuted) {
+        window.dispatchEvent(
+          new CustomEvent("weaver_ai_muted", {
+            detail: {
+              leadId: activeChat.id,
+              leadName: activeChat.name || (res as any)?.leadName || "Lead",
+            },
+          })
+        );
+      }
+
       setMessages(prev => prev.map(m => m.id === optimisticMsg.id ? res.userMessage : m));
       
       // Update thread list with latest message
@@ -367,7 +408,7 @@ function AdminInboxPage() {
 
                       <div className="flex items-center justify-between gap-2 mt-0.5">
                         <p className={`text-[11px] truncate leading-relaxed flex-1 ${c.unreadCount > 0 ? "font-semibold text-white/90" : "text-muted-foreground"}`}>
-                          {c.lastMessage}
+                          {formatMessagePreview(c.lastMessage)}
                         </p>
                         {c.unreadCount > 0 && (
                           <span className="shrink-0 px-1.5 py-0.2 bg-[#e5d9c5] text-black text-[8.5px] font-mono font-bold rounded-full select-none">
@@ -474,9 +515,86 @@ function AdminInboxPage() {
                             ? 'bg-[#e5d9c5] text-black rounded-tr-sm' 
                             : 'bg-[#12131a] text-foreground border border-white/10 rounded-tl-sm'
                         }`}>
-                          <p className="text-xs sm:text-sm whitespace-pre-wrap leading-relaxed select-text font-sans">
-                            {msg.content}
-                          </p>
+                          {(() => {
+                            const parsed = parseMessageContent(msg.content);
+                            return (
+                              <div className="space-y-2.5">
+                                {parsed.text && (
+                                  <p className="text-xs sm:text-sm whitespace-pre-wrap leading-relaxed select-text font-sans">
+                                    {parsed.text}
+                                  </p>
+                                )}
+                                {parsed.images.map((img, idx) => (
+                                  <div key={idx} className="rounded-xl overflow-hidden border border-white/10 bg-black/40 p-2 space-y-1.5">
+                                    {img.dataUrl && (
+                                      <img src={img.dataUrl} alt={img.name} className="w-full max-h-[220px] object-cover rounded-lg" />
+                                    )}
+                                    <div className="flex items-center justify-between text-[10px] opacity-80 px-1 font-mono">
+                                      <span className="truncate max-w-[180px]">{img.name}</span>
+                                      {img.dataUrl && (
+                                        <a href={img.dataUrl} download={img.name} className="underline hover:opacity-100 flex items-center gap-1">
+                                          <Download className="size-3" /> Save
+                                        </a>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                                {parsed.files.map((f, idx) => (
+                                  <div key={idx} className="rounded-xl border border-white/10 bg-black/40 p-2.5 flex items-center justify-between gap-3">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <FileText className="size-4 shrink-0 opacity-70" />
+                                      <div className="min-w-0">
+                                        <p className="text-xs font-semibold truncate">{f.name}</p>
+                                        <p className="text-[10px] opacity-60 font-mono">{f.size || 'Attachment'}</p>
+                                      </div>
+                                    </div>
+                                    {f.dataUrl && (
+                                      <a href={f.dataUrl} download={f.name} className="text-xs underline hover:opacity-100 font-mono shrink-0">
+                                        Download
+                                      </a>
+                                    )}
+                                  </div>
+                                ))}
+                                {parsed.links.map((l, idx) => (
+                                  <div key={idx} className="rounded-xl border border-white/10 bg-black/40 p-2.5 flex items-center justify-between gap-3">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <Globe className="size-4 shrink-0 opacity-70" />
+                                      <div className="min-w-0">
+                                        <p className="text-xs font-semibold truncate">{l.title}</p>
+                                        <p className="text-[10px] opacity-60 font-mono truncate">{l.url}</p>
+                                      </div>
+                                    </div>
+                                    <a href={l.url} target="_blank" rel="noopener noreferrer" className="text-xs underline hover:opacity-100 font-mono shrink-0">
+                                      Open
+                                    </a>
+                                  </div>
+                                ))}
+                                {parsed.brochures.map((b, idx) => (
+                                  <div key={idx} className="rounded-xl border border-white/10 bg-black/40 p-2.5 flex items-center justify-between gap-3">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <BookOpen className="size-4 shrink-0 text-[#e5d9c5]" />
+                                      <div className="min-w-0">
+                                        <p className="text-xs font-semibold truncate">{b.name}</p>
+                                        <p className="text-[10px] opacity-60 font-mono">Architectural Lookbook · {b.size || 'PDF'}</p>
+                                      </div>
+                                    </div>
+                                    <span className="text-[10px] font-mono opacity-80 uppercase px-2 py-0.5 rounded bg-white/5 border border-white/10">
+                                      PDF Spec
+                                    </span>
+                                  </div>
+                                ))}
+                                {parsed.appointments.map((a, idx) => (
+                                  <div key={idx} className="rounded-xl border border-white/10 bg-black/40 p-2.5 space-y-1">
+                                    <div className="flex items-center gap-1.5 text-xs font-semibold text-[#e5d9c5]">
+                                      <Calendar className="size-3.5" />
+                                      <span>Site Walkthrough & Consultation</span>
+                                    </div>
+                                    <p className="text-xs opacity-75 font-mono">{a.details}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })()}
                           <div className={`text-[9px] mt-2 flex items-center justify-end gap-1 font-mono ${
                             isUser ? 'text-black/60' : 'text-muted-foreground'
                           }`}>

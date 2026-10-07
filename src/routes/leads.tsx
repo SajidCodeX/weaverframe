@@ -1,7 +1,7 @@
 import { createFileRoute, useLoaderData, useRouteContext, useRouter, Link, useNavigate } from '@tanstack/react-router';
 import { RoutePending } from "@/components/dashboard/RoutePending";
-import { useState, useEffect, useRef, useMemo } from "react";
-import { Search, Plus, Download, Phone, Calendar, Eye, MoreHorizontal, X, Mail, Check, AlertCircle, Edit, RefreshCw, LayoutGrid, List, MessageSquare, Zap, Star, Sparkles, AlertTriangle, Lightbulb, Brain } from "lucide-react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { Search, Plus, Download, Phone, Calendar, Eye, MoreHorizontal, X, Mail, Check, AlertCircle, Edit, RefreshCw, LayoutGrid, List, MessageSquare, Zap, Star, Sparkles, AlertTriangle, Lightbulb, Brain, Inbox, Send, CheckCircle2, Archive, MapPin, Clock, Trash2 } from "lucide-react";
 import { Shell } from "@/components/dashboard/Shell";
 import { Card, ScoreBadge, StageBadge } from "@/components/dashboard/primitives";
 import { CustomSelect } from "@/components/dashboard/CustomSelect";
@@ -136,6 +136,29 @@ function LeadsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalError, setModalError] = useState("");
 
+  // ── Highlight & Deep-Link for Concierge Activation Steps ───────────────────
+  const [highlightAddLead, setHighlightAddLead] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const action = url.searchParams.get("action");
+    const highlight = url.searchParams.get("highlight");
+
+    if (action === "add" || highlight === "add" || highlight === "leads") {
+      setIsAddModalOpen(true);
+      setHighlightAddLead(true);
+      setTimeout(() => {
+        const btn = document.getElementById("activation-add-lead-btn");
+        if (btn) btn.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 200);
+      const timer = setTimeout(() => {
+        setHighlightAddLead(false);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
   // Edit lead modal state
   const [editLead, setEditLead] = useState<any | null>(null);
   const [editForm, setEditForm] = useState({
@@ -166,6 +189,19 @@ function LeadsPage() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        if (editLead || activeEmailLead || activeScheduleLead || isAddModalOpen) {
+          setEditLead(null);
+          setActiveEmailLead(null);
+          setActiveScheduleLead(null);
+          setIsAddModalOpen(false);
+          setActiveDropdown(null);
+          setActiveMoreLead(null);
+          return;
+        }
+        if (selected) {
+          // Handled with smooth slide-out by LeadDetailPanel
+          return;
+        }
         setActiveDropdown(null);
         setSelected(null);
         setIsAddModalOpen(false);
@@ -180,17 +216,17 @@ function LeadsPage() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [selected]);
 
   // Sync date selection dynamically from TopBar header dispatches
   useEffect(() => {
     const handleGlobalDateChange = (e: any) => {
-      const { label, start, end } = e.detail;
+      const { label, start, end } = e.detail || {};
       if (label === "Custom Range") {
         setSelectedDateRange("Custom Range");
         setCustomStart(start || "");
         setCustomEnd(end || "");
-      } else {
+      } else if (label) {
         setSelectedDateRange(label);
       }
     };
@@ -204,7 +240,7 @@ function LeadsPage() {
       if (!l) return null;
       // Read the accurate source string directly from Postgres
       const leadName = l.name || "Prospective Buyer";
-      const source = l.source || "Austin Building Permits";
+      const source = l.source || "Inbound Lead";
       const scoreTier = l.scoreTier || "Warm";
       const status = l.status || "New";
       const aiStatus = status === "New" ? "Awaiting" : status === "Replied" ? "Replied" : "Awaiting";
@@ -215,7 +251,7 @@ function LeadsPage() {
         name: leadName,
         firstName: leadName.split(' ')[0] || "Prospective",
         lastName: leadName.split(' ').slice(1).join(' ') || "",
-        city: l.county || "Travis County",
+        city: l.county || l.city || "Location Unspecified",
         budget: l.estimatedBudget ? `$${(l.estimatedBudget / 1000).toFixed(0)}k` : "$0k",
         score: scoreKey,
         scoreTier,
@@ -227,8 +263,8 @@ function LeadsPage() {
 
     const sources = Array.from(
       new Set([
-        "Austin Building Permits",
-        "Travis County Public Records",
+        "Website Contact Form",
+        "Direct Referral",
         ...mapped.map((l: any) => l.source)
       ])
     ).filter(Boolean) as string[];
@@ -254,41 +290,65 @@ function LeadsPage() {
 
       // Captured Date range filter
       let matchDate = true;
-      if (selectedDateRange !== "All Time" && l.createdAt) {
-        const leadDate = new Date(l.createdAt);
-        if (!isNaN(leadDate.getTime())) {
+      if (selectedDateRange !== "All Time") {
+        const leadDate = l.createdAt ? new Date(l.createdAt) : (l.purchaseDate ? new Date(l.purchaseDate) : null);
+        const lastActivityDate = l.messages?.[0]?.createdAt ? new Date(l.messages[0].createdAt) : null;
+
+        if (!leadDate && !lastActivityDate) {
+          matchDate = false;
+        } else {
           const now = new Date();
+          const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
 
           if (selectedDateRange === "Today") {
-            matchDate = leadDate.toDateString() === now.toDateString();
+            const isCreatedToday = leadDate ? leadDate.toDateString() === now.toDateString() : false;
+            const hasActivityToday = lastActivityDate ? lastActivityDate.toDateString() === now.toDateString() : false;
+            matchDate = Boolean(isCreatedToday || hasActivityToday);
           } else if (selectedDateRange === "Yesterday") {
-            const yesterday = new Date();
-            yesterday.setDate(yesterday.getDate() - 1);
-            matchDate = leadDate.toDateString() === yesterday.toDateString();
+            const yesterday = new Date(now);
+            yesterday.setDate(now.getDate() - 1);
+            const isCreatedYest = leadDate ? leadDate.toDateString() === yesterday.toDateString() : false;
+            const hasActivityYest = lastActivityDate ? lastActivityDate.toDateString() === yesterday.toDateString() : false;
+            matchDate = Boolean(isCreatedYest || hasActivityYest);
           } else if (selectedDateRange === "Last 7 Days") {
-            const diffTime = Math.abs(now.getTime() - leadDate.getTime());
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            if (diffDays > 7) matchDate = false;
+            const startOfPeriod = new Date(now);
+            startOfPeriod.setDate(now.getDate() - 7);
+            startOfPeriod.setHours(0, 0, 0, 0);
+            const leadInPeriod = leadDate ? (leadDate >= startOfPeriod && leadDate <= endOfToday) : false;
+            const actInPeriod = lastActivityDate ? (lastActivityDate >= startOfPeriod && lastActivityDate <= endOfToday) : false;
+            matchDate = leadInPeriod || actInPeriod;
           } else if (selectedDateRange === "Last 30 Days") {
-            const diffTime = Math.abs(now.getTime() - leadDate.getTime());
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            if (diffDays > 30) matchDate = false;
+            const startOfPeriod = new Date(now);
+            startOfPeriod.setDate(now.getDate() - 30);
+            startOfPeriod.setHours(0, 0, 0, 0);
+            const leadInPeriod = leadDate ? (leadDate >= startOfPeriod && leadDate <= endOfToday) : false;
+            const actInPeriod = lastActivityDate ? (lastActivityDate >= startOfPeriod && lastActivityDate <= endOfToday) : false;
+            matchDate = leadInPeriod || actInPeriod;
           } else if (selectedDateRange === "This Month") {
-            matchDate = leadDate.getMonth() === now.getMonth() && leadDate.getFullYear() === now.getFullYear();
+            const isCreatedMonth = leadDate ? (leadDate.getMonth() === now.getMonth() && leadDate.getFullYear() === now.getFullYear()) : false;
+            const hasActMonth = lastActivityDate ? (lastActivityDate.getMonth() === now.getMonth() && lastActivityDate.getFullYear() === now.getFullYear()) : false;
+            matchDate = Boolean(isCreatedMonth || hasActMonth);
           } else if (selectedDateRange === "Custom Range" || selectedDateRange.includes("to")) {
+            let startBound: Date | null = null;
+            let endBound: Date | null = null;
             if (customStart && customEnd) {
-              const startBound = new Date(customStart);
+              startBound = new Date(customStart);
               startBound.setHours(0, 0, 0, 0);
-              const endBound = new Date(customEnd);
+              endBound = new Date(customEnd);
               endBound.setHours(23, 59, 59, 999);
-              matchDate = leadDate >= startBound && leadDate <= endBound;
             } else if (selectedDateRange.includes("to")) {
               const [sStr, eStr] = selectedDateRange.split(" to ");
-              const startBound = new Date(sStr.trim());
+              startBound = new Date(sStr.trim());
               startBound.setHours(0, 0, 0, 0);
-              const endBound = new Date(eStr.trim());
+              endBound = new Date(eStr.trim());
               endBound.setHours(23, 59, 59, 999);
-              matchDate = leadDate >= startBound && leadDate <= endBound;
+            }
+            if (startBound && endBound) {
+              const leadInBound = leadDate ? (leadDate >= startBound && leadDate <= endBound) : false;
+              const actInBound = lastActivityDate ? (lastActivityDate >= startBound && lastActivityDate <= endBound) : false;
+              matchDate = leadInBound || actInBound;
+            } else {
+              matchDate = true;
             }
           }
         }
@@ -519,7 +579,7 @@ function LeadsPage() {
             {activeDropdown === "stage" && (
               <div className="absolute left-0 mt-1.5 w-48 rounded-lg bg-card border border-border p-1.5 shadow-none z-30 animate-in fade-in slide-in-from-top-2 duration-150">
                 <div className="text-[10px] font-semibold text-foreground/50 uppercase tracking-widest px-3 py-1.5 border-b border-border/40 mb-1">Filter Stage</div>
-                {["New", "Emailed", "Opened", "Replied", "Appointment"].map(s => (
+                {["New", "Emailed", "Opened", "Replied", "Qualified", "Appointment", "Closed Lost"].map(s => (
                   <button
                     key={s}
                     onClick={() => toggleStageFilter(s)}
@@ -634,13 +694,18 @@ function LeadsPage() {
             </button>
             <button
               onClick={exportToCSV}
-              className="inline-flex items-center gap-1.5 text-xs border border-white/[0.1] bg-[#0c0d14] rounded-lg px-3 py-1.5 text-white/80 hover:text-white hover:border-[#e5d9c5]/40 transition-colors whitespace-nowrap cursor-pointer"
+              className="inline-flex items-center gap-1.5 text-xs border border-white/[0.1] bg-[#141414] rounded-lg px-3 py-1.5 text-white/80 hover:text-white hover:border-[#e5d9c5]/40 transition-colors whitespace-nowrap cursor-pointer"
             >
               <Download className="size-3.5 text-white/50" /> Export CSV
             </button>
             <button
+              id="activation-add-lead-btn"
               onClick={() => setIsAddModalOpen(true)}
-              className="inline-flex items-center gap-1.5 text-xs bg-[#e5d9c5] text-black font-semibold rounded-lg px-3.5 py-1.5 hover:bg-white transition-all duration-200 shadow-sm shadow-[#e5d9c5]/15 whitespace-nowrap cursor-pointer"
+              className={`inline-flex items-center gap-1.5 text-xs bg-[#e5d9c5] text-black font-semibold rounded-lg px-3.5 py-1.5 hover:bg-white transition-all duration-300 shadow-sm whitespace-nowrap cursor-pointer ${
+                highlightAddLead
+                  ? "ring-4 ring-[#e5d9c5]/60 shadow-[0_0_25px_rgba(229,217,197,0.5)] scale-105"
+                  : "shadow-[#e5d9c5]/15"
+              }`}
             >
               <Plus className="size-3.5" /> Add Lead
             </button>
@@ -813,10 +878,14 @@ function LeadsPage() {
                               <Calendar className="size-3.5" />
                             </button>
                             <button
-                              onClick={(e) => { e.stopPropagation(); setSelected(lead); }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                router.navigate({ to: '/messages', search: { leadId: lead.id } as any });
+                              }}
+                              title="Open Chat / Inbox"
                               className="size-7 rounded hover:bg-secondary text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors"
                             >
-                              <Eye className="size-3.5" />
+                              <MessageSquare className="size-3.5" />
                             </button>
 
                             <div className="relative">
@@ -1024,7 +1093,11 @@ function LeadsPage() {
       {isAddModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="fixed inset-0" onClick={() => setIsAddModalOpen(false)} />
-          <div className="relative w-full max-w-lg bg-card/95 backdrop-blur-xl border border-border rounded-xl shadow-none overflow-hidden animate-in zoom-in-95 duration-150">
+          <div className={`relative w-full max-w-lg bg-card/95 backdrop-blur-xl border rounded-xl shadow-none overflow-hidden animate-in zoom-in-95 duration-150 transition-all duration-700 ${
+            highlightAddLead
+              ? "border-[#e5d9c5] ring-2 ring-[#e5d9c5] shadow-[0_0_40px_rgba(229,217,197,0.35)]"
+              : "border-border"
+          }`}>
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-border">
               <h2 className="font-display text-base font-semibold text-foreground">Add Manual Lead</h2>
@@ -1138,7 +1211,7 @@ function LeadsPage() {
                     <CustomSelect
                       value={modalForm.scoreTier}
                       onChange={(val) => setModalForm({ ...modalForm, scoreTier: val })}
-                      options={[{label: "🔥 Hot", value: "Hot"}, {label: "⚡ Warm", value: "Warm"}, {label: "❄️ Cold", value: "Cold"}]}
+                      options={[{label: "Hot", value: "Hot"}, {label: "Warm", value: "Warm"}, {label: "Cold", value: "Cold"}]}
                     />
                   </div>
                 </div>
@@ -1148,7 +1221,15 @@ function LeadsPage() {
                     <CustomSelect
                       value={modalForm.status}
                       onChange={(val) => setModalForm({ ...modalForm, status: val })}
-                      options={[{label: "New", value: "New"}, {label: "Emailed", value: "Emailed"}, {label: "Opened", value: "Opened"}, {label: "Replied", value: "Replied"}, {label: "Appointment", value: "Appointment"}]}
+                      options={[
+                        { label: "New", value: "New" },
+                        { label: "Emailed", value: "Emailed" },
+                        { label: "Opened", value: "Opened" },
+                        { label: "Replied", value: "Replied" },
+                        { label: "Qualified", value: "Qualified" },
+                        { label: "Appointment", value: "Appointment" },
+                        { label: "Closed Lost", value: "Closed Lost" }
+                      ]}
                     />
                   </div>
                 </div>
@@ -1197,7 +1278,7 @@ function EmailSimulatorModal({ lead, onClose }: { lead: any; onClose: () => void
     {
       label: "Welcome & Land Survey",
       subject: `Welcome ${lead.firstName} - Land Evaluation Questionnaire`,
-      body: `Hi ${lead.firstName},\n\nThanks for reaching out! I noticed you are evaluating land options in ${lead.city}, ${lead.state || "TX"}.\n\nTo help us design the perfect home style for your property, could you share:\n1. Have you officially surveyed the boundaries?\n2. What is your preferred layout style (e.g. Custom Modern Ranch)?\n\nLooking forward to building your dream home!\n\nBest regards,\nBuild Expert`
+      body: `Hi ${lead.firstName},\n\nThanks for reaching out! I noticed you are evaluating land options in ${[lead.city, lead.state].filter(Boolean).join(", ") || "your local area"}.\n\nTo help us design the perfect home style for your property, could you share:\n1. Have you officially surveyed the boundaries?\n2. What is your preferred layout style (e.g. Custom Modern Residence)?\n\nLooking forward to building your dream home!\n\nBest regards,\nBuild Expert`
     },
     {
       label: "Design Strategy Workshop",
@@ -1205,9 +1286,9 @@ function EmailSimulatorModal({ lead, onClose }: { lead: any; onClose: () => void
       body: `Hi ${lead.firstName},\n\nCongratulations on your pre-approval! We would love to invite you to our studio for a custom Design Strategy Workshop.\n\nWe will review your estimated budget of ${lead.budget} and walk through floor plans tailored to modern living layouts.\n\nLet me know if this week works for a 30-minute session!\n\nWarmly,\nLead Architect`
     },
     {
-      label: "Travis CAD Permit Follow-up",
-      subject: `Outreach regarding Travis CAD Boundary & Permitting`,
-      body: `Hi ${lead.firstName},\n\nI am following up on your custom modern ranch build. We checked the local Travis CAD zoning for your lot and have a few updates on utility connections.\n\nLet's connect this Friday to finalize the initial permit submissions.\n\nBest,\nPermitting Coordinator`
+      label: `${lead.county || lead.city || "Local"} Permitting & Zoning Follow-up`,
+      subject: `Outreach regarding ${lead.county || lead.city || "Local"} Boundary & Permitting`,
+      body: `Hi ${lead.firstName},\n\nI am following up on your custom home build. We checked the local municipal zoning guidelines for your lot in ${lead.city || lead.county || "your area"} and have a few updates on utility connections.\n\nLet's connect this Friday to review the initial permit requirements.\n\nBest,\nPermitting Coordinator`
     }
   ];
 
@@ -1420,6 +1501,43 @@ function LeadDetailPanel({ lead, onClose }: { lead: any; onClose: () => void }) 
   const { session } = useRouteContext({ strict: false }) as any;
   const isPrivacyMode = session?.role === 'admin' && !!session?.actingAsBuilderId;
 
+  const [isClosing, setIsClosing] = useState(false);
+  const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleClose = useCallback(() => {
+    if (isClosing) return;
+    setIsClosing(true);
+    closeTimeoutRef.current = setTimeout(() => {
+      onClose();
+    }, 200);
+  }, [isClosing, onClose]);
+
+  // Reset closing state when selected lead changes
+  useEffect(() => {
+    setIsClosing(false);
+    return () => {
+      if (closeTimeoutRef.current) {
+        clearTimeout(closeTimeoutRef.current);
+      }
+    };
+  }, [lead?.id]);
+
+  // Handle Escape key with smooth slide-out exit animation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        const hasOverlayModal = document.querySelector(".backdrop-blur-sm");
+        if (hasOverlayModal) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+        handleClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleClose]);
+
   let parsedMemory: Record<string, any> = {};
   if (lead.leadMemory) {
     try { parsedMemory = JSON.parse(lead.leadMemory); } catch (_) {}
@@ -1445,8 +1563,17 @@ function LeadDetailPanel({ lead, onClose }: { lead: any; onClose: () => void }) 
 
   return (
     <>
-      <div className="fixed inset-x-0 bottom-0 top-[60px] bg-black/40 z-30 animate-in fade-in duration-200" onClick={onClose} />
-      <aside className="fixed top-[60px] right-0 bottom-0 w-[480px] bg-card border-l border-border z-40 overflow-y-auto shadow-none animate-in slide-in-from-right duration-200">
+      <div
+        className={`fixed inset-x-0 bottom-0 top-[60px] bg-black/40 z-30 ${
+          isClosing ? "animate-out fade-out fill-mode-forwards duration-200 pointer-events-none" : "animate-in fade-in duration-200"
+        }`}
+        onClick={handleClose}
+      />
+      <aside
+        className={`fixed top-[60px] right-0 bottom-0 w-[480px] bg-card border-l border-border z-40 overflow-y-auto shadow-none ${
+          isClosing ? "animate-out slide-out-to-right fill-mode-forwards duration-200 pointer-events-none" : "animate-in slide-in-from-right duration-200"
+        }`}
+      >
         <div className="sticky top-0 bg-card border-b border-border px-5 py-4 flex items-start justify-between z-10">
           <div>
             <div className="flex items-center gap-2 flex-wrap">
@@ -1466,7 +1593,7 @@ function LeadDetailPanel({ lead, onClose }: { lead: any; onClose: () => void }) 
               <span>{lead.source || "Website Inbound"} · received {new Date(lead.purchaseDate || lead.createdAt || Date.now()).toLocaleDateString()}</span>
             </div>
           </div>
-          <button onClick={onClose} className="size-8 rounded hover:bg-secondary flex items-center justify-center text-muted-foreground"><X className="size-4" /></button>
+          <button onClick={handleClose} className="size-8 rounded hover:bg-secondary flex items-center justify-center text-muted-foreground"><X className="size-4" /></button>
         </div>
 
         <div className="p-5 space-y-6 text-left">
@@ -1556,7 +1683,7 @@ function LeadDetailPanel({ lead, onClose }: { lead: any; onClose: () => void }) 
             <h3 className="text-xs uppercase tracking-wider text-muted-foreground mb-3 font-mono">Lead Profile</h3>
             <dl className="grid grid-cols-2 gap-3 text-sm">
               <Field label="Budget" value={lead.budget} mono />
-              <Field label="County / City" value={`${lead.state || "TX"} · ${lead.city}`} />
+              <Field label="County / City" value={[lead.city, lead.state].filter(Boolean).join(" · ") || lead.county || "Location Unspecified"} />
               <Field label="Living situation" value={lead.landPrice > 0 ? `Bought land for $${(lead.landPrice / 1000).toFixed(0)}k` : "Evaluating land"} />
               <Field label="Estimated Land Value" value={`$${(lead.landPrice / 1000).toFixed(0)}k`} />
             </dl>
@@ -1649,50 +1776,62 @@ type KanbanBoardProps = {
   onRetrigger: (lead: any) => void;
 };
 
+// Format large custom home budgets gracefully (e.g. $2200k -> $2.2M)
+function formatLeadBudget(budget: string | number | undefined) {
+  if (!budget) return "$0";
+  const str = String(budget).trim();
+  const matchK = str.match(/^\$?(\d+)\s*k$/i);
+  if (matchK) {
+    const num = parseInt(matchK[1], 10);
+    if (num >= 1000) {
+      const millions = (num / 1000).toFixed(1).replace(/\.0$/, '');
+      return `$${millions}M`;
+    }
+    return `$${num}k`;
+  }
+  return str.startsWith('$') ? str : `$${str}`;
+}
+
 const KANBAN_COLUMNS = [
   {
     id: 'new',
     label: 'New Leads',
     stages: ['New', 'new', 'Unassigned', 'pending'],
-    icon: '📥',
-    accent: 'border-t-slate-500',
-    headerBg: 'bg-slate-500/10',
-    headerText: 'text-slate-300',
-    countBg: 'bg-slate-500/20 text-slate-300',
-    dotColor: 'bg-slate-400',
+    icon: Inbox,
+    iconColor: 'text-slate-400',
+    cardHoverBorder: 'hover:border-slate-400/60 hover:shadow-[0_0_20px_rgba(148,163,184,0.15)]',
   },
   {
     id: 'outreach',
     label: 'Outreach Sent',
     stages: ['Emailed', 'Outreach', 'contacted', 'Builder Notified', 'Sent'],
-    icon: '📧',
-    accent: 'border-t-blue-500',
-    headerBg: 'bg-blue-500/10',
-    headerText: 'text-blue-300',
-    countBg: 'bg-blue-500/20 text-blue-300',
-    dotColor: 'bg-blue-400',
+    icon: Send,
+    iconColor: 'text-sky-400',
+    cardHoverBorder: 'hover:border-sky-400/60 hover:shadow-[0_0_20px_rgba(56,189,248,0.18)]',
   },
   {
     id: 'engaged',
     label: 'Engaged',
     stages: ['Opened', 'Replied', 'engaged', 'Nurturing', 'In Progress'],
-    icon: '💬',
-    accent: 'border-t-amber-500',
-    headerBg: 'bg-amber-500/10',
-    headerText: 'text-amber-300',
-    countBg: 'bg-amber-500/20 text-amber-300',
-    dotColor: 'bg-amber-400',
+    icon: MessageSquare,
+    iconColor: 'text-amber-400',
+    cardHoverBorder: 'hover:border-amber-400/60 hover:shadow-[0_0_20px_rgba(251,191,36,0.18)]',
   },
   {
     id: 'qualified',
     label: 'Qualified (Hot)',
     stages: ['Qualified', 'Appointment', 'Scheduled', 'Closed Won', 'Hot', 'Won'],
-    icon: '⭐',
-    accent: 'border-t-green-500',
-    headerBg: 'bg-green-500/10',
-    headerText: 'text-green-300',
-    countBg: 'bg-green-500/20 text-green-300',
-    dotColor: 'bg-green-400',
+    icon: CheckCircle2,
+    iconColor: 'text-emerald-400',
+    cardHoverBorder: 'hover:border-emerald-400/70 hover:shadow-[0_0_24px_rgba(52,211,153,0.22)]',
+  },
+  {
+    id: 'archived',
+    label: 'Disqualified',
+    stages: ['Closed Lost', 'Disqualified', 'Cold', 'Lost', 'Archived'],
+    icon: Archive,
+    iconColor: 'text-zinc-400',
+    cardHoverBorder: 'hover:border-zinc-500/60 hover:shadow-[0_0_20px_rgba(161,161,170,0.15)]',
   },
 ];
 
@@ -1700,7 +1839,7 @@ function KanbanBoard(props: KanbanBoardProps) {
   const { leads, ...rest } = props;
 
   return (
-    <div className="flex gap-3 h-full px-4 py-4">
+    <div className="flex gap-3 h-full px-4 py-4 overflow-x-auto custom-scrollbar">
       {KANBAN_COLUMNS.map(col => {
         const colLeads = leads.filter(l => col.stages.includes(l.status || l.stage));
         return (
@@ -1730,27 +1869,28 @@ type KanbanColumnProps = {
 };
 
 function KanbanColumn({ column, leads, ...cardProps }: KanbanColumnProps) {
+  const Icon = column.icon;
   return (
-    <div className={`flex flex-col flex-1 min-w-0 rounded-xl border-t-2 ${column.accent} bg-card/60 border border-border overflow-hidden`}>
+    <div className="flex flex-col flex-1 min-w-[260px] rounded-xl bg-[#111111]/90 border border-white/[0.07] overflow-hidden shadow-xs">
       {/* Column Header */}
-      <div className={`px-3 py-2.5 ${column.headerBg} border-b border-border flex items-center justify-between shrink-0`}>
+      <div className="px-3.5 py-3 bg-[#151515] border-b border-white/[0.06] flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
-          <span className="text-base leading-none">{column.icon}</span>
-          <span className={`text-xs font-semibold uppercase tracking-wider ${column.headerText}`}>
+          <Icon className={`size-3.5 ${column.iconColor} shrink-0`} />
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-white/90">
             {column.label}
           </span>
         </div>
-        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${column.countBg}`}>
+        <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded-full bg-white/[0.06] text-white/70 border border-white/[0.06]">
           {leads.length}
         </span>
       </div>
 
-      {/* Cards */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar">
+      {/* Cards Area */}
+      <div className="flex-1 overflow-y-auto p-2.5 space-y-2.5 custom-scrollbar">
         {leads.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-10 text-center">
-            <div className={`size-2 rounded-full ${column.dotColor} mb-2 opacity-40`} />
-            <p className="text-[11px] text-muted-foreground/60 font-mono">No leads here</p>
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <Icon className={`size-5 ${column.iconColor} mb-2 opacity-35`} />
+            <p className="text-[11px] text-muted-foreground/50 font-mono">No leads in stage</p>
           </div>
         ) : (
           leads.map(lead => (
@@ -1781,6 +1921,7 @@ type LeadKanbanCardProps = {
 };
 
 function LeadKanbanCard({ lead, column, isPrivacyMode, onSelectLead, onEmailLead, onScheduleLead, onEditLead, onDeleteLead, onSendSms, onRetrigger }: LeadKanbanCardProps) {
+  const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -1800,114 +1941,175 @@ function LeadKanbanCard({ lead, column, isPrivacyMode, onSelectLead, onEmailLead
       ? `${lead.firstName} ${lead.lastName.split(/\s+/).map((p: string) => p.replace(/[^a-zA-Z]/g, '').charAt(0).toUpperCase()).filter(Boolean).join('. ')}.`
       : lead.firstName;
 
-  const daysAgo = Math.floor((Date.now() - new Date(lead.createdAt).getTime()) / (1000 * 60 * 60 * 24));
-  const daysLabel = daysAgo === 0 ? 'Today' : daysAgo === 1 ? '1d ago' : `${daysAgo}d ago`;
+  // Determine relevant interaction time: latest message date, or fallback to lead creation date
+  const latestInteractionDate = lead.messages?.[0]?.createdAt || lead.createdAt;
+  const targetDate = new Date(latestInteractionDate);
+  const diffMs = Math.max(0, Date.now() - (isNaN(targetDate.getTime()) ? Date.now() : targetDate.getTime()));
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHr = Math.floor(diffMin / 60);
+  const diffDays = Math.floor(diffHr / 24);
 
-  const scoreColors: Record<string, string> = {
-    hot: 'text-orange-400 bg-orange-400/10 border-orange-400/20',
-    warm: 'text-yellow-400 bg-yellow-400/10 border-yellow-400/20',
-    cold: 'text-sky-400 bg-sky-400/10 border-sky-400/20',
+  let daysLabel = "Today";
+  if (diffSec < 60) {
+    daysLabel = "Just now";
+  } else if (diffMin < 60) {
+    daysLabel = `${diffMin}m ago`;
+  } else if (diffHr < 24) {
+    daysLabel = `${diffHr}h ago`;
+  } else if (diffDays === 1) {
+    daysLabel = "1d ago";
+  } else if (diffDays < 7) {
+    daysLabel = `${diffDays}d ago`;
+  } else {
+    daysLabel = targetDate.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  }
+
+  // Refined quiet luxury Score Tier Styling
+  const scoreBadgeStyles: Record<string, string> = {
+    hot: 'bg-rose-500/10 text-rose-300 border-rose-500/20',
+    warm: 'bg-[#c9a84c]/10 text-[#e5d9c5] border-[#c9a84c]/20',
+    cold: 'bg-white/[0.04] text-zinc-400 border-white/[0.08]',
   };
-  const scoreColor = scoreColors[lead.score] || scoreColors.cold;
+  const scoreKey = (lead.scoreTier || lead.score || 'cold').toLowerCase();
+  const scoreStyle = scoreBadgeStyles[scoreKey] || scoreBadgeStyles.cold;
 
-  const aiDot = lead.aiStatus === 'Replied'
-    ? 'bg-green-400'
-    : lead.aiStatus === 'Awaiting'
-    ? 'bg-yellow-400'
-    : 'bg-red-400';
+  // Refined AI Status Styling
+  const aiStatusConfig: Record<string, { dot: string; bg: string; text: string; label: string }> = {
+    Replied: {
+      dot: 'bg-emerald-400',
+      bg: 'bg-emerald-500/10 border-emerald-500/20',
+      text: 'text-emerald-400',
+      label: 'Replied',
+    },
+    Awaiting: {
+      dot: 'bg-amber-400',
+      bg: 'bg-amber-500/10 border-amber-500/20',
+      text: 'text-amber-300/90',
+      label: 'Awaiting',
+    },
+    Active: {
+      dot: 'bg-sky-400',
+      bg: 'bg-sky-500/10 border-sky-500/20',
+      text: 'text-sky-300',
+      label: 'Active',
+    },
+  };
+  const aiConfig = aiStatusConfig[lead.aiStatus] || {
+    dot: 'bg-zinc-400',
+    bg: 'bg-white/[0.04] border-white/[0.08]',
+    text: 'text-zinc-400',
+    label: lead.aiStatus || 'Pending',
+  };
 
   return (
     <div
       onClick={() => onSelectLead(lead)}
-      className="group relative bg-card border border-border rounded-lg p-3 cursor-pointer hover:border-white/20 hover:bg-card/80 transition-all duration-150 animate-in fade-in duration-200"
+      className={`group relative bg-[#161616] hover:bg-[#191919] border border-white/[0.07] ${column.cardHoverBorder} rounded-xl p-3.5 cursor-pointer transition-all duration-200 shadow-xs hover:shadow-md space-y-3`}
     >
-      {/* Top row: name + score badge */}
-      <div className="flex items-start justify-between gap-2 mb-2">
+      {/* Top row: Client Name & Score Tier */}
+      <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-foreground truncate leading-tight">{displayName}</p>
-          <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{lead.city}, {lead.state || 'TX'}</p>
+          <p className="text-[13px] font-semibold text-white/95 truncate leading-snug">
+            {displayName}
+          </p>
+          <div className="flex items-center gap-1 mt-0.5 text-[11px] text-muted-foreground/75 truncate font-normal">
+            <MapPin className="size-3 text-muted-foreground/50 shrink-0" />
+            <span className="truncate">
+              {lead.city ? `${lead.city}${lead.state ? `, ${lead.state}` : ''}` : (lead.state || 'Custom Architectural Build')}
+            </span>
+          </div>
         </div>
-        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wide shrink-0 ${scoreColor}`}>
-          {lead.scoreTier === 'Hot' ? '🔥' : lead.scoreTier === 'Warm' ? '🌡' : '❄️'} {lead.scoreTier}
+
+        {/* Score Badge */}
+        <span className={`text-[10px] font-mono font-medium px-2 py-0.5 rounded-full border uppercase tracking-wider shrink-0 ${scoreStyle}`}>
+          {lead.scoreTier || lead.score || 'Lead'}
         </span>
       </div>
 
-      {/* Budget row */}
-      <div className="flex items-center justify-between mb-2.5">
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs font-mono font-bold text-foreground">{lead.budget}</span>
-          <span className="text-[10px] text-muted-foreground">budget</span>
+      {/* Commercial Intelligence Row: Budget & AI Status */}
+      <div className="flex items-center justify-between gap-2 pt-0.5">
+        <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/[0.03] border border-white/[0.06]">
+          <span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Est.</span>
+          <span className="text-xs font-mono font-bold text-white/95">
+            {formatLeadBudget(lead.budget)}
+          </span>
         </div>
-        <div className="flex items-center gap-1">
-          <span className={`size-1.5 rounded-full ${aiDot}`} />
-          <span className="text-[10px] text-muted-foreground">{lead.aiStatus}</span>
+
+        <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] font-medium ${aiConfig.bg} ${aiConfig.text}`}>
+          <span className={`size-1.5 rounded-full ${aiConfig.dot}`} />
+          <span>{aiConfig.label}</span>
         </div>
       </div>
 
-      {/* Divider */}
-      <div className="border-t border-border/50 mb-2" />
+      {/* Footer: timestamp + quick actions */}
+      <div className="pt-2 border-t border-white/[0.06] flex items-center justify-between text-muted-foreground">
+        <div className="flex items-center gap-1 text-[11px] font-mono text-muted-foreground/70">
+          <Clock className="size-3 text-muted-foreground/40" />
+          <span>{daysLabel}</span>
+        </div>
 
-      {/* Footer: days ago + action buttons */}
-      <div className="flex items-center justify-between">
-        <span className="text-[10px] text-muted-foreground font-mono">{daysLabel}</span>
         <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
           <button
             onClick={() => onEmailLead(lead)}
             title="Send Email"
-            className="size-6 rounded hover:bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+            className="size-6 rounded-md hover:bg-white/[0.08] flex items-center justify-center text-muted-foreground/60 hover:text-white transition-colors cursor-pointer"
           >
             <Mail className="size-3" />
           </button>
           <button
             onClick={() => onScheduleLead(lead)}
-            title="Schedule Appointment"
-            className="size-6 rounded hover:bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+            title="Schedule Consultation"
+            className="size-6 rounded-md hover:bg-white/[0.08] flex items-center justify-center text-muted-foreground/60 hover:text-white transition-colors cursor-pointer"
           >
             <Calendar className="size-3" />
           </button>
           <button
-            onClick={() => onSelectLead(lead)}
-            title="View Lead Detail"
-            className="size-6 rounded hover:bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+            onClick={(e) => {
+              e.stopPropagation();
+              router.navigate({ to: '/messages', search: { leadId: lead.id } as any });
+            }}
+            title="Open Inbox Thread"
+            className="size-6 rounded-md hover:bg-white/[0.08] flex items-center justify-center text-muted-foreground/60 hover:text-white transition-colors cursor-pointer"
           >
-            <Eye className="size-3" />
+            <MessageSquare className="size-3" />
           </button>
 
           {/* More actions menu */}
           <div className="relative" ref={menuRef}>
             <button
               onClick={() => setMenuOpen(p => !p)}
-              title="More Actions"
-              className="size-6 rounded hover:bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+              title="More Options"
+              className="size-6 rounded-md hover:bg-white/[0.08] flex items-center justify-center text-muted-foreground/60 hover:text-white transition-colors cursor-pointer"
             >
               <MoreHorizontal className="size-3" />
             </button>
             {menuOpen && (
-              <div className="absolute right-0 bottom-7 w-36 rounded-lg bg-card/95 backdrop-blur-xl border border-border p-1 shadow-xl z-50 animate-in fade-in slide-in-from-bottom-2 duration-100">
+              <div className="absolute right-0 bottom-7 w-40 rounded-xl bg-[#181818] border border-white/10 p-1.5 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-100">
                 <button
                   onClick={() => { setMenuOpen(false); onEditLead(lead); }}
-                  className="w-full text-left text-xs px-2.5 py-1.5 rounded hover:bg-white/[0.04] text-foreground transition-colors flex items-center gap-1.5"
+                  className="w-full text-left text-xs px-2.5 py-1.5 rounded-lg hover:bg-white/[0.06] text-white/90 transition-colors flex items-center gap-2 font-medium cursor-pointer"
                 >
-                  <Edit className="size-3" /> Edit Lead
+                  <Edit className="size-3 text-muted-foreground" /> Edit Lead
                 </button>
                 <button
                   onClick={() => { setMenuOpen(false); onSendSms(lead); }}
-                  className="w-full text-left text-xs px-2.5 py-1.5 rounded hover:bg-white/[0.04] text-foreground transition-colors flex items-center gap-1.5"
+                  className="w-full text-left text-xs px-2.5 py-1.5 rounded-lg hover:bg-white/[0.06] text-white/90 transition-colors flex items-center gap-2 font-medium cursor-pointer"
                 >
-                  <Mail className="size-3" /> Send Email
+                  <Mail className="size-3 text-muted-foreground" /> Send Email
                 </button>
                 <button
                   onClick={() => { setMenuOpen(false); onRetrigger(lead); }}
-                  className="w-full text-left text-xs px-2.5 py-1.5 rounded hover:bg-white/[0.04] text-foreground transition-colors flex items-center gap-1.5"
+                  className="w-full text-left text-xs px-2.5 py-1.5 rounded-lg hover:bg-white/[0.06] text-white/90 transition-colors flex items-center gap-2 font-medium cursor-pointer"
                 >
-                  <Zap className="size-3" /> Re-trigger AI
+                  <Zap className="size-3 text-amber-400" /> Re-trigger AI
                 </button>
-                <div className="border-t border-border/40 my-1" />
+                <div className="border-t border-white/[0.06] my-1" />
                 <button
                   onClick={() => { setMenuOpen(false); onDeleteLead(lead); }}
-                  className="w-full text-left text-xs px-2.5 py-1.5 rounded hover:bg-danger/10 text-danger font-medium transition-colors"
+                  className="w-full text-left text-xs px-2.5 py-1.5 rounded-lg hover:bg-red-500/10 text-red-400 transition-colors flex items-center gap-2 font-medium cursor-pointer"
                 >
-                  Delete Lead
+                  <Trash2 className="size-3" /> Delete Lead
                 </button>
               </div>
             )}

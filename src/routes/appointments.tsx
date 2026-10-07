@@ -564,7 +564,7 @@ function ApptPage() {
     <Shell title="Appointments">
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
-          <div className="inline-flex bg-[#161618] border border-white/10 rounded-md p-0.5">
+          <div className="inline-flex bg-secondary border border-border rounded-md p-0.5">
             {(["calendar", "list"] as const).map((v) => (
               <button 
                 key={v} 
@@ -590,7 +590,7 @@ function ApptPage() {
               }
             }}
             disabled={isRefreshing}
-            className="size-7 rounded-md bg-[#161618] border border-white/10 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer disabled:opacity-80"
+            className="size-7 rounded-md bg-secondary border border-border flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer disabled:opacity-80"
             title="Refresh Appointments"
           >
             <RefreshCw className={`size-3 transition-transform duration-300 ${isRefreshing ? 'animate-spin text-[#c9a84c] dark:text-[#e5d9c5]' : ''}`} />
@@ -770,7 +770,7 @@ function ApptPage() {
         {/* Main interactive area: Calendar or List */}
         <div className="lg:col-span-3">
           {view === "calendar" ? (
-            <Card className="p-3 overflow-hidden border-white/10 bg-[#09090b] relative animate-duration-300 select-none touch-none">
+            <Card className="p-3 overflow-hidden relative animate-duration-300 select-none touch-none">
               <div
                 ref={calendarContainerRef}
                 onDragStart={(e) => e.preventDefault()}
@@ -910,14 +910,14 @@ function ApptPage() {
               </div>
             </Card>
           ) : (
-            <Card className="border-white/10 bg-[#09090b]">
+            <Card>
               <CardHeader 
                 title="Active Appointments" 
                 subtitle="Live status, scheduled time slots, and real-time activity tracking." 
               />
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead className="bg-[#161618] text-xs text-muted-foreground uppercase tracking-wider border-b border-white/10">
+                  <thead className="bg-secondary/70 text-xs text-muted-foreground uppercase tracking-wider border-b border-border">
                     <tr className="text-left">
                       <th className="px-4 py-3 font-semibold">Lead</th>
                       <th className="px-4 py-3 font-semibold">Type</th>
@@ -1003,7 +1003,7 @@ function ApptPage() {
 
         {/* Sidebar: Quick Book Appointment */}
         <div className="lg:col-span-1">
-          <Card className="p-4 border-white/10 bg-[#09090b] flex flex-col justify-between">
+          <Card className="p-4 flex flex-col justify-between">
             <div>
               <h3 className="text-[11px] font-bold text-foreground mb-2.5 uppercase tracking-widest text-[#00a884] flex items-center gap-2">
                 <Plus className="size-3.5" />
@@ -1047,16 +1047,16 @@ function ApptPage() {
                           }
                         }
                       }}
-                      className="w-full bg-[#161618] border border-white/10 rounded-lg pl-8 pr-3 py-1.5 text-xs focus:outline-none focus-visible:ring-1 focus-visible:ring-white/20 focus-visible:border-white/30 focus:border-white/20 transition-all text-white placeholder-white/30"
+                      className="w-full bg-secondary border border-border rounded-lg pl-8 pr-3 py-1.5 text-xs focus:outline-none focus-visible:ring-1 focus-visible:ring-white/20 focus-visible:border-white/30 focus:border-border transition-all text-foreground placeholder-muted-foreground/50"
                     />
-                    <Search className="absolute left-2.5 top-2 size-3.5 text-white/30" />
+                    <Search className="absolute left-2.5 top-2 size-3.5 text-muted-foreground/50" />
                     {selectedLeadId && (
                       <Check className="absolute right-2.5 top-2 size-3.5 text-emerald-500" />
                     )}
                   </div>
 
                   {isDropdownOpen && (
-                    <div className="absolute z-20 w-full mt-1 bg-[#161618] border border-white/10 rounded-lg shadow-none max-h-44 overflow-y-auto custom-scrollbar">
+                    <div className="absolute z-20 w-full mt-1 bg-card border border-border rounded-lg shadow-xl max-h-44 overflow-y-auto custom-scrollbar">
                       {filteredLeads.length === 0 ? (
                         <div className="px-3 py-2 text-[11px] text-muted-foreground text-center">
                           No matching leads found
@@ -1073,7 +1073,7 @@ function ApptPage() {
                           >
                             <div className="flex flex-col">
                               <span className="text-xs font-semibold text-white">{isPrivacyMode ? obscurePII(getCleanLeadName(l), 'name') : getCleanLeadName(l)}</span>
-                              <span className="text-[9px] text-muted-foreground">{l.county || "Travis County"}, {l.state || "TX"}</span>
+                              <span className="text-[9px] text-muted-foreground">{[l.county || l.city, l.state].filter(Boolean).join(", ") || "Location Unspecified"}</span>
                             </div>
                             <span className={`text-[8px] px-1.5 py-0.5 rounded font-bold uppercase ${
                               l.scoreTier?.toLowerCase() === "hot" ? "bg-rose-500/10 text-rose-500" :
@@ -1132,14 +1132,14 @@ function ApptPage() {
                         }
                       }
                     }}
-                    className="w-full mt-0.5 bg-[#161618] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-left text-white flex items-center justify-between hover:border-white/20 transition-all select-none focus:outline-none focus-visible:ring-1 focus-visible:ring-white/20 focus-visible:border-white/30"
+                    className="w-full mt-0.5 bg-secondary border border-border rounded-lg px-2.5 py-1.5 text-xs text-left text-foreground flex items-center justify-between hover:border-white/20 transition-all select-none focus:outline-none focus-visible:ring-1 focus-visible:ring-white/20 focus-visible:border-white/30"
                   >
                     <span>{apptType === "Custom" ? (customApptType.trim() ? `Custom: ${customApptType}` : "Custom (Write your own)") : apptType}</span>
-                    <ChevronDown className="size-3.5 text-white/50" />
+                    <ChevronDown className="size-3.5 text-muted-foreground" />
                   </button>
 
                   {isTypeDropdownOpen && (
-                    <div className="absolute z-20 w-full mt-1 bg-[#161618] border border-white/10 rounded-lg shadow-none p-1 animate-in fade-in slide-in-from-top-1 duration-150">
+                    <div className="absolute z-20 w-full mt-1 bg-card border border-border rounded-lg shadow-xl p-1 animate-in fade-in slide-in-from-top-1 duration-150">
                       {typeOptions.map((opt, idx) => (
                         <button
                           key={opt.value}
@@ -1161,7 +1161,7 @@ function ApptPage() {
                             }
                           }}
                           className={`w-full text-left text-xs px-2.5 py-1.5 rounded flex items-center justify-between transition-colors font-medium cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-white/20 focus-visible:border-white/30 ${
-                            idx === activeTypeIndex ? "bg-white/10" : "hover:bg-white/[0.08]"
+                            idx === activeTypeIndex ? "bg-white/10 text-white" : "hover:bg-white/[0.08] text-foreground"
                           }`}
                         >
                           <span>{opt.label}</span>
@@ -1179,7 +1179,7 @@ function ApptPage() {
                       placeholder="e.g. Design Consult, Roof Inspection..." 
                       value={customApptType}
                       onChange={(e) => setCustomApptType(e.target.value)}
-                      className="w-full mt-0.5 bg-[#161618] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-white/20 focus:border-white/30 transition-all text-white placeholder-white/20" 
+                      className="w-full mt-0.5 bg-secondary border border-border rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-white/20 focus:border-white/30 transition-all text-foreground placeholder-muted-foreground/40" 
                     />
                   </div>
                 )}
@@ -1189,7 +1189,7 @@ function ApptPage() {
                   <input 
                     value={apptLocation}
                     onChange={(e) => setApptLocation(e.target.value)}
-                    className="w-full mt-0.5 bg-[#161618] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-white/20 focus:border-white/30 transition-all text-white placeholder-white/20" 
+                    className="w-full mt-0.5 bg-secondary border border-border rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-white/20 focus:border-white/30 transition-all text-foreground placeholder-muted-foreground/40" 
                   />
                 </div>
 
@@ -1199,7 +1199,7 @@ function ApptPage() {
                     type="datetime-local" 
                     value={apptDateTime}
                     onChange={(e) => setApptDateTime(e.target.value)}
-                    className="w-full mt-0.5 bg-[#161618] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-white/20 focus:border-white/30 transition-all text-white color-scheme-dark" 
+                    className="w-full mt-0.5 bg-secondary border border-border rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-white/20 focus:border-white/30 transition-all text-foreground color-scheme-dark" 
                   />
                 </div>
 
@@ -1210,7 +1210,7 @@ function ApptPage() {
                     onChange={(e) => setApptNotes(e.target.value)}
                     placeholder="Agenda / notes..."
                     rows={2}
-                    className="w-full mt-0.5 bg-[#161618] border border-white/10 rounded-lg px-2.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-white/20 focus:border-white/30 transition-all resize-none h-12 text-white placeholder-white/20" 
+                    className="w-full mt-0.5 bg-secondary border border-border rounded-lg px-2.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-white/20 focus:border-white/30 transition-all resize-none h-12 text-foreground placeholder-muted-foreground/40" 
                   />
                 </div>
 
@@ -1266,11 +1266,11 @@ function ApptPage() {
       {selectedApptDetails && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
           <div 
-            className="relative w-full max-w-md bg-[#0e171c] border border-white/10 rounded-xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
+            className="relative w-full max-w-md bg-[#141414] border border-border rounded-xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
             role="dialog"
           >
             {/* Modal Header */}
-            <div className="px-5 py-3 bg-[#162127] border-b border-white/10 flex items-center justify-between">
+            <div className="px-5 py-3 bg-[#181818] border-b border-border flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <CalendarIcon className="size-4.5 text-[#00a884]" />
                 <h3 className="font-semibold text-sm text-white">Appointment Details</h3>
@@ -1302,7 +1302,7 @@ function ApptPage() {
                       type="datetime-local" 
                       value={newDateTime}
                       onChange={(e) => setNewDateTime(e.target.value)}
-                      className="w-full mt-1 bg-[#161618] border border-white/10 rounded-lg px-2.5 py-2 text-xs focus:outline-none focus-visible:ring-1 focus-visible:ring-white/20 focus-visible:border-white/30 focus:border-white/20 transition-all text-white color-scheme-dark" 
+                      className="w-full mt-1 bg-secondary border border-border rounded-lg px-2.5 py-2 text-xs focus:outline-none focus-visible:ring-1 focus-visible:ring-white/20 focus-visible:border-white/30 focus:border-border transition-all text-foreground color-scheme-dark" 
                     />
                   </div>
 
@@ -1332,7 +1332,7 @@ function ApptPage() {
               ) : (
                 // Standard details view
                 <>
-                  <div className="bg-[#162127]/40 p-3.5 rounded-lg border border-white/5 space-y-2.5">
+                  <div className="bg-secondary/40 p-3.5 rounded-lg border border-border/40 space-y-2.5">
                     <div className="flex items-center justify-between border-b border-white/5 pb-2">
                       <div className="flex items-center gap-2 text-white">
                         <User className="size-3.5 text-[#00a884]" />
@@ -1377,7 +1377,7 @@ function ApptPage() {
                       <span className="text-[9px] text-muted-foreground font-bold uppercase tracking-wider flex items-center gap-1">
                         <FileText className="size-3" /> Agenda / Notes
                       </span>
-                      <p className="bg-[#161618] border border-white/5 rounded-lg p-2.5 text-xs text-muted-foreground leading-relaxed max-h-24 overflow-y-auto custom-scrollbar">
+                      <p className="bg-secondary border border-border/40 rounded-lg p-2.5 text-xs text-muted-foreground leading-relaxed max-h-24 overflow-y-auto custom-scrollbar">
                         {selectedApptDetails.notes}
                       </p>
                     </div>

@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
-import { getDb } from './db'
+import crypto from 'crypto'
+import { getDb } from './db.server'
 
 // ─── Login Rate Limiter (In-Memory) ──────────────────────────────────────────
 // Tracks failed login attempts per key (email + IP).
@@ -237,8 +238,6 @@ export const getSessionFromCookie = async (
   }
 
   // x-active-role not present — Contextless check. 
-  // Do NOT guess based on priority if multiple cookies are present, to avoid crossing streams.
-  // We only fallback if exactly ONE cookie is present.
   const adminCookie = getCookie('jwt_admin')
   const builderCookie = getCookie('jwt_builder')
   const userCookie = getCookie('jwt_user')
@@ -260,7 +259,34 @@ export const getSessionFromCookie = async (
     }
   }
 
-  // If multiple cookies are present and NO explicit role was requested, we CANNOT safely guess.
+  // If multiple cookies are present, gracefully check builder then admin rather than locking the user out
+  if (builderCookie) {
+    try {
+      const s = verifyToken(builderCookie) as AuthSession
+      if (s) return s
+    } catch {
+      deleteCookie('jwt_builder', { path: '/' })
+    }
+  }
+
+  if (adminCookie) {
+    try {
+      const s = verifyToken(adminCookie) as AuthSession
+      if (s) return s
+    } catch {
+      deleteCookie('jwt_admin', { path: '/' })
+    }
+  }
+
+  if (fallbackCookie) {
+    try {
+      const s = verifyToken(fallbackCookie) as AuthSession
+      if (s) return s
+    } catch {
+      deleteCookie('jwt', { path: '/' })
+    }
+  }
+
   return null
 }
 
@@ -351,9 +377,17 @@ export const requireManagerOrAbove = async (activeRole?: string): Promise<AuthSe
 }
 
 export const setAuthCookie = async (payload: AuthSession, rememberMe: boolean = false): Promise<void> => {
-  const { setCookie } = await import('@tanstack/react-start/server')
+  const { setCookie, deleteCookie } = await import('@tanstack/react-start/server')
   const token = signToken(payload, rememberMe)
   const cookieName = COOKIE_NAME_MAP[payload.role] ?? 'jwt'
+
+  // Proactively clear conflicting role cookies to prevent multi-cookie deadlocks
+  const allCookieNames = ['jwt_admin', 'jwt_builder', 'jwt_user', 'jwt']
+  for (const name of allCookieNames) {
+    if (name !== cookieName) {
+      deleteCookie(name, { path: '/' })
+    }
+  }
 
   // secure:true only in production (HTTPS). In local dev (http://localhost),
   // most browsers (Firefox, Safari) will NOT send Secure cookies over HTTP,
@@ -598,3 +632,150 @@ export const handleSetInvitePassword = async (data: { token: string; password: s
   await setAuthCookie(payload)
   return { success: true }
 }
+
+export const handleRequestPasswordReset = async (email: string) => {
+  const normalizedEmail = (email || '').trim().toLowerCase();
+  if (!normalizedEmail || !normalizedEmail.includes('@')) {
+    return { success: false, message: 'Please enter a valid corporate email address.' };
+  }
+
+  const db = await getDb();
+  const user = await db.user.findFirst({
+    where: {
+      email: { equals: normalizedEmail, mode: 'insensitive' },
+      isActive: true,
+      deletedAt: null,
+    },
+    include: { builder: true },
+  });
+
+  // Anti-enumeration: always return success
+  if (!user) {
+    return {
+      success: true,
+      message: 'If an active account exists for this corporate address, password reset instructions have been dispatched.',
+    };
+  }
+
+  const token = crypto.randomBytes(32).toString('hex');
+  const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour expiration
+
+  await db.user.update({
+    where: { id: user.id },
+    data: {
+      resetToken: token,
+      resetTokenExpires: expires,
+    },
+  });
+
+  const appBaseUrl = (process.env.APP_BASE_URL || 'http://localhost:8080').replace(/\/+$/, '');
+  const resetUrl = `${appBaseUrl}/reset-password?token=${token}`;
+
+  try {
+    const { sendOutboundEmail, buildPasswordResetEmailHtml } = await import('./email.server');
+    const html = buildPasswordResetEmailHtml({
+      resetUrl,
+      recipientEmail: user.email,
+      displayName: user.displayName,
+    });
+
+    await sendOutboundEmail({
+      to: user.email,
+      subject: 'WeaverFrame Security: Password Reset Authorization',
+      html,
+    });
+  } catch (emailErr) {
+    console.error('[AUTH] Failed to dispatch password reset email:', emailErr);
+  }
+
+  return {
+    success: true,
+    message: 'If an active account exists for this corporate address, password reset instructions have been dispatched.',
+  };
+};
+
+export const handleVerifyResetToken = async (token: string) => {
+  if (!token || typeof token !== 'string') {
+    return { valid: false, message: 'Invalid reset link' };
+  }
+
+  const db = await getDb();
+  const user = await db.user.findFirst({
+    where: {
+      resetToken: token,
+      resetTokenExpires: { gt: new Date() },
+      isActive: true,
+      deletedAt: null,
+    },
+    select: {
+      id: true,
+      email: true,
+      displayName: true,
+      role: true,
+    },
+  });
+
+  if (!user) {
+    return { valid: false, message: 'This password reset link is invalid or has expired.' };
+  }
+
+  return {
+    valid: true,
+    email: user.email,
+    displayName: user.displayName,
+  };
+};
+
+export const handleResetPassword = async (data: { token: string; password: string }) => {
+  if (!data.token) {
+    throw new Error('Reset token is required.');
+  }
+
+  if (!data.password || data.password.length < 8) {
+    throw new Error('Password must be at least 8 characters long.');
+  }
+
+  const db = await getDb();
+  const user = await db.user.findFirst({
+    where: {
+      resetToken: data.token,
+      resetTokenExpires: { gt: new Date() },
+      isActive: true,
+      deletedAt: null,
+    },
+    include: { builder: true },
+  });
+
+  if (!user) {
+    throw new Error('This password reset link is invalid or has expired.');
+  }
+
+  const passwordHash = await bcrypt.hash(data.password, 10);
+  const updated = await db.user.update({
+    where: { id: user.id },
+    data: {
+      passwordHash,
+      forcePasswordReset: false,
+      resetToken: null,
+      resetTokenExpires: null,
+      lastLoginAt: new Date(),
+    },
+  });
+
+  const payload: AuthSession = {
+    userId: updated.id,
+    builderId: updated.builderId,
+    actingAsBuilderId: null,
+    role: updated.role,
+    builderRole: updated.builderRole,
+    permissions: updated.permissions,
+    displayName: updated.displayName,
+    companyName: user.builder?.companyName,
+    email: updated.email,
+    companyEmail: user.builder?.email,
+  };
+
+  await setAuthCookie(payload);
+  return { success: true };
+};
+

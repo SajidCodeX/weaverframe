@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouteContext, useRouter } from "@tanstack/react-router";
 import { Bell, Calendar as CalIcon, ChevronDown, Search, X, Check, ArrowRight, RefreshCw } from "lucide-react";
-import { getLeadsData, getNotificationsData, getLastSyncTime } from "@/lib/dashboard";
+import { getLeadsData, getNotificationsData, getLastSyncTime, triggerMailboxSync } from "@/lib/dashboard";
+import { toast } from "sonner";
 
 function formatRelativeTime(dateString: string): string {
   const date = new Date(dateString);
@@ -157,7 +158,10 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
       const saved = sessionStorage.getItem("globalDateRange");
       if (saved) {
         try {
-          return JSON.parse(saved).label;
+          const parsed = JSON.parse(saved);
+          if (parsed.label) {
+            return parsed.label;
+          }
         } catch (_) {}
       }
     }
@@ -202,6 +206,7 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
 
   // Sync default range with active section on title changes
   useEffect(() => {
+    const initialLabel = title === "Reports" ? "This Month" : "Today";
     if (typeof window !== "undefined") {
       const saved = sessionStorage.getItem("globalDateRange");
       if (saved) {
@@ -214,7 +219,6 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
         } catch (_) {}
       }
     }
-    const initialLabel = title === "Reports" ? "This Month" : title === "Overview" ? "All Time" : "Today";
     changeDateRange(initialLabel);
   }, [title]);
 
@@ -352,22 +356,42 @@ export function TopBar({ title, isCollapsed, lastSyncAt }: { title: string; isCo
 
         {/* Actions */}
         <div className="flex items-center gap-2">
-          {/* Refresh Button */}
+          {/* Refresh / Sync Button */}
           <button
             onClick={async () => {
               if (isRefreshing) return;
               setIsRefreshing(true);
               try {
+                // 1. Trigger background sync without blocking page refresh
+                triggerMailboxSync().then(() => {
+                  const activeRole = typeof window !== 'undefined' ? sessionStorage.getItem('active_role') ?? undefined : undefined;
+                  getLastSyncTime({ data: { activeRole } }).then((time) => {
+                    if (time) setRealSyncTime(time);
+                  }).catch(() => {});
+                }).catch(() => {});
+
+                // 2. Immediately refresh active route data
                 await router.invalidate();
+
+                // 3. Update sync time telemetry
+                const activeRole = typeof window !== 'undefined' ? sessionStorage.getItem('active_role') ?? undefined : undefined;
+                getLastSyncTime({ data: { activeRole } }).then((time) => {
+                  if (time) setRealSyncTime(time);
+                }).catch(() => {});
+
+                toast.success("Dashboard refreshed successfully");
+              } catch {
+                toast.error("Could not refresh dashboard");
               } finally {
-                setTimeout(() => setIsRefreshing(false), 800);
+                setTimeout(() => setIsRefreshing(false), 500);
               }
             }}
             disabled={isRefreshing}
-            className="hidden sm:flex items-center justify-center size-9 text-muted-foreground bg-card border border-border rounded-xl hover:border-primary/40 hover:text-foreground transition-all duration-150 cursor-pointer shadow-sm shrink-0 disabled:opacity-80"
+            className="hidden sm:flex items-center gap-1.5 h-9 px-3 text-xs text-muted-foreground bg-card border border-border rounded-xl hover:border-primary/40 hover:text-foreground transition-all duration-150 cursor-pointer shadow-sm shrink-0 disabled:opacity-80"
             title="Refresh Page Data"
           >
             <RefreshCw className={`size-3.5 transition-transform duration-300 ${isRefreshing ? 'animate-spin text-[#c9a84c] dark:text-[#e5d9c5]' : 'text-muted-foreground'}`} />
+            <span className="text-xs font-medium">{isRefreshing ? 'Refreshing' : 'Refresh'}</span>
           </button>
 
           {/* Cmd+K Search trigger */}

@@ -1,5 +1,5 @@
 import { RoutePending } from "@/components/dashboard/RoutePending";
-import { createFileRoute, useLoaderData } from "@tanstack/react-router";
+import { createFileRoute, useLoaderData, useRouter } from "@tanstack/react-router";
 import { Shell } from "@/components/dashboard/Shell";
 import { Card, CardHeader, Badge } from "@/components/dashboard/primitives";
 import { CustomSelect } from "@/components/dashboard/CustomSelect";
@@ -162,6 +162,7 @@ function WhatsAppDoodleBackground({ idPrefix = "sim" }: { idPrefix?: string }) {
 }
 
 function AIPage() {
+  const router = useRouter();
   const { session } = useRouteContext({ strict: false }) as any;
   const isPrivacyMode = session?.role === 'admin' && !!session?.actingAsBuilderId;
 
@@ -172,6 +173,43 @@ function AIPage() {
 
   // Active Main View Tab
   const [activeTab, setActiveTab] = useState<"studio" | "simulator" | "logs">("studio");
+
+  // ── Highlight & Deep-Link for Concierge Activation Steps ───────────────────
+  const [highlightSection, setHighlightSection] = useState<"voice" | "rules" | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const focus = url.searchParams.get("focus") || url.searchParams.get("highlight");
+
+    if (focus === "voice" || focus === "brain") {
+      setActiveTab("studio");
+      setHighlightSection("voice");
+      setTimeout(() => {
+        const el = document.getElementById("activation-voice-section");
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }, 200);
+      const timer = setTimeout(() => {
+        setHighlightSection(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    } else if (focus === "rules" || focus === "qualification") {
+      setActiveTab("studio");
+      setHighlightSection("rules");
+      setTimeout(() => {
+        const el = document.getElementById("activation-rules-section");
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }, 200);
+      const timer = setTimeout(() => {
+        setHighlightSection(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, []);
 
   // ── AI Brain Studio State ───────────────────────────────────────────────────
   const [primaryGoal, setPrimaryGoal] = useState<string>(initialBrainConfig.primaryGoal || "book_consultation");
@@ -203,6 +241,7 @@ function AIPage() {
           customDirectives,
         }
       });
+      await router.invalidate();
       setBrainSaved(true);
       setTimeout(() => setBrainSaved(false), 3000);
     } catch (err) {
@@ -310,7 +349,7 @@ function AIPage() {
       const greeting = [
         { 
           role: 'assistant' as const, 
-          content: `Hi ${name}, I noticed your residential permit inquiry filed in ${leadObj.county || 'Travis County'}. I'm ${personaName}, executive concierge representing ${initialProfile.companyName || 'our custom estate studio'}. Are you currently exploring a custom build, or have you already engaged a general contractor?` 
+          content: `Hi ${name}, I noticed your residential inquiry regarding ${leadObj?.county || leadObj?.city || 'your upcoming build'}. I'm ${personaName}, executive concierge representing ${initialProfile.companyName || 'our custom estate studio'}. Are you currently exploring a custom build, or have you already engaged a general contractor?` 
         }
       ];
       setChatHistory(greeting);
@@ -355,7 +394,7 @@ function AIPage() {
         leadId: selectedLeadId,
         leadName: name,
         scoreTier: leadObj?.scoreTier || "Warm",
-        county: leadObj?.county || "Travis County",
+        county: leadObj?.county || leadObj?.city || "Local Area",
         lastMessageAt: "Just now",
         messages: updatedHistory
       }
@@ -399,7 +438,7 @@ function AIPage() {
           leadId: selectedLeadId,
           leadName: name,
           scoreTier: intent.charAt(0) + intent.slice(1).toLowerCase(),
-          county: leadObj?.county || "Travis County",
+          county: leadObj?.county || leadObj?.city || "Local Area",
           lastMessageAt: "Just now",
           messages: finalHistory
         }
@@ -481,51 +520,6 @@ function AIPage() {
       {/* ── TAB 1: AI BRAIN STUDIO & KNOWLEDGE CONTROLS ── */}
       {activeTab === "studio" && (
         <div className="space-y-6 max-w-5xl">
-          
-          {/* Top Save & Deploy Action Bar */}
-          <div className="p-4 rounded-2xl border border-[#c9a84c]/30 dark:border-[#e5d9c5]/30 bg-card flex items-center justify-between gap-4 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="size-9 rounded-xl bg-secondary border border-border flex items-center justify-center text-[#c9a84c] dark:text-[#e5d9c5] shrink-0">
-                <Wand2 className="size-4" />
-              </div>
-              <div>
-                <h3 className="text-xs sm:text-sm font-semibold text-foreground">
-                  Ready to deploy updates to your AI Brain?
-                </h3>
-                <p className="text-[11px] text-muted-foreground">
-                  Changes take effect immediately across all Email conversations and the live sandbox.
-                </p>
-              </div>
-            </div>
-
-            <button
-              onClick={handleSaveBrain}
-              disabled={isSavingBrain}
-              className={`px-5 py-2.5 rounded-xl text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer shadow-md shrink-0 ${
-                brainSaved 
-                  ? "bg-emerald-500 text-white border-emerald-600" 
-                  : "bg-primary text-primary-foreground hover:bg-primary/90"
-              }`}
-            >
-              {isSavingBrain ? (
-                <>
-                  <RefreshCw className="size-3.5 animate-spin" />
-                  <span>Deploying...</span>
-                </>
-              ) : brainSaved ? (
-                <>
-                  <Check className="size-3.5" />
-                  <span>Deployed & Active!</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles className="size-3.5" />
-                  <span>Save & Deploy AI Brain</span>
-                </>
-              )}
-            </button>
-          </div>
-
           {/* 1. Primary AI Objective (Goal Dropdown) */}
           <div className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-3">
             <div className="flex items-center justify-between">
@@ -558,7 +552,14 @@ function AIPage() {
           </div>
 
           {/* 2. Brand Voice, Persona & Tone Dropdown */}
-          <div className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-4">
+          <div
+            id="activation-voice-section"
+            className={`rounded-2xl border bg-card p-6 shadow-sm space-y-4 transition-all duration-700 ${
+              highlightSection === "voice"
+                ? "border-[#e5d9c5] ring-2 ring-[#e5d9c5] shadow-[0_0_35px_rgba(229,217,197,0.35)] scale-[1.01]"
+                : "border-border"
+            }`}
+          >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <Volume2 className="size-4 text-[#c9a84c] dark:text-[#e5d9c5]" />
@@ -625,7 +626,14 @@ function AIPage() {
           </div>
 
           {/* 3. In-Depth Qualification Criteria */}
-          <div className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-5">
+          <div
+            id="activation-rules-section"
+            className={`rounded-2xl border bg-card p-6 shadow-sm space-y-5 transition-all duration-700 ${
+              highlightSection === "rules"
+                ? "border-[#e5d9c5] ring-2 ring-[#e5d9c5] shadow-[0_0_35px_rgba(229,217,197,0.35)] scale-[1.01]"
+                : "border-border"
+            }`}
+          >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <Sliders className="size-4 text-[#c9a84c] dark:text-[#e5d9c5]" />
@@ -785,7 +793,7 @@ function AIPage() {
               {[
                 "10-Year Structural Warranty Included",
                 "Never quote exact square foot price over text",
-                "Specializing in Travis & Williamson Counties",
+                "Specializing in bespoke luxury residential construction",
                 "In-house architectural & interior design team",
                 "Office open Mon-Sat 9am to 6pm"
               ].map((chip) => (
@@ -919,11 +927,11 @@ function AIPage() {
               >
                 {leads.map((l: any) => (
                   <option key={l.id} value={l.id}>
-                    {getCleanLeadName(l)} · {l.county || 'Travis County'} ({l.scoreTier || 'Warm'})
+                    {getCleanLeadName(l)} · {l.county || l.city || 'Local Area'} ({l.scoreTier || 'Warm'})
                   </option>
                 ))}
                 {leads.length === 0 && (
-                  <option value="demo">Demo Homeowner (Travis County Modern Estate)</option>
+                  <option value="demo">Demo Homeowner (Bespoke Architectural Residence)</option>
                 )}
               </select>
             </div>
@@ -1090,7 +1098,7 @@ function AIPage() {
               </div>
 
               {/* Chat Thread Messages with WhatsApp Wallpaper Doodle Overlay */}
-              <div className="flex-1 min-h-0 relative bg-[#050608] overflow-hidden flex flex-col">
+              <div className="flex-1 min-h-0 relative bg-background overflow-hidden flex flex-col">
                 <WhatsAppDoodleBackground idPrefix="sim" />
 
                 <div 
@@ -1105,13 +1113,13 @@ function AIPage() {
                         className={`flex ${isAssistant ? "justify-start" : "justify-end"} items-start gap-2.5`}
                       >
                         {isAssistant && (
-                          <div className="size-7 rounded-lg bg-[#181920] border border-border flex items-center justify-center font-nevera text-[10px] text-[#c9a84c] dark:text-[#e5d9c5] shrink-0 mt-0.5 shadow-sm">
+                          <div className="size-7 rounded-lg bg-secondary border border-border flex items-center justify-center font-nevera text-[10px] text-[#c9a84c] dark:text-[#e5d9c5] shrink-0 mt-0.5 shadow-sm">
                             {personaName.slice(0, 1).toUpperCase()}
                           </div>
                         )}
                         <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-xs sm:text-sm leading-relaxed shadow-md ${
                           isAssistant
-                            ? "bg-[#111218]/95 backdrop-blur-sm border border-border/80 text-foreground rounded-tl-none"
+                            ? "bg-[#161616]/95 backdrop-blur-sm border border-border/80 text-foreground rounded-tl-none"
                             : "bg-primary text-primary-foreground rounded-tr-none font-medium"
                         }`}>
                           {m.content}
@@ -1121,7 +1129,7 @@ function AIPage() {
                   })}
 
                   {isThinking && (
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono italic p-2.5 bg-[#111218]/90 backdrop-blur-sm rounded-xl border border-border w-fit animate-pulse">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono italic p-2.5 bg-[#161616]/90 backdrop-blur-sm rounded-xl border border-border w-fit animate-pulse">
                       <Bot className="size-3.5 text-primary" />
                       <span>{personaName} is formulating response...</span>
                     </div>
@@ -1274,7 +1282,7 @@ function AIPage() {
                     {conversations[activeModalLeadId]?.leadName} &middot; Email History
                   </h3>
                   <span className="text-[11px] text-muted-foreground font-mono">
-                    County: {conversations[activeModalLeadId]?.county || "Travis County"}
+                    Location: {conversations[activeModalLeadId]?.county || conversations[activeModalLeadId]?.city || "Local Area"}
                   </span>
                 </div>
               </div>
@@ -1286,7 +1294,7 @@ function AIPage() {
               </button>
             </div>
 
-            <div className="flex-1 min-h-0 relative bg-[#050608] overflow-hidden flex flex-col">
+            <div className="flex-1 min-h-0 relative bg-background overflow-hidden flex flex-col">
               <WhatsAppDoodleBackground idPrefix="modal" />
               
               <div className="flex-1 overflow-y-auto p-5 space-y-3 relative z-10 custom-scrollbar">
@@ -1299,7 +1307,7 @@ function AIPage() {
                     >
                       <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-xs sm:text-sm leading-relaxed shadow-md ${
                         isAssistant
-                          ? "bg-[#111218]/95 backdrop-blur-sm border border-border/80 text-foreground rounded-tl-none"
+                          ? "bg-[#161616]/95 backdrop-blur-sm border border-border/80 text-foreground rounded-tl-none"
                           : "bg-primary text-primary-foreground rounded-tr-none font-medium"
                       }`}>
                         {m.content}

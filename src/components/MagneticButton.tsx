@@ -62,9 +62,17 @@ export function MagneticButton({ children, className = "", onClick, href }: Magn
     );
   }
 
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className="inline-block">
+        {content}
+      </button>
+    );
+  }
+
   return (
-    <button onClick={onClick} className="inline-block">
+    <div className="inline-block">
       {content}
-    </button>
+    </div>
   );
 }

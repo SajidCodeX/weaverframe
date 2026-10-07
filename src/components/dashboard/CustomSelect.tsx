@@ -4,6 +4,7 @@ import { ChevronDown } from "lucide-react";
 interface Option {
   label: string;
   value: string;
+  icon?: React.ReactNode;
 }
 
 interface CustomSelectProps {
@@ -73,7 +74,10 @@ export function CustomSelect({
         onClick={handleToggle}
         className="flex w-full items-center justify-between bg-input border border-border text-xs rounded-xl px-3.5 py-2.5 text-foreground outline-none hover:border-primary/50 transition-colors focus:ring-1 focus:ring-primary shadow-sm cursor-pointer"
       >
-        <span className="truncate">{selectedOption?.label}</span>
+        <div className="flex items-center gap-2.5 min-w-0">
+          {selectedOption?.icon && <span className="shrink-0 flex items-center">{selectedOption.icon}</span>}
+          <span className="truncate">{selectedOption?.label}</span>
+        </div>
         <ChevronDown className={`size-3.5 text-muted-foreground transition-transform shrink-0 ml-2 ${isOpen ? "rotate-180" : ""}`} />
       </button>
 
@@ -94,13 +98,14 @@ export function CustomSelect({
                   onChange(option.value);
                   setIsOpen(false);
                 }}
-                className={`block w-full text-left px-4 py-2.5 text-xs transition-colors cursor-pointer ${
+                className={`flex items-center gap-2.5 w-full text-left px-4 py-2.5 text-xs transition-colors cursor-pointer ${
                   option.value === value
                     ? "bg-secondary text-primary font-semibold"
                     : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                 }`}
               >
-                {option.label}
+                {option.icon && <span className="shrink-0 flex items-center">{option.icon}</span>}
+                <span className="truncate">{option.label}</span>
               </button>
             ))}
           </div>

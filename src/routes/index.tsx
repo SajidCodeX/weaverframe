@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import { Shell } from "@/components/dashboard/Shell";
 import { Card, CardHeader, ScoreBadge } from "@/components/dashboard/primitives";
+import { ActivationChecklist } from "@/components/dashboard/ActivationChecklist";
 import { getDashboardData } from "../lib/dashboard";
 import { getSessionFn } from "@/lib/auth";
 import { obscurePII } from "@/lib/utils";
@@ -36,7 +37,7 @@ export const Route = createFileRoute("/")({
       
     return getDashboardData({ data: { activeRole } });
   },
-  staleTime: 60_000, // 60s — fresh data, instant revisits within a minute
+  staleTime: 5_000, // 5s — fast refresh when returning from settings/activation steps
   pendingMs: 0,
   pendingComponent: () => <RoutePending title="Loading Overview..." type="overview" />,
   component: Overview,
@@ -62,7 +63,7 @@ const tooltipStyle = {
 function formatRelativeTime(dateString: string): string {
   const date = new Date(dateString);
   const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
+  const diffMs = Math.max(0, now.getTime() - date.getTime());
   const diffSec = Math.floor(diffMs / 1000);
   const diffMin = Math.floor(diffSec / 60);
   const diffHr = Math.floor(diffMin / 60);
@@ -102,7 +103,7 @@ function Kpi({
   isGold?: boolean;
 }) {
   return (
-    <Card className={`p-5 relative overflow-hidden transition-all duration-300 ${highlight ? 'border-white/15' : ''}`} highlight={highlight}>
+    <Card className={`p-5 relative overflow-hidden transition-all duration-300 ${highlight ? 'border-white/15' : ''}`} highlight={highlight} lift>
       <div className="text-[10px] font-mono font-medium text-muted-foreground uppercase tracking-widest flex items-center justify-between">
         <span>{label}</span>
         {isGold && <span className="size-1.5 rounded-full bg-[#e5d9c5] shadow-[0_0_8px_rgba(229,217,197,0.8)]" />}
@@ -148,7 +149,7 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
 
   const getInitialDateRange = () => {
     if (typeof window === "undefined") {
-      return { range: "All Time", start: "", end: "" };
+      return { range: "Today", start: "", end: "" };
     }
     const saved = sessionStorage.getItem("globalDateRange");
     if (saved) {
@@ -157,13 +158,12 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
         if (parsed.label === "Custom Range") {
           return { range: "Custom Range", start: parsed.start || "", end: parsed.end || "" };
         }
-        return { range: parsed.label || "All Time", start: "", end: "" };
+        return { range: parsed.label || "Today", start: "", end: "" };
       } catch (_) {}
     }
-    return { range: "All Time", start: "", end: "" };
+    return { range: "Today", start: "", end: "" };
   };
 
-  const [isSyncing, setIsSyncing] = useState(false);
   const [initialDate] = useState(() => getInitialDateRange());
   const [selectedDateRange, setSelectedDateRange] = useState<string>(initialDate.range);
   const [customStart, setCustomStart] = useState<string>(initialDate.start);
@@ -184,20 +184,6 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
     window.addEventListener("globalDateRangeChanged", handleGlobalDateChange);
     return () => window.removeEventListener("globalDateRangeChanged", handleGlobalDateChange);
   }, []);
-
-  const changeDateRange = (label: string, start?: string, end?: string) => {
-    setSelectedDateRange(label);
-    if (typeof window !== "undefined") {
-      const rangeData = { label, start, end };
-      sessionStorage.setItem("globalDateRange", JSON.stringify(rangeData));
-      (window as any).__globalDateRange = rangeData;
-      window.dispatchEvent(
-        new CustomEvent("globalDateRangeChanged", {
-          detail: rangeData,
-        }),
-      );
-    }
-  };
 
   const matchDate = (dateInput: string | Date) => {
     if (selectedDateRange === "All Time") return true;
@@ -334,62 +320,8 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
 
   return (
     <>
-      {/* ── Overview Quick Date Range Filter Bar ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 bg-card/60 border border-border/70 backdrop-blur-sm p-2 sm:p-2.5 rounded-2xl shadow-sm">
-        <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto custom-scrollbar py-0.5">
-          <div className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground pr-2 border-r border-border/60 shrink-0">
-            <Calendar className="size-3.5 text-[#e5d9c5]" />
-            <span className="hidden md:inline uppercase text-[10px] tracking-wider font-semibold">Date Window:</span>
-          </div>
-          {[
-            "All Time",
-            "Today",
-            "Yesterday",
-            "Last 7 Days",
-            "Last 30 Days",
-            "This Month",
-          ].map((preset) => (
-            <button
-              key={preset}
-              onClick={() => changeDateRange(preset)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-xl transition-all whitespace-nowrap cursor-pointer ${
-                selectedDateRange === preset
-                  ? "bg-[#e5d9c5] text-black font-semibold shadow-sm shadow-[#e5d9c5]/20"
-                  : "bg-secondary/50 text-muted-foreground hover:text-foreground hover:bg-secondary border border-border/40"
-              }`}
-            >
-              {preset}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex items-center gap-2.5 justify-end shrink-0">
-          <div className="text-[11px] font-mono text-muted-foreground hidden sm:block">
-            {selectedDateRange === "All Time"
-              ? "All Historical Pipeline"
-              : selectedDateRange === "Today"
-              ? `Today (${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})`
-              : selectedDateRange}
-          </div>
-          <button
-            onClick={async () => {
-              if (isSyncing) return;
-              setIsSyncing(true);
-              try {
-                await router.invalidate();
-              } finally {
-                setTimeout(() => setIsSyncing(false), 800);
-              }
-            }}
-            disabled={isSyncing}
-            className="inline-flex items-center gap-1.5 text-xs border border-border/80 bg-secondary/60 rounded-xl px-3 py-1.5 text-foreground hover:bg-secondary transition-colors cursor-pointer shadow-sm disabled:opacity-80"
-            title="Refresh Data"
-          >
-            <RefreshCw className={`size-3 transition-transform duration-300 ${isSyncing ? 'animate-spin text-[#c9a84c] dark:text-[#e5d9c5]' : 'text-muted-foreground'}`} />
-            <span className="text-[11px] font-mono">{isSyncing ? 'Syncing...' : 'Sync'}</span>
-          </button>
-        </div>
-      </div>
+      {/* 5-Step Luxury Activation Checklist */}
+      <ActivationChecklist data={(data as any)?.activationChecklist} />
 
       {/* KPI row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -406,7 +338,7 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
           value={dynamicStats.qualifiedLeads.toString()}
           sub={`${dynamicStats.totalLeads > 0 ? Math.round((dynamicStats.qualifiedLeads / dynamicStats.totalLeads) * 100) : 0}% qualification rate`}
           extra={
-            <div className="h-1.5 bg-[#101014] rounded-full overflow-hidden border border-white/[0.04]">
+            <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden border border-white/[0.04]">
               <div
                 className="h-full rounded-full bar-animated"
                 style={{
@@ -565,7 +497,7 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
                       <span className="text-xs font-mono font-bold text-right w-8" style={{ color: row.color }}>
                         {row.pct}%
                       </span>
-                      <div className="w-16 h-1.5 bg-[#14151e] rounded-full overflow-hidden shrink-0 border border-white/[0.04]">
+                      <div className="w-16 h-1.5 bg-white/[0.06] rounded-full overflow-hidden shrink-0 border border-white/[0.04]">
                         <div
                           className="h-full rounded-full"
                           style={{
@@ -582,11 +514,11 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
 
             {/* Quick Stats Footer */}
             <div className="mt-auto pt-4 grid grid-cols-2 gap-3">
-              <div className="p-3.5 rounded-xl border border-white/[0.08] bg-[#0f1016] flex flex-col justify-between hover:border-[#e5d9c5]/30 transition-colors">
+              <div className="p-3.5 rounded-xl border border-white/[0.08] bg-[#181818] flex flex-col justify-between hover:border-[#e5d9c5]/30 transition-colors">
                 <div className="text-[9.5px] font-mono text-muted-foreground uppercase tracking-widest mb-1.5">Avg Time to Book</div>
                 <div className="text-2xl font-nevera font-normal text-white">{avgDaysToBook} <span className="text-xs text-muted-foreground font-sans">days</span></div>
               </div>
-              <div className="p-3.5 rounded-xl border border-white/[0.08] bg-[#0f1016] flex flex-col justify-between hover:border-[#e5d9c5]/30 transition-colors">
+              <div className="p-3.5 rounded-xl border border-white/[0.08] bg-[#181818] flex flex-col justify-between hover:border-[#e5d9c5]/30 transition-colors">
                 <div className="text-[9.5px] font-mono text-muted-foreground uppercase tracking-widest mb-1.5">AI Qual. Rate</div>
                 <div className="text-2xl font-nevera font-normal text-white">{dynamicStats.qualRate}%</div>
               </div>
@@ -626,7 +558,7 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
                   {/* Stage card */}
                   <Link
                     {...linkProps}
-                    className="flex-1 rounded-xl border border-white/[0.08] hover:border-[#e5d9c5]/40 bg-[#0a0a0d] cursor-pointer transition-all duration-200 block no-underline shadow-sm group hover:-translate-y-0.5"
+                    className="flex-1 rounded-xl border border-white/[0.08] hover:border-[#e5d9c5]/40 bg-[#181818] hover:bg-[#1e1e1e] cursor-pointer transition-all duration-200 block no-underline shadow-sm group hover:-translate-y-0.5"
                   >
                     <div className="p-4">
                       {/* Stage number + pct */}
@@ -651,7 +583,7 @@ function OverviewContent({ data, isPrivacyMode }: { data: any, isPrivacyMode: bo
                       </div>
 
                       {/* Progress bar */}
-                      <div className="mt-3 h-1.5 bg-[#14151e] rounded-full overflow-hidden border border-white/[0.04]">
+                      <div className="mt-3 h-1.5 bg-white/[0.06] rounded-full overflow-hidden border border-white/[0.04]">
                         <div
                           className="h-full rounded-full bar-animated"
                           style={{

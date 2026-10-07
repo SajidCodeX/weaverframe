@@ -16,16 +16,16 @@ import {
   saveQualificationRules,
   getNotificationSettings,
   saveNotificationSettings,
-  getWebhookUrl,
-  saveWebhookUrl,
   getBillingProfile,
   updateBillingProfile,
   createStripeCheckoutSession,
   createStripeCustomerPortalSession,
   addManualLead,
   triggerMailboxSync,
+  getGoogleConnectUrl,
 } from "@/lib/dashboard";
-import { Loader2, Check, X, AlertCircle, Download, Mail, Sparkles, RefreshCw, Lock, ShieldCheck, CheckCircle2, Zap, Server, Globe, CreditCard, ExternalLink, Copy, Code, Share2, Send, Terminal, Smartphone, Inbox, ArrowRight, CheckCircle, Eye, EyeOff, ChevronDown, FileText } from "lucide-react";
+import { Loader2, Check, X, AlertCircle, AlertTriangle, Download, Mail, Sparkles, RefreshCw, Lock, ShieldCheck, CheckCircle2, Zap, Server, Globe, CreditCard, ExternalLink, Copy, Code, Code2, Share2, Send, Terminal, Smartphone, Inbox, ArrowRight, CheckCircle, Eye, EyeOff, ChevronDown, FileText } from "lucide-react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/settings")({
   beforeLoad: async ({ context }) => {
@@ -49,7 +49,6 @@ export const Route = createFileRoute("/settings")({
         builderProfile: {},
         qualRules: {},
         notifSettings: {},
-        webhookUrl: '',
         billingProfile: { adSpendBalance: 0, paymentMethod: "None", plan: "trial" },
       };
     }
@@ -60,14 +59,12 @@ export const Route = createFileRoute("/settings")({
       getBuilderProfile({ data: { activeRole } }),
       getQualificationRules(),
       getNotificationSettings(),
-      getWebhookUrl(),
       getBillingProfile(),
-    ]).then(([integrationsStatus, builderProfile, qualRules, notifSettings, webhookUrl, billingProfile]) => ({
+    ]).then(([integrationsStatus, builderProfile, qualRules, notifSettings, billingProfile]) => ({
       integrationsStatus: integrationsStatus || {},
       builderProfile: builderProfile || {},
       qualRules: qualRules || {},
       notifSettings: notifSettings || {},
-      webhookUrl: webhookUrl || '',
       billingProfile: billingProfile || { adSpendBalance: 0, paymentMethod: "None", plan: "trial" },
     }));
   },
@@ -134,7 +131,7 @@ const clientPlanDetails: Record<string, { name: string; price: string; period: s
 
 function SettingsPage() {
   const loaderData = useLoaderData({ from: "/settings" }) || {};
-  const { integrationsStatus: loadedStatuses = {}, builderProfile: loadedProfile = {}, qualRules: loadedQualRules = {}, notifSettings: loadedNotif = {}, webhookUrl: loadedWebhookUrl = '', billingProfile: loadedBillingProfile = { adSpendBalance: 0, paymentMethod: "None", plan: "trial" } } = loaderData as any;
+  const { integrationsStatus: loadedStatuses = {}, builderProfile: loadedProfile = {}, qualRules: loadedQualRules = {}, notifSettings: loadedNotif = {}, billingProfile: loadedBillingProfile = { adSpendBalance: 0, paymentMethod: "None", plan: "trial" } } = loaderData as any;
   const router = useRouter();
   const routeContext = (Route as any).useRouteContext ? (Route as any).useRouteContext() : {};
   const session = routeContext?.session;
@@ -149,9 +146,73 @@ function SettingsPage() {
     }
   }, [loaderData, router])
 
-  const [active, setActive] = useState<typeof sections[number]>("Builder Profile");
+  const [active, setActive] = useState<typeof sections[number]>(() => {
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      const urlTab = url.searchParams.get('tab');
+      if (urlTab) {
+        const matched = sections.find(s => s.toLowerCase() === urlTab.toLowerCase() || s === urlTab);
+        if (matched) return matched;
+      }
+      if (url.searchParams.get('connected') || url.searchParams.get('error')) {
+        return "Integrations";
+      }
+      const saved = sessionStorage.getItem('settings_active_tab');
+      if (saved && sections.includes(saved as any)) {
+        return saved as any;
+      }
+    }
+    return "Builder Profile";
+  });
+
+  const handleSelectTab = (tabName: typeof sections[number]) => {
+    setActive(tabName);
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('settings_active_tab', tabName);
+    }
+  };
+
   const [expandedIntegration, setExpandedIntegration] = useState<string | null>(null);
   const { theme, setTheme } = useTheme();
+
+  // ── Highlight & Deep-Link for Concierge Activation Steps ───────────────────
+  const [highlightSection, setHighlightSection] = useState<"profile" | "mailbox" | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const urlTab = url.searchParams.get("tab");
+    const highlight = url.searchParams.get("highlight");
+
+    if (highlight === "profile" || urlTab?.toLowerCase().includes("profile")) {
+      setActive("Builder Profile");
+      if (highlight === "profile") {
+        setHighlightSection("profile");
+        setTimeout(() => {
+          const el = document.getElementById("activation-profile-section");
+          if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 200);
+        const timer = setTimeout(() => {
+          setHighlightSection(null);
+        }, 3000);
+        return () => clearTimeout(timer);
+      }
+    } else if (highlight === "mailbox" || urlTab?.toLowerCase() === "integrations") {
+      setActive("Integrations");
+      if (highlight === "mailbox") {
+        setExpandedIntegration("email_mailbox");
+        setHighlightSection("mailbox");
+        setTimeout(() => {
+          const el = document.getElementById("activation-mailbox-section");
+          if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 200);
+        const timer = setTimeout(() => {
+          setHighlightSection(null);
+        }, 3000);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, []);
 
   // ── Billing States ──────────────────────────────────────────────────────────
   const [adSpendBalance, setAdSpendBalance] = useState(loadedBillingProfile.adSpendBalance);
@@ -449,22 +510,31 @@ function SettingsPage() {
   };
 
   // ── Builder Profile State ───────────────────────────────────────────────────
-  const [profileForm, setProfileForm] = useState({
-    companyName: loadedProfile.companyName || "",
-    primaryContact: loadedProfile.primaryContact || "",
-    email: loadedProfile.email || "",
-    phone: loadedProfile.phone || "",
-    businessAddress: loadedProfile.businessAddress || "",
-    targetZipCodes: loadedProfile.targetZipCodes || "",
-    avgHomePrice: loadedProfile.avgHomePrice || "$700,000",
-    homesPerYear: loadedProfile.homesPerYear || "42",
-    timezone: loadedProfile.timezone || "Asia/Kolkata",
-    aiContext: loadedProfile.aiContext || "",
+  const [profileForm, setProfileForm] = useState(() => {
+    let cached: any = null;
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = sessionStorage.getItem('cached_builder_profile');
+        if (raw) cached = JSON.parse(raw);
+      } catch (e) {}
+    }
+    return {
+      companyName: loadedProfile.companyName || cached?.companyName || "",
+      primaryContact: loadedProfile.primaryContact || cached?.primaryContact || "",
+      email: loadedProfile.email || cached?.email || "",
+      phone: loadedProfile.phone || cached?.phone || "",
+      businessAddress: loadedProfile.businessAddress || cached?.businessAddress || "",
+      targetZipCodes: loadedProfile.targetZipCodes || cached?.targetZipCodes || "",
+      avgHomePrice: loadedProfile.avgHomePrice || cached?.avgHomePrice || "$700,000",
+      homesPerYear: loadedProfile.homesPerYear || cached?.homesPerYear || "42",
+      timezone: loadedProfile.timezone || cached?.timezone || "Asia/Kolkata",
+      aiContext: loadedProfile.aiContext || cached?.aiContext || "",
+    };
   });
 
   useEffect(() => {
-    if (loadedProfile && Object.keys(loadedProfile).length > 0) {
-      setProfileForm({
+    if (loadedProfile && Object.keys(loadedProfile).length > 0 && !(loadedProfile as any)._isSsrPlaceholder) {
+      const updated = {
         companyName: loadedProfile.companyName || "",
         primaryContact: loadedProfile.primaryContact || "",
         email: loadedProfile.email || "",
@@ -475,7 +545,11 @@ function SettingsPage() {
         homesPerYear: loadedProfile.homesPerYear || "42",
         timezone: loadedProfile.timezone || "Asia/Kolkata",
         aiContext: loadedProfile.aiContext || "",
-      });
+      };
+      setProfileForm(updated);
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('cached_builder_profile', JSON.stringify(updated));
+      }
     }
   }, [loadedProfile]);
 
@@ -483,14 +557,6 @@ function SettingsPage() {
   const [profileSaved, setProfileSaved] = useState(false);
 
   const handleSaveProfile = async () => {
-    // // Unique Zip Code Validation (Scraper remnant - commented out)
-    // const zips = profileForm.targetZipCodes.split(',').map((z: string) => z.trim()).filter(Boolean);
-    // const uniqueZips = new Set(zips);
-    // if (uniqueZips.size !== zips.length) {
-    //   alert("Error: Duplicate zip codes are not allowed in Target Zip Codes. Please remove duplicates.");
-    //   return;
-    // }
-
     // Mandatory Field Verification
     if (!profileForm.companyName.trim() || !profileForm.primaryContact.trim() || !profileForm.email.trim() || !profileForm.phone.trim() || !profileForm.businessAddress.trim()) {
       alert("Please fill in all mandatory fields: Company Name, Primary Contact, Email, Phone, and Business Address.");
@@ -514,10 +580,17 @@ function SettingsPage() {
       return;
     }
 
+    // Compulsory AI Knowledge Base Check
+    if (!profileForm.aiContext || profileForm.aiContext.trim().length < 20) {
+      alert("AI Knowledge Base / Builder Defaults is compulsory (minimum 20 characters). Please provide your build policies, service region, or guidelines to prevent the AI from misinforming leads.");
+      return;
+    }
+
     setIsSavingProfile(true);
     try {
       await saveBuilderProfile({ data: profileForm });
       if (typeof window !== 'undefined') {
+        sessionStorage.setItem('cached_builder_profile', JSON.stringify(profileForm));
         const { invalidateClientSession } = await import('./__root');
         invalidateClientSession({ 
           companyName: profileForm.companyName, 
@@ -613,33 +686,8 @@ function SettingsPage() {
     }
   };
 
-  // ── Webhook URL State ───────────────────────────────────────────────────
-  const [webhookUrl, setWebhookUrl] = useState(loadedWebhookUrl || '');
-
-  useEffect(() => {
-    if (loadedWebhookUrl) {
-      setWebhookUrl(loadedWebhookUrl);
-    }
-  }, [loadedWebhookUrl]);
-
-  const [isSavingWebhook, setIsSavingWebhook] = useState(false);
-  const [webhookSaved, setWebhookSaved] = useState(false);
   const [showWebhookUrl, setShowWebhookUrl] = useState(false);
   const [isInboundExpanded, setIsInboundExpanded] = useState(false);
-
-  const handleSaveWebhook = async () => {
-    setIsSavingWebhook(true);
-    try {
-      await saveWebhookUrl({ data: webhookUrl });
-      setWebhookSaved(true);
-      setTimeout(() => setWebhookSaved(false), 2500);
-    } catch (err) {
-      console.error(err);
-      alert("Failed to save webhook URL.");
-    } finally {
-      setIsSavingWebhook(false);
-    }
-  };
 
   // ── Integration connection states ──────────────────────────────────────────
   const [connectionStatus, setConnectionStatus] = useState<Record<string, boolean>>(() => {
@@ -671,9 +719,35 @@ function SettingsPage() {
   const [smtpHost, setSmtpHost] = useState("");
   const [smtpPort, setSmtpPort] = useState("587");
   const [useSsl, setUseSsl] = useState(false);
+  const [showManualGoogle, setShowManualGoogle] = useState(false);
 
   const [isTestingEmail, setIsTestingEmail] = useState(false);
-  const [emailTestSuccess, setEmailTestSuccess] = useState<string | null>(null);
+
+  // Detect Google OAuth callback redirect parameters
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      const connected = url.searchParams.get('connected');
+      const err = url.searchParams.get('error');
+      const connectedEmail = url.searchParams.get('email');
+
+      if (connected === 'google') {
+        setActive("Integrations");
+        sessionStorage.setItem('settings_active_tab', 'Integrations');
+        toast.success(`Google Workspace connected successfully!${connectedEmail ? ` (${connectedEmail})` : ''}`);
+        setExpandedIntegration('email_mailbox');
+        url.searchParams.delete('connected');
+        url.searchParams.delete('email');
+        window.history.replaceState({}, '', url.toString());
+      } else if (err) {
+        setActive("Integrations");
+        sessionStorage.setItem('settings_active_tab', 'Integrations');
+        toast.error(`Google Connection Notice: ${err.replace(/_/g, ' ')}`);
+        url.searchParams.delete('error');
+        window.history.replaceState({}, '', url.toString());
+      }
+    }
+  }, []);
 
   useEffect(() => {
     if (loadedStatuses && Object.keys(loadedStatuses).length > 0) {
@@ -694,7 +768,13 @@ function SettingsPage() {
 
       if (creds.email_mailbox) {
         const em = creds.email_mailbox;
-        if (em.provider) setEmailProvider(em.provider as any);
+        if (em.provider === 'google_oauth' || em.provider === 'google') {
+          setEmailProvider('google');
+        } else if (em.provider === 'microsoft') {
+          setEmailProvider('microsoft');
+        } else if (em.provider === 'custom_smtp') {
+          setEmailProvider('custom_smtp');
+        }
         if (em.email) setEmailAddress(em.email);
         if (em.senderName) setEmailSenderName(em.senderName);
         if (em.password) setEmailPassword(em.password);
@@ -708,37 +788,60 @@ function SettingsPage() {
   const isEmailConnected = !!connectionStatus.email_mailbox;
 
   const handleTestEmail = async () => {
-    if (!emailAddress.trim()) {
-      alert("Please enter a valid company mailbox email first.");
+    const targetEmail = emailAddress.trim() || credentials.email_mailbox?.email || '';
+    if (!targetEmail) {
+      toast.error("Please enter a valid company mailbox email first.");
       return;
     }
     setIsTestingEmail(true);
-    setEmailTestSuccess(null);
     try {
+      const activeProvider = credentials.email_mailbox?.provider || emailProvider;
       const creds = {
-        provider: emailProvider,
-        email: emailAddress,
-        senderName: emailSenderName,
-        password: emailPassword,
-        smtpHost: emailProvider === 'google' ? 'smtp.gmail.com' : emailProvider === 'microsoft' ? 'smtp.office365.com' : smtpHost,
-        smtpPort: emailProvider === 'google' ? '465' : emailProvider === 'microsoft' ? '587' : smtpPort,
+        provider: activeProvider,
+        email: targetEmail,
+        senderName: emailSenderName || credentials.email_mailbox?.senderName || '',
+        password: emailPassword || credentials.email_mailbox?.password || '',
+        smtpHost: (activeProvider === 'google' || activeProvider === 'google_oauth') ? 'smtp.gmail.com' : activeProvider === 'microsoft' ? 'smtp.office365.com' : smtpHost,
+        smtpPort: (activeProvider === 'google' || activeProvider === 'google_oauth') ? '465' : activeProvider === 'microsoft' ? '587' : smtpPort,
         useSsl: useSsl ? 'true' : 'false'
       };
       await testIntegrationConnection({
         data: { platformId: "email_mailbox", credentials: creds }
       });
-      setEmailTestSuccess(`Handshake verified! Connected to ${emailAddress}`);
-      setTimeout(() => setEmailTestSuccess(null), 5000);
+      toast.success(`Handshake verified! Connected to ${targetEmail}`);
     } catch (err: any) {
-      alert(`Mailbox Verification Failed: ${err?.message || err}`);
+      toast.error(`Mailbox Verification Failed: ${err?.message || err}`);
     } finally {
       setIsTestingEmail(false);
     }
   };
 
+  const [isConnectingGoogle, setIsConnectingGoogle] = useState(false);
+  const [isDisconnectModalOpen, setIsDisconnectModalOpen] = useState(false);
+
+  // Ensure isConnectingGoogle is never stuck on status change
+  useEffect(() => {
+    setIsConnectingGoogle(false);
+  }, [connectionStatus.email_mailbox]);
+
+  const handleConnectGoogle = async () => {
+    setIsConnectingGoogle(true);
+    try {
+      const res = await getGoogleConnectUrl({ data: { returnTo: '/settings?tab=integrations' } });
+      if (res?.url) {
+        window.location.href = res.url;
+      }
+    } catch (err: any) {
+      toast.error("Could not start Google connection: " + (err?.message || err));
+      setIsConnectingGoogle(false);
+    } finally {
+      setTimeout(() => setIsConnectingGoogle(false), 5000);
+    }
+  };
+
   const handleSaveEmail = async () => {
     if (!emailAddress.trim()) {
-      alert("Please enter a company email address.");
+      toast.error("Please enter a company email address.");
       return;
     }
     setIsSaving(prev => ({ ...prev, email_mailbox: true }));
@@ -763,17 +866,18 @@ function SettingsPage() {
       // Immediately trigger initial sync
       triggerMailboxSync().catch((e) => console.warn('[INITIAL MAILBOX SYNC ERROR]:', e));
       await router.invalidate();
-      alert(`Success: Company mailbox linked! Initial sync triggered and AI can now send and receive emails as ${emailAddress}.`);
+      toast.success(`Company mailbox linked! AI can now send and receive emails as ${emailAddress}.`);
     } catch (err: any) {
       console.error(err);
-      alert(`Failed to save mailbox connection: ${err?.message || err}`);
+      toast.error(`Failed to save mailbox connection: ${err?.message || err}`);
     } finally {
       setIsSaving(prev => ({ ...prev, email_mailbox: false }));
     }
   };
 
-  const handleDisconnectEmail = async () => {
+  const confirmDisconnectEmail = async () => {
     setIsSaving(prev => ({ ...prev, email_mailbox: true }));
+    setIsConnectingGoogle(false);
     try {
       await disconnectIntegration({
         data: { platformId: "email_mailbox" }
@@ -781,13 +885,15 @@ function SettingsPage() {
       setConnectionStatus(prev => ({ ...prev, email_mailbox: false }));
       setCredentials(prev => ({ ...prev, email_mailbox: {} }));
       setEmailPassword("");
+      setIsDisconnectModalOpen(false);
       await router.invalidate();
-      alert("Mailbox disconnected.");
-    } catch (err) {
+      toast.success("Company mailbox disconnected successfully.");
+    } catch (err: any) {
       console.error(err);
-      alert("Failed to disconnect mailbox.");
+      toast.error("Failed to disconnect mailbox: " + (err?.message || err));
     } finally {
       setIsSaving(prev => ({ ...prev, email_mailbox: false }));
+      setIsConnectingGoogle(false);
     }
   };
 
@@ -802,6 +908,8 @@ function SettingsPage() {
       }
     }));
   };
+
+  const [disconnectTarget, setDisconnectTarget] = useState<{ id: string; name: string } | null>(null);
 
   const handleConnect = async (id: string) => {
     setIsSaving(prev => ({ ...prev, [id]: true }));
@@ -819,17 +927,20 @@ function SettingsPage() {
       setConnectionStatus(prev => ({ ...prev, [id]: true }));
       setExpandedIntegration(null);
       await router.invalidate();
-      alert(`Success: Credential lock secured and connection synced successfully!`);
+      const targetName = id === 'hubspot' ? 'HubSpot CRM' : id === 'ghl' ? 'GoHighLevel' : id;
+      toast.success(`${targetName} connected and synced successfully!`);
     } catch (err: any) {
       console.error(err);
       const errMsg = err?.message || "Failed to save credentials.";
-      alert(`API Connection Failed: ${errMsg}`);
+      toast.error(`API Connection Failed: ${errMsg}`);
     } finally {
       setIsSaving(prev => ({ ...prev, [id]: false }));
     }
   };
 
-  const handleDisconnect = async (id: string) => {
+  const confirmDisconnectIntegration = async () => {
+    if (!disconnectTarget) return;
+    const { id, name } = disconnectTarget;
     setIsSaving(prev => ({ ...prev, [id]: true }));
     try {
       await disconnectIntegration({
@@ -838,11 +949,12 @@ function SettingsPage() {
       setConnectionStatus(prev => ({ ...prev, [id]: false }));
       setCredentials(prev => ({ ...prev, [id]: {} }));
       setExpandedIntegration(null);
+      setDisconnectTarget(null);
       await router.invalidate();
-      alert(`Disconnected integration from our platform.`);
-    } catch (err) {
+      toast.success(`${name} disconnected successfully.`);
+    } catch (err: any) {
       console.error(err);
-      alert("Failed to disconnect integration.");
+      toast.error(`Failed to disconnect ${name}: ` + (err?.message || err));
     } finally {
       setIsSaving(prev => ({ ...prev, [id]: false }));
     }
@@ -853,6 +965,64 @@ function SettingsPage() {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [isTestingInbound, setIsTestingInbound] = useState(false);
   const [testInboundResult, setTestInboundResult] = useState<{ success: boolean; message: string; leadId?: string; scoreTier?: string; dealScore?: number } | null>(null);
+
+  const inboundPlatformOptions = [
+    {
+      value: "zapier",
+      label: "Zapier Webhook (Easiest)",
+      icon: (
+        <svg className="size-4 shrink-0" viewBox="0 0 24 24">
+          <rect width="24" height="24" rx="5" fill="#FF4F00" />
+          <path d="M11 5h2v6h5v2h-5v6h-2v-6H6v-2h5V5z" fill="#FFF" />
+          <path d="M7.4 6.6l1.4-1.4 8.5 8.5-1.4 1.4L7.4 6.6zm9.9 1.4l-1.4-1.4-8.5 8.5 1.4 1.4 8.5-8.5z" fill="#FFF" />
+        </svg>
+      ),
+    },
+    {
+      value: "make",
+      label: "Make.com (Integromat)",
+      icon: (
+        <svg className="size-4 shrink-0" viewBox="0 0 24 24">
+          <rect width="24" height="24" rx="5" fill="#6E00F5" />
+          <path d="M5.5 8.5L9.5 5.5L13.5 8.5L9.5 11.5L5.5 8.5Z" fill="#FFF" />
+          <path d="M10.5 12.5L14.5 9.5L18.5 12.5L14.5 15.5L10.5 12.5Z" fill="#FFF" opacity="0.9"/>
+          <path d="M5.5 15.5L9.5 12.5L13.5 15.5L9.5 18.5L5.5 15.5Z" fill="#FFF" opacity="0.75"/>
+        </svg>
+      ),
+    },
+    {
+      value: "wordpress",
+      label: "WordPress / Elementor Pro",
+      icon: (
+        <svg className="size-4 shrink-0" viewBox="0 0 24 24" fill="#21759B">
+          <path d="M12 2C6.486 2 2 6.486 2 12c0 4.418 2.865 8.167 6.839 9.49L4.47 8.358C5.83 5.46 8.7 3.5 12 3.5c1.68 0 3.25.503 4.568 1.368L12 2zm8.53 10c0-1.657-.597-2.808-1.11-3.71-.682-1.11-1.32-2.046-1.32-3.155 0-1.233.937-2.383 2.26-2.383.104 0 .204.01.306.022A9.957 9.957 0 0012 3.5c-3.766 0-7.067 2.09-8.79 5.204l5.748 16.717c.64-1.87 1.312-4.54 1.312-6.657 0-1.657-.597-2.808-1.11-3.71-.682-1.11-1.32-2.046-1.32-3.155 0-1.233.937-2.383 2.26-2.383zM12 22a9.96 9.96 0 005.161-1.425l-5.07-14.73-5.26 14.797A9.97 9.97 0 0012 22z"/>
+        </svg>
+      ),
+    },
+    {
+      value: "meta",
+      label: "Meta (FB & IG) Lead Ads",
+      icon: (
+        <svg className="size-4 shrink-0" viewBox="0 0 24 24" fill="#0081FB">
+          <path d="M16.96 4C14.74 4 13.06 5.21 12 6.55 10.94 5.21 9.26 4 7.04 4 3.15 4 0 7.22 0 11.23c0 4.88 4.25 9.07 10.63 11.13.88.29 1.86.29 2.74 0C19.75 20.3 24 16.11 24 11.23 24 7.22 20.85 4 16.96 4zm-9.92 9.77c-2.06 0-3.68-1.59-3.68-3.54 0-1.96 1.62-3.55 3.68-3.55 1.51 0 2.59.88 3.32 1.89-1.23 1.58-2.36 3.49-3.32 5.2zm9.92 0c-.96-1.71-2.09-3.62-3.32-5.2.73-1.01 1.81-1.89 3.32-1.89 2.06 0 3.68 1.59 3.68 3.55 0 1.95-1.62 3.54-3.68 3.54z"/>
+        </svg>
+      ),
+    },
+    {
+      value: "webflow",
+      label: "Webflow Forms",
+      icon: (
+        <svg className="size-4 shrink-0" viewBox="0 0 24 24" fill="#146EF5">
+          <path d="M17.8 7.2c-.3 0-.6.1-.8.4L13.7 13l-2.4-7.8c-.1-.3-.4-.5-.7-.5s-.6.2-.7.5L6.6 15.9 4.3 8.3c-.1-.3-.4-.5-.7-.5H1.4c-.4 0-.7.4-.6.8l3.6 11.9c.1.3.4.5.7.5h2.8c.3 0 .6-.2.7-.5l3.2-9.6 3.2 9.6c.1.3.4.5.7.5h2.8c.3 0 .6-.2.7-.5l4.8-12.7c.1-.4-.2-.8-.6-.8h-1.9z"/>
+        </svg>
+      ),
+    },
+    {
+      value: "html",
+      label: "Custom HTML / Code Embed",
+      icon: <Code2 className="size-4 text-emerald-400 shrink-0" />,
+    },
+  ];
 
   const copyToClipboard = (text: string, key: string) => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -871,18 +1041,21 @@ function SettingsPage() {
     setIsTestingInbound(true);
     setTestInboundResult(null);
     try {
-      const county = profileForm.targetZipCodes ? `${profileForm.targetZipCodes.split(',')[0].trim()} CAD` : "Travis County";
+      const parsedCity = profileForm.businessAddress ? profileForm.businessAddress.split(',')[0]?.trim() : "";
+      const parsedRegion = profileForm.businessAddress ? (profileForm.businessAddress.split(',')[1]?.trim() || parsedCity) : "Local Region";
+      const county = parsedRegion || (profileForm.targetZipCodes ? profileForm.targetZipCodes.split(',')[0].trim() : "Local Region");
+      const state = profileForm.businessAddress ? (profileForm.businessAddress.split(',')[2]?.trim()?.slice(0, 2)?.toUpperCase() || "US") : "US";
       const res = await addManualLead({
         data: {
           name: "Harrison Vance (Test Inbound Lead)",
           email: `inbound.buyer.${Date.now().toString().slice(-4)}@example.com`,
-          phone: "+1 (512) 555-0199",
+          phone: "+1 (555) 019-9234",
           county,
-          state: "TX",
+          state,
           estimatedBudget: 2200000,
           source: `${inboundTab.toUpperCase()} Inbound Lead Hub`,
           scoreTier: "Hot",
-          notes: "Looking for a 4,800 sqft modern architectural estate in Westlake. Lot survey already completed. Requesting architectural consultation.",
+          notes: `Inquiring about building a 4,800 sqft modern custom residence in ${county}. Lot survey already completed. Requesting consultation with ${profileForm.companyName || 'your design team'}.`,
         }
       });
 
@@ -912,50 +1085,28 @@ function SettingsPage() {
   };
 
   const integrationsList = [
-    // {
-    //   id: "google",
-    //   name: "Google Business Reviews API",
-    //   desc: "Monitor Google Reviews in real-time, generate keyword-rich responses, and publish instantly.",
-    //   icon: "G",
-    //   fields: [
-    //     { key: "clientId", label: "Google OAuth Client ID", type: "text", required: true, placeholder: "e.g. oauth-client.apps.googleusercontent.com" },
-    //     { key: "clientSecret", label: "OAuth Client Secret", type: "password", required: true, placeholder: "Enter client secret key" },
-    //     { key: "locationId", label: "Google Location ID", type: "text", required: true, placeholder: "e.g. accounts/12345/locations/67890" }
-    //   ]
     {
       id: "hubspot",
       name: "HubSpot CRM Sync",
       desc: "Sync qualified builder leads, custom timelines, and budgets directly into your HubSpot deal pipelines.",
-      icon: "H",
+      icon: (
+        <svg className="size-5 shrink-0" viewBox="0 0 24 24" fill="#FF7A59">
+          <path d="M17.8 8.15V5.98a2.15 2.15 0 1 0-2.15 2.15v.02h-.03a5.5 5.5 0 0 0-2.92 1.48L7.6 6.33a2.15 2.15 0 1 0-1.42 1.63l5.05 3.26a5.55 5.55 0 0 0-.23 1.58c0 .55.08 1.08.23 1.58l-5.05 3.26a2.15 2.15 0 1 0 1.42 1.63l5.1-3.3a5.5 5.5 0 0 0 2.92 1.48v.02a2.15 2.15 0 1 0 2.15 2.15v-2.17a5.53 5.53 0 0 0 3.7-5.23 5.53 5.53 0 0 0-3.67-5.22zm-7.3 6.65a2.8 2.8 0 1 1 0-5.6 2.8 2.8 0 0 1 0 5.6z"/>
+        </svg>
+      ),
       fields: [
         { key: "accessToken", label: "Private App Access Token", type: "password", required: true, placeholder: "e.g. pat-na1-xxxxxxxxxxxxxxxxxxxx", colSpan: 2 }
       ]
     },
-    // {
-    //   id: "houzz",
-    //   name: "Houzz Professional Reviews",
-    //   desc: "Automatically route Houzz 5-Star reviews to boost local visibility and organic Houzz profile rank.",
-    //   icon: "Hz",
-    //   fields: [
-    //     { key: "apiKey", label: "Houzz Partner API Key", type: "password", required: true, placeholder: "Enter Partner API Key" },
-    //     { key: "profileUrl", label: "Houzz Profile URL", type: "text", required: true, placeholder: "e.g. houzz.com/pro/yourcompany" }
-    //   ]
-    // },
-    // {
-    //   id: "facebook",
-    //   name: "Facebook Page & Recommendations API",
-    //   desc: "Sync Facebook client reviews, recommendations, and local check-in mentions to our dashboard.",
-    //   icon: "F",
-    //   fields: [
-    //     { key: "pageId", label: "Facebook Page ID", type: "text", required: true, placeholder: "e.g. 102459806497" },
-    //     { key: "accessToken", label: "Page Access Token", type: "password", required: true, placeholder: "Enter Page Access Token", colSpan: 2 }
-    //   ]
-    // },
     {
       id: "ghl",
       name: "GoHighLevel (GHL) Sync",
       desc: "Sync contacts, pipeline stages, and AI conversation actions directly inside GHL sub-accounts.",
-      icon: "GHL",
+      icon: (
+        <div className="size-6 rounded bg-gradient-to-br from-[#1E60FF] to-[#0A47D4] flex items-center justify-center text-white font-black text-[9px] tracking-tight shrink-0 shadow-sm">
+          GHL
+        </div>
+      ),
       fields: [
         { key: "apiKey", label: "GHL Location API Key (v2)", type: "password", required: true, placeholder: "Enter GHL Location API Key", colSpan: 2 }
       ]
@@ -969,17 +1120,23 @@ function SettingsPage() {
           {availableSections.map((s) => (
             <button
               key={s}
-              onClick={() => setActive(s)}
-              className={`block w-full text-left px-3 py-2 rounded-md text-sm ${active === s ? "bg-secondary text-foreground border-l-2 border-primary" : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground"}`}
+              onClick={() => handleSelectTab(s)}
+              className={`block w-full text-left px-3 py-2 rounded-md text-sm cursor-pointer ${active === s ? "bg-secondary text-foreground border-l-2 border-primary" : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground"}`}
             >
               {s}
             </button>
           ))}
         </nav>
 
-        <Card className="p-6 max-w-2xl w-full">
+        <Card
+          className={`p-6 max-w-2xl w-full transition-all duration-700 ${
+            highlightSection === "profile"
+              ? "border-[#e5d9c5] ring-2 ring-[#e5d9c5] shadow-[0_0_35px_rgba(229,217,197,0.35)]"
+              : ""
+          }`}
+        >
           {active === "Builder Profile" && (
-            <div className="space-y-4">
+            <div id="activation-profile-section" className="space-y-4">
               <H>Builder Profile</H>
               <Row label="Company Organization">
                 <div className="flex items-center justify-between w-full bg-secondary/60 border border-border rounded-md px-3 py-2 text-sm text-foreground select-none">
@@ -1020,17 +1177,31 @@ function SettingsPage() {
                 </Row>
                 
                 <div className="mt-4 flex flex-col gap-1.5">
-                  <label className="text-xs font-semibold text-foreground uppercase tracking-widest">
-                    AI Knowledge Base / Builder Defaults
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-foreground uppercase tracking-widest flex items-center gap-1">
+                      <span>AI Knowledge Base / Builder Defaults</span>
+                      <span className="text-red-500 font-bold">*</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setProfileForm(p => ({
+                        ...p,
+                        aiContext: p.aiContext && p.aiContext.trim().length > 10 ? p.aiContext : `Operating Hours: Monday–Friday 8:00 AM – 5:30 PM, Saturday by appointment.\nSpecialization: Luxury architectural custom homes, site-sensitive estate design, and complete modern transformations.\nConsultation Locations: Private design studio or virtual video conference.\nFeasibility: Complimentary zoning envelope, topography slope analysis, and utility verification for buyer parcels.\nPricing & Policy: Bespoke custom builds starting at regional luxury market standards. Detailed estimates provided post-architectural discovery.`
+                      }))}
+                      className="text-[11px] text-primary hover:underline font-medium transition-colors cursor-pointer"
+                    >
+                      + Insert Standard Builder Template
+                    </button>
+                  </div>
                   <textarea
                     value={profileForm.aiContext}
                     onChange={e => setProfileForm(p => ({ ...p, aiContext: e.target.value }))}
-                    placeholder="e.g. Office hours: Mon-Sat 9am-6pm. We specialize in luxury custom homes & modern architectural estates. Consultation locations: Office or virtual video call."
-                    className="w-full bg-[#0c0d12] border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-primary transition-colors text-white resize-y min-h-[100px]"
+                    placeholder="e.g. Office hours: Mon-Fri 8am-5pm. We specialize in luxury custom homes and architectural estates. Consultation locations: Studio or virtual video call. Feasibility: Complimentary slope and setback verification for buyer lots."
+                    className="w-full bg-[#141414] border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-primary transition-colors text-white resize-y min-h-[110px]"
+                    required
                   />
                   <p className="text-[10px] text-muted-foreground">
-                    Provide default operating hours, meeting locations, or policies. The AI will use this context when answering leads and booking appointments.
+                    The autonomous AI concierge quotes strictly from this context when conversing with leads and booking consultations. Prevents misinformation and regional assumptions.
                   </p>
                 </div>
               </div>
@@ -1056,7 +1227,7 @@ function SettingsPage() {
           {active === "Appearance" && (
             <div className="space-y-4">
               <H>Appearance</H>
-              <div className="bg-[#0a0a0a] border border-[#333] rounded-md p-6">
+              <div className="bg-card border border-border rounded-xl p-6 shadow-xs">
                 <label className="block text-sm font-medium text-muted-foreground mb-4">Theme Preference</label>
                 <div className="flex items-center gap-3">
                   <button
@@ -1064,7 +1235,7 @@ function SettingsPage() {
                     className={`px-4 py-2 rounded-md text-sm font-medium transition-colors border ${
                       theme === "light" 
                         ? "bg-white text-black border-white" 
-                        : "bg-transparent text-muted-foreground border-[#333] hover:text-white"
+                        : "bg-transparent text-muted-foreground border-border hover:text-white"
                     }`}
                   >
                     Light
@@ -1074,7 +1245,7 @@ function SettingsPage() {
                     className={`px-4 py-2 rounded-md text-sm font-medium transition-colors border ${
                       theme === "dark" 
                         ? "bg-white text-black border-white" 
-                        : "bg-transparent text-muted-foreground border-[#333] hover:text-white"
+                        : "bg-transparent text-muted-foreground border-border hover:text-white"
                     }`}
                   >
                     Dark
@@ -1084,7 +1255,7 @@ function SettingsPage() {
                     className={`px-4 py-2 rounded-md text-sm font-medium transition-colors border ${
                       theme === "system" 
                         ? "bg-white text-black border-white" 
-                        : "bg-transparent text-muted-foreground border-[#333] hover:text-white"
+                        : "bg-transparent text-muted-foreground border-border hover:text-white"
                     }`}
                   >
                     System
@@ -1132,12 +1303,12 @@ function SettingsPage() {
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-foreground truncate">Inbound Lead Ingestion</span>
+                        <span className="text-sm font-medium text-foreground">Inbound Lead Ingestion</span>
                         <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-primary/20 text-primary border border-primary/30 uppercase tracking-wider">
                           Auto Ingest
                         </span>
                       </div>
-                      <div className="text-xs text-muted-foreground mt-0.5 truncate">
+                      <div className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
                         Directly capture inquiries from your website forms, Meta ads, or Zapier into your autonomous pipeline.
                       </div>
                     </div>
@@ -1147,291 +1318,266 @@ function SettingsPage() {
                     <span className="text-[10px] uppercase font-mono tracking-widest px-2 py-0.5 rounded bg-success/10 text-success">
                       Active
                     </span>
-
-                    <button
-                      type="button"
-                      onClick={handleSendTestLead}
-                      disabled={isTestingInbound}
-                      className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-border bg-secondary hover:bg-secondary/80 text-xs font-medium text-foreground transition-colors cursor-pointer disabled:opacity-50"
-                      title="Send a sample high-ticket lead to test your pipeline"
-                    >
-                      {isTestingInbound ? (
-                        <>
-                          <Loader2 className="size-3 animate-spin" />
-                          <span>Testing...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Send className="size-3 text-primary" />
-                          <span>Test Lead</span>
-                        </>
-                      )}
-                    </button>
-
                     <button
                       type="button"
                       onClick={() => setIsInboundExpanded(!isInboundExpanded)}
-                      className="text-xs px-3 py-1.5 rounded border border-border text-foreground hover:bg-secondary transition-colors cursor-pointer flex items-center gap-1"
+                      className="text-xs px-3 py-1.5 rounded border border-border text-foreground hover:bg-secondary transition-colors cursor-pointer"
                     >
-                      <span>{isInboundExpanded ? "Close" : "Configure"}</span>
-                      <ChevronDown className={`size-3.5 transition-transform duration-200 ${isInboundExpanded ? "rotate-180" : ""}`} />
+                      {isInboundExpanded ? "Close" : "Configure"}
                     </button>
                   </div>
                 </div>
 
                 {isInboundExpanded && (
-                  <div className="p-5 border-t border-border/40 bg-card space-y-5 animate-in slide-in-from-top-2 duration-150">
-                    {/* Mobile Test Button */}
-                    <div className="sm:hidden flex justify-end">
-                      <button
-                        type="button"
-                        onClick={handleSendTestLead}
-                        disabled={isTestingInbound}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-primary text-black text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
-                      >
-                        {isTestingInbound ? (
-                          <>
-                            <Loader2 className="size-3 animate-spin" />
-                            <span>Ingesting Test Lead...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Send className="size-3" />
-                            <span>Send Test Inbound Lead</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
+                  <div className="p-5 border-t border-border/40 bg-card space-y-4 animate-in slide-in-from-top-2 duration-150">
+                    <div className="p-4 sm:p-5 rounded-xl border border-border/70 bg-secondary/15 dark:bg-neutral-900/40 space-y-3.5 animate-in fade-in duration-150">
 
-                    {/* Test Inbound Result Banner */}
-                    {testInboundResult && (
-                      <div className={`p-3 rounded-xl border flex items-center justify-between text-xs animate-in fade-in slide-in-from-top-1 ${
-                        testInboundResult.success
-                          ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 font-medium"
-                          : "bg-red-500/10 border-red-500/30 text-red-400"
-                      }`}>
-                        <div className="flex items-center gap-2 min-w-0">
-                          {testInboundResult.success ? (
-                            <CheckCircle className="size-4 text-emerald-400 shrink-0" />
-                          ) : (
-                            <AlertCircle className="size-4 text-red-400 shrink-0" />
-                          )}
-                          <span className="truncate">{testInboundResult.message}</span>
+                      {/* Row 1: Icon & Title */}
+                      <div className="flex items-center gap-3">
+                        <div className="size-9 rounded-lg bg-card border border-border flex items-center justify-center shrink-0 shadow-sm">
+                          <Globe className="size-4.5 text-[#c9a84c] dark:text-[#e5d9c5]" />
                         </div>
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span className="text-sm font-semibold text-foreground whitespace-nowrap">
+                            Inbound Webhook Endpoint
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Row 2: Subtitle / Description */}
+                      <div className="text-xs text-muted-foreground">
+                        Accepts JSON & form-encoded payloads from any lead source
+                      </div>
+
+                      {/* Row 3: Action Buttons (Show URL, Copy URL, Test Lead) */}
+                      <div className="flex items-center gap-2 flex-wrap pt-0.5">
                         <button
                           type="button"
-                          onClick={() => setTestInboundResult(null)}
-                          className="p-1 hover:bg-white/10 rounded text-muted-foreground hover:text-white cursor-pointer"
+                          onClick={() => setShowWebhookUrl(!showWebhookUrl)}
+                          className="text-xs px-3 py-1.5 rounded-lg border border-border bg-card text-foreground hover:bg-secondary transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm font-medium"
+                          title={showWebhookUrl ? "Hide full URL" : "Show full URL"}
                         >
-                          <X className="size-3.5" />
+                          {showWebhookUrl ? <EyeOff className="size-3 text-muted-foreground" /> : <Eye className="size-3 text-primary" />}
+                          <span>{showWebhookUrl ? "Hide URL" : "Show URL"}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(inboundWebhookUrl, "webhook_url")}
+                          className="text-xs px-3 py-1.5 rounded-lg border border-border bg-card text-foreground hover:bg-secondary transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm font-medium"
+                          title="Copy webhook URL to clipboard"
+                        >
+                          {copiedKey === "webhook_url" ? (
+                            <>
+                              <Check className="size-3 text-emerald-400" />
+                              <span className="text-emerald-400">Copied!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="size-3 text-foreground" />
+                              <span>Copy URL</span>
+                            </>
+                          )}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleSendTestLead}
+                          disabled={isTestingInbound}
+                          className="text-xs px-3 py-1.5 rounded-lg border border-border bg-card text-foreground hover:bg-secondary transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50 shadow-sm font-medium"
+                          title="Send sample qualified lead"
+                        >
+                          {isTestingInbound ? (
+                            <>
+                              <Loader2 className="size-3 animate-spin" />
+                              <span>Testing...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Send className="size-3 text-primary" />
+                              <span>Test Lead</span>
+                            </>
+                          )}
                         </button>
                       </div>
-                    )}
 
-                    {/* Master Webhook URL Box (Clean & Collapsible) */}
-                    <div className="p-3.5 sm:p-4 rounded-xl bg-[#06070a] border border-border/80 space-y-3">
-                      <div className="flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[11px] font-mono text-muted-foreground uppercase font-semibold tracking-wider flex items-center gap-1.5">
-                            <Globe className="size-3.5 text-primary" />
-                            <span>Inbound Webhook Endpoint (POST)</span>
-                          </span>
-                          <span className="text-[10px] font-mono text-emerald-400 hidden sm:inline-flex items-center gap-1">
-                            <Check className="size-3" /> Ready
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setShowWebhookUrl(!showWebhookUrl)}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-secondary/60 hover:bg-secondary border border-border text-[11px] font-medium text-foreground transition-colors cursor-pointer"
-                            title={showWebhookUrl ? "Hide full webhook URL" : "Show full webhook URL"}
-                          >
-                            {showWebhookUrl ? (
-                              <>
-                                <EyeOff className="size-3.5 text-muted-foreground" />
-                                <span>Hide URL</span>
-                              </>
-                            ) : (
-                              <>
-                                <Eye className="size-3.5 text-primary" />
-                                <span>Show URL</span>
-                              </>
-                            )}
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => copyToClipboard(inboundWebhookUrl, "webhook_url")}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary hover:bg-secondary/80 border border-border text-[11px] font-medium text-foreground transition-colors shrink-0 cursor-pointer"
-                          >
-                            {copiedKey === "webhook_url" ? (
-                              <>
-                                <Check className="size-3.5 text-emerald-400" />
-                                <span className="text-emerald-400">Copied!</span>
-                              </>
-                            ) : (
-                              <>
-                                <Copy className="size-3.5" />
-                                <span>Copy URL</span>
-                              </>
-                            )}
-                          </button>
-                        </div>
-                      </div>
-
+                      {/* Visible URL Bar when toggled */}
                       {showWebhookUrl && (
-                        <div className="flex items-center gap-2 pt-1 animate-in fade-in slide-in-from-top-1 duration-150">
-                          <div className="flex-1 bg-secondary/30 border border-border rounded-lg px-3 py-2 text-xs font-mono text-foreground select-all overflow-x-auto whitespace-nowrap">
-                            {inboundWebhookUrl}
-                          </div>
+                        <div className="p-3 rounded-lg bg-[#101010] border border-border font-mono text-xs text-foreground select-all overflow-x-auto whitespace-nowrap animate-in fade-in duration-150">
+                          {inboundWebhookUrl}
                         </div>
                       )}
-                    </div>
 
-                    {/* Platform Tabs Selector */}
-                    <div className="space-y-3 pt-1">
-                      <label className="block text-[11px] text-muted-foreground uppercase tracking-wider font-semibold">
-                        Select Your Platform For Exact Step-by-Step Instructions:
-                      </label>
-
-                      <div className="flex flex-wrap gap-2">
-                        {[
-                          { id: "zapier", name: "⚡ Zapier Webhook (Easiest)", icon: "⚡" },
-                          { id: "make", name: "🟣 Make.com (Integromat)", icon: "🟣" },
-                          { id: "wordpress", name: "🟦 WordPress / Elementor", icon: "🟦" },
-                          { id: "meta", name: "📱 Meta (FB/IG) Lead Ads", icon: "📱" },
-                          { id: "webflow", name: "🌊 Webflow Forms", icon: "🌊" },
-                          { id: "html", name: "💻 Direct HTML / Custom Code", icon: "💻" },
-                        ].map((plat) => (
+                      {/* Test Inbound Result Banner */}
+                      {testInboundResult && (
+                        <div className={`p-3 rounded-xl border flex items-center justify-between text-xs animate-in fade-in slide-in-from-top-1 ${
+                          testInboundResult.success
+                            ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 font-medium"
+                            : "bg-red-500/10 border-red-500/30 text-red-400"
+                        }`}>
+                          <div className="flex items-center gap-2 min-w-0">
+                            {testInboundResult.success ? (
+                              <CheckCircle className="size-4 text-emerald-400 shrink-0" />
+                            ) : (
+                              <AlertCircle className="size-4 text-red-400 shrink-0" />
+                            )}
+                            <span className="truncate">{testInboundResult.message}</span>
+                          </div>
                           <button
-                            key={plat.id}
                             type="button"
-                            onClick={() => setInboundTab(plat.id as any)}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer ${
-                              inboundTab === plat.id
-                                ? "bg-primary text-black font-bold shadow-sm"
-                                : "bg-secondary/40 hover:bg-secondary border border-border/60 text-muted-foreground hover:text-foreground"
-                            }`}
+                            onClick={() => setTestInboundResult(null)}
+                            className="p-1 hover:bg-white/10 rounded text-muted-foreground hover:text-white cursor-pointer"
                           >
-                            <span>{plat.name}</span>
+                            <X className="size-3.5" />
                           </button>
-                        ))}
+                        </div>
+                      )}
+
+                      {/* Row 2: Platform Dropdown Selector */}
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">
+                          Platform Setup Guide
+                        </label>
+                        <CustomSelect
+                          value={inboundTab}
+                          onChange={(val) => setInboundTab(val as any)}
+                          options={inboundPlatformOptions}
+                          align="left"
+                        />
                       </div>
-                    </div>
 
-                    {/* Active Platform Guide Box */}
-                    <div className="p-4 rounded-xl bg-[#06070a] border border-border/80 space-y-3">
-                      {inboundTab === "zapier" && (
-                        <div className="space-y-2.5">
-                          <div className="flex items-center justify-between border-b border-border/40 pb-2.5">
-                            <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
-                              <span>⚡ Connecting via Zapier Webhooks</span>
-                            </h4>
-                            <span className="text-[10px] font-mono text-muted-foreground">3-Step Setup</span>
+                      {/* Row 3: Setup Instructions Box */}
+                      <div className="p-4 rounded-xl bg-[#101010] border border-border/80 space-y-3">
+                        {inboundTab === "zapier" && (
+                          <div className="space-y-2.5">
+                            <div className="flex items-center justify-between border-b border-border/40 pb-2">
+                              <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
+                                <svg className="size-4 shrink-0" viewBox="0 0 24 24">
+                                  <rect width="24" height="24" rx="5" fill="#FF4F00" />
+                                  <path d="M11 5h2v6h5v2h-5v6h-2v-6H6v-2h5V5z" fill="#FFF" />
+                                  <path d="M7.4 6.6l1.4-1.4 8.5 8.5-1.4 1.4L7.4 6.6zm9.9 1.4l-1.4-1.4-8.5 8.5 1.4 1.4 8.5-8.5z" fill="#FFF" />
+                                </svg>
+                                <span>Zapier Webhook Setup</span>
+                              </h4>
+                              <span className="text-[10px] font-mono text-muted-foreground">3-Step Setup</span>
+                            </div>
+                            <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal pl-4 leading-relaxed">
+                              <li>In Zapier, create a new Zap and choose your trigger app (e.g. Typeform, Google Forms, Calendly, or Lead Ads).</li>
+                              <li>Add an Action: choose <strong className="text-foreground">"Webhooks by Zapier"</strong> &rarr; Event: <strong className="text-foreground">"Custom Request"</strong> (or <strong className="text-foreground">POST</strong>).</li>
+                              <li>Paste your WeaverFrame Webhook URL into <code className="text-foreground font-mono">URL</code>, select <code className="text-foreground font-mono">Payload Type: JSON</code>, and map fields: <code className="text-foreground font-mono">name</code>, <code className="text-foreground font-mono">email</code>, <code className="text-foreground font-mono">phone</code>, <code className="text-foreground font-mono">estimatedBudget</code>, <code className="text-foreground font-mono">county</code>, <code className="text-foreground font-mono">message</code>.</li>
+                            </ol>
                           </div>
-                          <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal pl-4 leading-relaxed">
-                            <li>In Zapier, create a new Zap and set your Trigger to any app (e.g. Google Forms, Calendly, Typeform).</li>
-                            <li>For Action, select <strong className="text-foreground">"Webhooks by Zapier"</strong> &rarr; Event: <strong className="text-foreground">"Custom Request"</strong> (or <strong className="text-foreground">POST</strong>).</li>
-                            <li>Paste your Unique Webhook URL in the <code className="text-foreground font-mono">URL</code> field, set <code className="text-foreground font-mono">Payload Type: JSON</code>, and map fields like <code className="text-foreground font-mono">name</code>, <code className="text-foreground font-mono">email</code>, <code className="text-foreground font-mono">phone</code>, <code className="text-foreground font-mono">estimatedBudget</code>.</li>
-                          </ol>
-                        </div>
-                      )}
+                        )}
 
-                      {inboundTab === "make" && (
-                        <div className="space-y-2.5">
-                          <div className="flex items-center justify-between border-b border-border/40 pb-2.5">
-                            <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
-                              <span>🟣 Connecting via Make.com (Integromat)</span>
-                            </h4>
-                            <span className="text-[10px] font-mono text-muted-foreground">HTTP Module</span>
+                        {inboundTab === "make" && (
+                          <div className="space-y-2.5">
+                            <div className="flex items-center justify-between border-b border-border/40 pb-2">
+                              <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
+                                <svg className="size-4 shrink-0" viewBox="0 0 24 24">
+                                  <rect width="24" height="24" rx="5" fill="#6E00F5" />
+                                  <path d="M5.5 8.5L9.5 5.5L13.5 8.5L9.5 11.5L5.5 8.5Z" fill="#FFF" />
+                                  <path d="M10.5 12.5L14.5 9.5L18.5 12.5L14.5 15.5L10.5 12.5Z" fill="#FFF" opacity="0.9"/>
+                                  <path d="M5.5 15.5L9.5 12.5L13.5 15.5L9.5 18.5L5.5 15.5Z" fill="#FFF" opacity="0.75"/>
+                                </svg>
+                                <span>Make.com (Integromat) Setup</span>
+                              </h4>
+                              <span className="text-[10px] font-mono text-muted-foreground">HTTP Module</span>
+                            </div>
+                            <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal pl-4 leading-relaxed">
+                              <li>Add an <strong className="text-foreground">"HTTP &rarr; Make a request"</strong> module at the end of your Make scenario.</li>
+                              <li>Set URL to your WeaverFrame Webhook URL, and Method to <strong className="text-foreground">POST</strong>.</li>
+                              <li>Set Body type to <strong className="text-foreground">Raw</strong> and Content type to <strong className="text-foreground">JSON (application/json)</strong>. Map your lead variables in the JSON body.</li>
+                            </ol>
                           </div>
-                          <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal pl-4 leading-relaxed">
-                            <li>Add an <strong className="text-foreground">"HTTP &rarr; Make a request"</strong> module at the end of your scenario.</li>
-                            <li>Set URL to your WeaverFrame Inbound Webhook URL.</li>
-                            <li>Method: <strong className="text-foreground">POST</strong>, Body type: <strong className="text-foreground">Raw (JSON)</strong>. Map your lead variables in the JSON body.</li>
-                          </ol>
-                        </div>
-                      )}
+                        )}
 
-                      {inboundTab === "wordpress" && (
-                        <div className="space-y-2.5">
-                          <div className="flex items-center justify-between border-b border-border/40 pb-2.5">
-                            <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
-                              <span>🟦 WordPress (Elementor Pro / WPForms / Gravity)</span>
-                            </h4>
-                            <span className="text-[10px] font-mono text-muted-foreground">Form Actions</span>
+                        {inboundTab === "wordpress" && (
+                          <div className="space-y-2.5">
+                            <div className="flex items-center justify-between border-b border-border/40 pb-2">
+                              <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
+                                <svg className="size-4 shrink-0" viewBox="0 0 24 24" fill="#21759B">
+                                  <path d="M12 2C6.486 2 2 6.486 2 12c0 4.418 2.865 8.167 6.839 9.49L4.47 8.358C5.83 5.46 8.7 3.5 12 3.5c1.68 0 3.25.503 4.568 1.368L12 2zm8.53 10c0-1.657-.597-2.808-1.11-3.71-.682-1.11-1.32-2.046-1.32-3.155 0-1.233.937-2.383 2.26-2.383.104 0 .204.01.306.022A9.957 9.957 0 0012 3.5c-3.766 0-7.067 2.09-8.79 5.204l5.748 16.717c.64-1.87 1.312-4.54 1.312-6.657 0-1.657-.597-2.808-1.11-3.71-.682-1.11-1.32-2.046-1.32-3.155 0-1.233.937-2.383 2.26-2.383zM12 22a9.96 9.96 0 005.161-1.425l-5.07-14.73-5.26 14.797A9.97 9.97 0 0012 22z"/>
+                                </svg>
+                                <span>WordPress (Elementor Pro / WPForms / Gravity)</span>
+                              </h4>
+                              <span className="text-[10px] font-mono text-muted-foreground">Native Form Webhooks</span>
+                            </div>
+                            <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal pl-4 leading-relaxed">
+                              <li>In Elementor Pro Form settings, open <strong className="text-foreground">"Actions After Submit"</strong> and add <strong className="text-foreground">"Webhook"</strong> (or use WPForms / Gravity Forms Webhook addon).</li>
+                              <li>Under the Webhook tab, paste your WeaverFrame Webhook URL.</li>
+                              <li>Ensure your form field IDs or Shortcodes match: <code className="text-foreground font-mono">name</code>, <code className="text-foreground font-mono">email</code>, <code className="text-foreground font-mono">phone</code>, <code className="text-foreground font-mono">estimatedBudget</code>, and <code className="text-foreground font-mono">county</code>.</li>
+                            </ol>
                           </div>
-                          <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal pl-4 leading-relaxed">
-                            <li>In your WordPress Form builder (Elementor Form, WPForms Webhooks addon, or Gravity Forms Webhooks), go to <strong className="text-foreground">"Actions After Submit"</strong>.</li>
-                            <li>Select <strong className="text-foreground">"Webhook"</strong> and paste your Webhook URL.</li>
-                            <li>Ensure field names or Shortcodes match <code className="text-foreground font-mono">name</code>, <code className="text-foreground font-mono">email</code>, <code className="text-foreground font-mono">phone</code>, and <code className="text-foreground font-mono">estimatedBudget</code>.</li>
-                          </ol>
-                        </div>
-                      )}
+                        )}
 
-                      {inboundTab === "meta" && (
-                        <div className="space-y-2.5">
-                          <div className="flex items-center justify-between border-b border-border/40 pb-2.5">
-                            <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
-                              <span>📱 Meta Lead Ads (Facebook & Instagram)</span>
-                            </h4>
-                            <span className="text-[10px] font-mono text-muted-foreground">Instant Lead Sync</span>
+                        {inboundTab === "meta" && (
+                          <div className="space-y-2.5">
+                            <div className="flex items-center justify-between border-b border-border/40 pb-2">
+                              <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
+                                <svg className="size-4 shrink-0" viewBox="0 0 24 24" fill="#0081FB">
+                                  <path d="M16.96 4C14.74 4 13.06 5.21 12 6.55 10.94 5.21 9.26 4 7.04 4 3.15 4 0 7.22 0 11.23c0 4.88 4.25 9.07 10.63 11.13.88.29 1.86.29 2.74 0C19.75 20.3 24 16.11 24 11.23 24 7.22 20.85 4 16.96 4zm-9.92 9.77c-2.06 0-3.68-1.59-3.68-3.54 0-1.96 1.62-3.55 3.68-3.55 1.51 0 2.59.88 3.32 1.89-1.23 1.58-2.36 3.49-3.32 5.2zm9.92 0c-.96-1.71-2.09-3.62-3.32-5.2.73-1.01 1.81-1.89 3.32-1.89 2.06 0 3.68 1.59 3.68 3.55 0 1.95-1.62 3.54-3.68 3.54z"/>
+                                </svg>
+                                <span>Meta Lead Ads (Facebook & Instagram)</span>
+                              </h4>
+                              <span className="text-[10px] font-mono text-muted-foreground">Instant Lead Sync</span>
+                            </div>
+                            <p className="text-xs text-muted-foreground leading-relaxed">
+                              Connect Meta Lead Ads directly to your WeaverFrame webhook using Zapier's free <strong className="text-foreground">Facebook Lead Ads</strong> trigger or directly subscribe via Meta Graph Webhooks (our endpoint automatically satisfies the Meta <code className="text-foreground font-mono">hub.challenge</code> handshake). When a buyer submits an ad form on Instagram or Facebook, WeaverFrame ingests the lead in &lt;1 second, auto-forwards to your CRMs, and triggers autonomous AI follow-up!
+                            </p>
                           </div>
-                          <p className="text-xs text-muted-foreground leading-relaxed">
-                            Connect Meta Lead Ads directly to your WeaverFrame webhook using Zapier's free <strong className="text-foreground">Facebook Lead Ads</strong> integration or Make.com. Whenever a prospect submits an ad form on Instagram or Facebook, WeaverFrame ingests the lead in under 1 second and immediately sends the personalized AI introductory email!
-                          </p>
-                        </div>
-                      )}
+                        )}
 
-                      {inboundTab === "webflow" && (
-                        <div className="space-y-2.5">
-                          <div className="flex items-center justify-between border-b border-border/40 pb-2.5">
-                            <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
-                              <span>🌊 Webflow Forms Webhook</span>
-                            </h4>
-                            <span className="text-[10px] font-mono text-muted-foreground">Project Settings</span>
+                        {inboundTab === "webflow" && (
+                          <div className="space-y-2.5">
+                            <div className="flex items-center justify-between border-b border-border/40 pb-2">
+                              <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
+                                <svg className="size-4 shrink-0" viewBox="0 0 24 24" fill="#146EF5">
+                                  <path d="M17.8 7.2c-.3 0-.6.1-.8.4L13.7 13l-2.4-7.8c-.1-.3-.4-.5-.7-.5s-.6.2-.7.5L6.6 15.9 4.3 8.3c-.1-.3-.4-.5-.7-.5H1.4c-.4 0-.7.4-.6.8l3.6 11.9c.1.3.4.5.7.5h2.8c.3 0 .6-.2.7-.5l3.2-9.6 3.2 9.6c.1.3.4.5.7.5h2.8c.3 0 .6-.2.7-.5l4.8-12.7c.1-.4-.2-.8-.6-.8h-1.9z"/>
+                                </svg>
+                                <span>Webflow Forms Webhook</span>
+                              </h4>
+                              <span className="text-[10px] font-mono text-muted-foreground">Project Settings</span>
+                            </div>
+                            <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal pl-4 leading-relaxed">
+                              <li>In your Webflow project, go to <strong className="text-foreground">Project Settings &rarr; Integrations &rarr; Webhooks</strong>.</li>
+                              <li>Click <strong className="text-foreground">"Add Webhook"</strong>, select Trigger: <strong className="text-foreground">"Form Submission"</strong>.</li>
+                              <li>Paste your WeaverFrame Webhook URL and click <strong className="text-foreground">Add Webhook</strong>. All website submissions will instantly flow into WeaverFrame!</li>
+                            </ol>
                           </div>
-                          <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal pl-4 leading-relaxed">
-                            <li>In Webflow, navigate to <strong className="text-foreground">Project Settings &rarr; Integrations &rarr; Webhooks</strong>.</li>
-                            <li>Click <strong className="text-foreground">"Add Webhook"</strong>, select Trigger: <strong className="text-foreground">"Form Submission"</strong>.</li>
-                            <li>Paste your Unique Webhook URL and click Save!</li>
-                          </ol>
-                        </div>
-                      )}
+                        )}
 
-                      {inboundTab === "html" && (
-                        <div className="space-y-2.5">
-                          <div className="flex items-center justify-between border-b border-border/40 pb-2.5">
-                            <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
-                              <span>💻 1-Line HTML Form / Embed Snippet</span>
-                            </h4>
-                            <span className="text-[10px] font-mono text-muted-foreground">Raw HTML / React</span>
-                          </div>
-                          <p className="text-xs text-muted-foreground leading-relaxed">
-                            Copy and paste this standard HTML consultation form into any custom website page:
-                          </p>
-                          <div className="space-y-1.5">
-                            <div className="flex items-center justify-between text-[11px]">
-                              <span className="font-mono text-muted-foreground">HTML Form Snippet:</span>
-                              <button
-                                type="button"
-                                onClick={() => copyToClipboard(`<form action="${inboundWebhookUrl}" method="POST">
+                        {inboundTab === "html" && (
+                          <div className="space-y-2.5">
+                            <div className="flex items-center justify-between border-b border-border/40 pb-2">
+                              <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
+                                <Code2 className="size-4 text-emerald-400 shrink-0" />
+                                <span>1-Line HTML Form / Embed Snippet</span>
+                              </h4>
+                              <span className="text-[10px] font-mono text-muted-foreground">Embed Anywhere</span>
+                            </div>
+                            <p className="text-xs text-muted-foreground leading-relaxed">
+                              Copy and paste this standard HTML consultation form into any custom website or landing page:
+                            </p>
+                            <div className="space-y-1.5">
+                              <div className="flex items-center justify-between text-[11px]">
+                                <span className="font-mono text-muted-foreground">HTML Form Snippet:</span>
+                                <button
+                                  type="button"
+                                  onClick={() => copyToClipboard(`<form action="${inboundWebhookUrl}" method="POST">
   <input type="text" name="name" placeholder="Your Full Name" required />
   <input type="email" name="email" placeholder="Your Email Address" required />
   <input type="tel" name="phone" placeholder="Phone Number" />
   <input type="number" name="estimatedBudget" placeholder="Target Budget (e.g. 1800000)" />
-  <input type="text" name="county" placeholder="County / Location (e.g. Travis County)" />
+  <input type="text" name="county" placeholder="County / Region (e.g. Palm Beach, Orange County, Westchester)" />
   <textarea name="message" placeholder="Describe your dream home vision..."></textarea>
   <button type="submit">Request Architectural Consultation</button>
 </form>`, "html_form")}
-                                className="text-primary hover:underline flex items-center gap-1 font-mono text-[10px] cursor-pointer"
-                              >
-                                {copiedKey === "html_form" ? "Copied HTML!" : "Copy HTML Snippet"}
-                              </button>
-                            </div>
-                            <pre className="p-3 rounded-lg bg-[#06070a] border border-border text-[11px] font-mono text-foreground/90 overflow-x-auto">
+                                  className="text-primary hover:underline flex items-center gap-1 font-mono text-[10px] cursor-pointer"
+                                >
+                                  {copiedKey === "html_form" ? "Copied HTML!" : "Copy HTML Snippet"}
+                                </button>
+                              </div>
+                              <pre className="p-3 rounded-lg bg-[#101010] border border-border text-[11px] font-mono text-foreground/90 overflow-x-auto">
 {`<form action="${inboundWebhookUrl}" method="POST">
   <input type="text" name="name" placeholder="Your Full Name" required />
   <input type="email" name="email" placeholder="Your Email Address" required />
@@ -1441,10 +1587,18 @@ function SettingsPage() {
   <textarea name="message" placeholder="Project details..."></textarea>
   <button type="submit">Submit Inquiry</button>
 </form>`}
-                            </pre>
+                              </pre>
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )}
+                      </div>
+
+                      {/* Row 4: Shorter Clean Status Line */}
+                      <div className="flex items-center gap-2 text-[11px] text-muted-foreground font-mono pt-3 border-t border-border/40">
+                        <CheckCircle2 className="size-3.5 text-emerald-500 shrink-0" />
+                        <span>Instant Webhook Ingestion • Auto-Forward to CRMs • Autonomous AI Replies Online</span>
+                      </div>
+
                     </div>
                   </div>
                 )}
@@ -1458,17 +1612,24 @@ function SettingsPage() {
                 </h4>
 
                 {/* ── EMAIL & MAILBOX CONNECTION (PRIMARY AI MAIL GATEWAY) ── */}
-                <div className="border border-border rounded-lg bg-secondary/10 overflow-hidden transition-all duration-150">
+                <div
+                  id="activation-mailbox-section"
+                  className={`border rounded-lg bg-secondary/10 overflow-hidden transition-all duration-700 ${
+                    highlightSection === "mailbox"
+                      ? "border-[#e5d9c5] ring-2 ring-[#e5d9c5] shadow-[0_0_35px_rgba(229,217,197,0.35)]"
+                      : "border-border"
+                  }`}
+                >
                   <div className="flex items-center justify-between p-4 bg-secondary/30">
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="size-9 rounded-md bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-foreground text-xs font-mono font-bold shrink-0">
                         <Mail className="size-4 text-[#c9a84c] dark:text-[#e5d9c5]" />
                       </div>
                       <div className="min-w-0">
-                        <div className="text-sm font-medium text-foreground truncate">
+                        <div className="text-sm font-medium text-foreground">
                           Company Email & Mailbox Gateway
                         </div>
-                        <div className="text-xs text-muted-foreground mt-0.5 truncate">
+                        <div className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
                           Send and receive AI lead conversations directly from your official company email.
                         </div>
                       </div>
@@ -1492,193 +1653,444 @@ function SettingsPage() {
 
                   {expandedIntegration === "email_mailbox" && (
                     <div className="p-5 border-t border-border/40 bg-card space-y-4 animate-in slide-in-from-top-2 duration-150">
-                      {/* Mail Provider Dropdown */}
-                      <div className="space-y-1.5">
-                        <label className="block text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">
-                          Mail Service Provider
-                        </label>
-                        <CustomSelect
-                          value={emailProvider}
-                          onChange={(val) => setEmailProvider(val as any)}
-                          options={[
-                            { value: "google", label: "Google Workspace / Gmail (@yourcompany.com)" },
-                            { value: "microsoft", label: "Microsoft 365 / Outlook (@yourcompany.com)" },
-                            { value: "custom_smtp", label: "Custom SMTP / IMAP Server (Private Host)" },
-                          ]}
-                        />
-                      </div>
+                      {isEmailConnected ? (
+                        /* ── ALREADY CONNECTED: SHOW ONLY HOW IT IS CONNECTED (NO CONFUSING FORM) ── */
+                        <div className="space-y-4">
+                          {credentials.email_mailbox?.provider === 'google_oauth' || credentials.email_mailbox?.provider === 'google' || (!credentials.email_mailbox?.password && (credentials.email_mailbox?.email || emailAddress)) ? (
+                            <div className="p-4 sm:p-5 rounded-xl border border-border/70 bg-secondary/15 dark:bg-neutral-900/40 space-y-3.5 animate-in fade-in duration-150">
+                              {/* Row 1: Google Icon, Google Workspace, Connected */}
+                              <div className="flex items-center gap-3">
+                                <div className="size-9 rounded-lg bg-card border border-border flex items-center justify-center shrink-0 shadow-sm">
+                                  <svg className="size-4.5 shrink-0" viewBox="0 0 24 24">
+                                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                                  </svg>
+                                </div>
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <span className="text-sm font-semibold text-foreground whitespace-nowrap">Google Workspace</span>
+                                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 font-medium shrink-0">
+                                    <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                    Connected
+                                  </span>
+                                </div>
+                              </div>
 
-                      {/* Form Fields Grid */}
-                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-4">
-                        {/* Connected Email Address */}
-                        <div className="sm:col-span-6 space-y-1.5">
-                          <label className="block text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">
-                            Company Mailbox Email <span className="text-danger">*</span>
-                          </label>
-                          <input
-                            type="email"
-                            value={emailAddress}
-                            onChange={e => setEmailAddress(e.target.value)}
-                            placeholder="e.g. alex@luxuryhomes.com"
-                            className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs text-foreground focus:outline-none focus:border-white/60 font-mono"
-                          />
+                              {/* Row 2: email */}
+                              <div className="text-xs text-muted-foreground font-mono select-all">
+                                {emailAddress || credentials.email_mailbox?.email || "Google Account Connected"}
+                              </div>
+
+                              {/* Row 3: Test Connection, Switch Account, Disconnect */}
+                              <div className="flex items-center gap-2 flex-wrap pt-0.5">
+                                <button
+                                  type="button"
+                                  onClick={handleTestEmail}
+                                  disabled={isTestingEmail}
+                                  className="text-xs px-3 py-1.5 rounded-lg border border-border bg-card text-foreground hover:bg-secondary transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50 shadow-sm font-medium"
+                                  title="Verify handshake with Google"
+                                >
+                                  {isTestingEmail ? <RefreshCw className="size-3 animate-spin" /> : <Zap className="size-3 text-[#c9a84c] dark:text-[#e5d9c5]" />}
+                                  <span>{isTestingEmail ? "Verifying..." : "Test Connection"}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleConnectGoogle}
+                                  disabled={isConnectingGoogle}
+                                  className="text-xs px-3 py-1.5 rounded-lg border border-border bg-card text-foreground hover:bg-secondary transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50 shadow-sm font-medium"
+                                  title="Switch or re-authorize Google account"
+                                >
+                                  <span>Switch Account</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setIsDisconnectModalOpen(true)}
+                                  disabled={isSaving.email_mailbox}
+                                  className="text-xs px-3 py-1.5 rounded-lg border border-danger/20 text-danger hover:bg-danger/10 transition-colors cursor-pointer disabled:opacity-50 shadow-sm font-medium"
+                                >
+                                  Disconnect
+                                </button>
+                              </div>
+
+                              {/* Row 4: Shorter status */}
+                              <div className="flex items-center gap-2 text-[11px] text-muted-foreground font-mono pt-3 border-t border-border/40">
+                                <CheckCircle2 className="size-3.5 text-emerald-500 shrink-0" />
+                                <span>Active 2-Way Sync • AI Replies Online</span>
+                              </div>
+                            </div>
+                          ) : credentials.email_mailbox?.provider === 'microsoft' ? (
+                            <div className="p-4 sm:p-5 rounded-xl border border-border/70 bg-secondary/20 dark:bg-neutral-900/40 space-y-3.5 animate-in fade-in duration-150">
+                              {/* Row 1: Microsoft Icon, Microsoft 365, Connected */}
+                              <div className="flex items-center gap-3">
+                                <div className="size-9 rounded-lg bg-card border border-border flex items-center justify-center shrink-0 shadow-sm">
+                                  <svg className="size-4.5 shrink-0" viewBox="0 0 24 24">
+                                    <path fill="#F25022" d="M1 1h10v10H1z"/>
+                                    <path fill="#7FBA00" d="M13 1h10v10H13z"/>
+                                    <path fill="#00A4EF" d="M1 13h10v10H1z"/>
+                                    <path fill="#FFB900" d="M13 13h10v10H13z"/>
+                                  </svg>
+                                </div>
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <span className="text-sm font-semibold text-foreground whitespace-nowrap">Microsoft 365</span>
+                                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 font-medium shrink-0">
+                                    <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                    Connected
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Row 2: email */}
+                              <div className="text-xs text-muted-foreground font-mono select-all">
+                                {emailAddress || credentials.email_mailbox?.email}
+                              </div>
+
+                              {/* Row 3: Test Connection, Disconnect */}
+                              <div className="flex items-center gap-2 flex-wrap pt-0.5">
+                                <button
+                                  type="button"
+                                  onClick={handleTestEmail}
+                                  disabled={isTestingEmail}
+                                  className="text-xs px-3 py-1.5 rounded-lg border border-border bg-card text-foreground hover:bg-secondary transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50 shadow-sm font-medium"
+                                >
+                                  {isTestingEmail ? <RefreshCw className="size-3 animate-spin" /> : <Zap className="size-3 text-[#c9a84c] dark:text-[#e5d9c5]" />}
+                                  <span>{isTestingEmail ? "Verifying..." : "Test Connection"}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setIsDisconnectModalOpen(true)}
+                                  disabled={isSaving.email_mailbox}
+                                  className="text-xs px-3 py-1.5 rounded-lg border border-danger/20 text-danger hover:bg-danger/10 transition-colors cursor-pointer disabled:opacity-50 shadow-sm font-medium"
+                                >
+                                  Disconnect
+                                </button>
+                              </div>
+
+                              {/* Row 4: Shorter status */}
+                              <div className="flex items-center gap-2 text-[11px] text-muted-foreground font-mono pt-3 border-t border-border/40">
+                                <CheckCircle2 className="size-3.5 text-emerald-500 shrink-0" />
+                                <span>Active 2-Way Sync • AI Replies Online</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="p-4 sm:p-5 rounded-xl border border-border/70 bg-secondary/20 dark:bg-neutral-900/40 space-y-3.5 animate-in fade-in duration-150">
+                              {/* Row 1: Server Icon, Custom SMTP / IMAP, Connected */}
+                              <div className="flex items-center gap-3">
+                                <div className="size-9 rounded-lg bg-card border border-border flex items-center justify-center shrink-0 shadow-sm text-primary">
+                                  <Server className="size-4.5" />
+                                </div>
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <span className="text-sm font-semibold text-foreground whitespace-nowrap">Custom SMTP / IMAP</span>
+                                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 font-medium shrink-0">
+                                    <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                    Connected
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Row 2: email */}
+                              <div className="text-xs text-muted-foreground font-mono select-all">
+                                {emailAddress || credentials.email_mailbox?.email} {smtpHost ? `(${smtpHost})` : ''}
+                              </div>
+
+                              {/* Row 3: Test Connection, Disconnect */}
+                              <div className="flex items-center gap-2 flex-wrap pt-0.5">
+                                <button
+                                  type="button"
+                                  onClick={handleTestEmail}
+                                  disabled={isTestingEmail}
+                                  className="text-xs px-3 py-1.5 rounded-lg border border-border bg-card text-foreground hover:bg-secondary transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50 shadow-sm font-medium"
+                                >
+                                  {isTestingEmail ? <RefreshCw className="size-3 animate-spin" /> : <Zap className="size-3 text-[#c9a84c] dark:text-[#e5d9c5]" />}
+                                  <span>{isTestingEmail ? "Verifying..." : "Test Connection"}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setIsDisconnectModalOpen(true)}
+                                  disabled={isSaving.email_mailbox}
+                                  className="text-xs px-3 py-1.5 rounded-lg border border-danger/20 text-danger hover:bg-danger/10 transition-colors cursor-pointer disabled:opacity-50 shadow-sm font-medium"
+                                >
+                                  Disconnect
+                                </button>
+                              </div>
+
+                              {/* Row 4: Shorter status */}
+                              <div className="flex items-center gap-2 text-[11px] text-muted-foreground font-mono pt-3 border-t border-border/40">
+                                <CheckCircle2 className="size-3.5 text-emerald-500 shrink-0" />
+                                <span>Active 2-Way Sync • AI Replies Online</span>
+                              </div>
+                            </div>
+                          )}
                         </div>
-
-                        {/* Sender Display Name */}
-                        <div className="sm:col-span-6 space-y-1.5">
-                          <label className="block text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">
-                            Sender Display Name
-                          </label>
-                          <input
-                            type="text"
-                            value={emailSenderName}
-                            onChange={e => setEmailSenderName(e.target.value)}
-                            placeholder="e.g. Alex | Luxury Homes Studio"
-                            className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs text-foreground focus:outline-none focus:border-white/60"
-                          />
-                        </div>
-
-                        {/* App Password / Access Secret */}
-                        {emailProvider !== "custom_smtp" ? (
-                          <div className="sm:col-span-12 space-y-1.5">
+                      ) : (
+                        /* ── DISCONNECTED: SHOW PROVIDER SELECTOR & ONBOARDING FLOW ── */
+                        <div className="space-y-4">
+                          {/* Mail Provider Dropdown */}
+                          <div className="space-y-1.5">
                             <label className="block text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">
-                              {emailProvider === "google" ? "Google Workspace App Password" : "Microsoft 365 App Password / Secret"} <span className="text-danger">*</span>
+                              Mail Service Provider
                             </label>
-                            <input
-                              type="password"
-                              value={emailPassword}
-                              onChange={e => setEmailPassword(e.target.value)}
-                              placeholder="Enter 16-character App Password (e.g. abcd efgh ijkl mnop)"
-                              className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-white/60"
+                            <CustomSelect
+                              value={emailProvider}
+                              onChange={(val) => setEmailProvider(val as any)}
+                              options={[
+                                {
+                                  value: "google",
+                                  label: "Google Workspace",
+                                  icon: (
+                                    <svg className="size-4 shrink-0" viewBox="0 0 24 24">
+                                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                                    </svg>
+                                  ),
+                                },
+                                {
+                                  value: "microsoft",
+                                  label: "Microsoft 365",
+                                  icon: (
+                                    <svg className="size-4 shrink-0" viewBox="0 0 24 24">
+                                      <path fill="#F25022" d="M1 1h10v10H1z"/>
+                                      <path fill="#7FBA00" d="M13 1h10v10H13z"/>
+                                      <path fill="#00A4EF" d="M1 13h10v10H1z"/>
+                                      <path fill="#FFB900" d="M13 13h10v10H13z"/>
+                                    </svg>
+                                  ),
+                                },
+                                {
+                                  value: "custom_smtp",
+                                  label: "Custom SMTP / IMAP Server",
+                                  icon: <Server className="size-4 shrink-0 text-muted-foreground" />,
+                                },
+                              ]}
                             />
-                            <p className="text-[10px] text-muted-foreground">
-                              {emailProvider === "google"
-                                ? "🔑 Generated in Google Account > Security > 2-Step Verification > App Passwords."
-                                : "🔑 Generated in Microsoft 365 Admin / Azure Security > App Registrations or App Passwords."}
-                            </p>
                           </div>
-                        ) : (
-                          <>
-                            <div className="sm:col-span-6 space-y-1.5">
-                              <label className="block text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">
-                                SMTP Server Host <span className="text-danger">*</span>
-                              </label>
-                              <input
-                                type="text"
-                                value={smtpHost}
-                                onChange={e => setSmtpHost(e.target.value)}
-                                placeholder="e.g. smtp.mailgun.org or mail.yourdomain.com"
-                                className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-white/60"
-                              />
-                            </div>
 
-                            <div className="sm:col-span-3 space-y-1.5">
-                              <label className="block text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">
-                                SMTP Port <span className="text-danger">*</span>
-                              </label>
-                              <input
-                                type="text"
-                                value={smtpPort}
-                                onChange={e => setSmtpPort(e.target.value)}
-                                placeholder="587"
-                                className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-white/60"
-                              />
-                            </div>
+                          {/* 1-Click Google Workspace OAuth (Default for Google) */}
+                          {emailProvider === "google" && !showManualGoogle ? (
+                            <div className="space-y-4">
+                              <div className="p-5 rounded-lg border border-border/60 bg-secondary/30 flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in duration-150">
+                                <div className="space-y-1 text-center sm:text-left">
+                                  <div className="flex items-center justify-center sm:justify-start gap-2.5">
+                                    <svg className="size-5 shrink-0" viewBox="0 0 24 24">
+                                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                                    </svg>
+                                    <span className="text-sm font-semibold text-foreground">Google Workspace Authorization</span>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground">
+                                    Connect your company Gmail or Google Workspace inbox securely with zero passwords or manual port setups.
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={handleConnectGoogle}
+                                  disabled={isConnectingGoogle}
+                                  className="inline-flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-md bg-white text-black hover:bg-neutral-100 font-semibold text-xs tracking-wide shadow-md transition-all shrink-0 cursor-pointer disabled:opacity-60"
+                                >
+                                  {isConnectingGoogle ? (
+                                    <>
+                                      <RefreshCw className="size-3.5 animate-spin text-black" />
+                                      <span>Connecting...</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <svg className="size-4" viewBox="0 0 24 24">
+                                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                                      </svg>
+                                      <span>Connect with Google</span>
+                                    </>
+                                  )}
+                                </button>
+                              </div>
 
-                            <div className="sm:col-span-3 space-y-1.5 flex flex-col justify-center pt-3">
-                              <label className="flex items-center gap-2 cursor-pointer text-xs text-foreground">
-                                <input
-                                  type="checkbox"
-                                  checked={useSsl}
-                                  onChange={e => setUseSsl(e.target.checked)}
-                                  className="size-4 accent-primary rounded"
-                                />
-                                <span>Use SSL (Port 465)</span>
-                              </label>
+                              <div className="flex justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() => setShowManualGoogle(true)}
+                                  className="text-[11px] text-muted-foreground hover:text-foreground underline transition-colors cursor-pointer"
+                                >
+                                  Advanced: Configure manually with 16-character App Password →
+                                </button>
+                              </div>
                             </div>
+                          ) : (
+                            /* Manual Credentials Form (Microsoft 365, Custom SMTP, or manual Google) */
+                            <div className="space-y-4">
+                              {emailProvider === "google" && showManualGoogle && (
+                                <div className="flex justify-between items-center pb-1">
+                                  <span className="text-[11px] text-muted-foreground">Configuring Google via manual App Password</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowManualGoogle(false)}
+                                    className="text-[11px] text-primary hover:underline transition-colors cursor-pointer"
+                                  >
+                                    ← Switch back to Google Workspace Authorization
+                                  </button>
+                                </div>
+                              )}
 
-                            <div className="sm:col-span-12 space-y-1.5">
-                              <label className="block text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">
-                                SMTP Password <span className="text-danger">*</span>
-                              </label>
-                              <input
-                                type="password"
-                                value={emailPassword}
-                                onChange={e => setEmailPassword(e.target.value)}
-                                placeholder="Enter SMTP password"
-                                className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-white/60"
-                              />
+                              <div className="grid grid-cols-1 sm:grid-cols-12 gap-4">
+                                {/* Connected Email Address */}
+                                <div className="sm:col-span-6 space-y-1.5">
+                                  <label className="block text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">
+                                    Company Mailbox Email <span className="text-danger">*</span>
+                                  </label>
+                                  <input
+                                    type="email"
+                                    value={emailAddress}
+                                    onChange={e => setEmailAddress(e.target.value)}
+                                    placeholder="e.g. contact@luxuryhomes.com"
+                                    className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs text-foreground focus:outline-none focus:border-white/60 font-mono"
+                                  />
+                                </div>
+
+                                {/* Sender Display Name */}
+                                <div className="sm:col-span-6 space-y-1.5">
+                                  <label className="block text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">
+                                    Sender Display Name
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={emailSenderName}
+                                    onChange={e => setEmailSenderName(e.target.value)}
+                                    placeholder="e.g. Alex | Luxury Homes Studio"
+                                    className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs text-foreground focus:outline-none focus:border-white/60"
+                                  />
+                                </div>
+
+                                {/* App Password / Access Secret */}
+                                {emailProvider !== "custom_smtp" ? (
+                                  <div className="sm:col-span-12 space-y-1.5">
+                                    <label className="block text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">
+                                      {emailProvider === "google" ? "Google Workspace App Password" : "Microsoft 365 App Password / Secret"} <span className="text-danger">*</span>
+                                    </label>
+                                    <input
+                                      type="password"
+                                      value={emailPassword}
+                                      onChange={e => setEmailPassword(e.target.value)}
+                                      placeholder="Enter 16-character App Password (e.g. abcd efgh ijkl mnop)"
+                                      className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-white/60"
+                                    />
+                                    <p className="text-[10px] text-muted-foreground">
+                                      {emailProvider === "google"
+                                        ? "🔑 Generated in Google Account > Security > 2-Step Verification > App Passwords."
+                                        : "🔑 Generated in Microsoft 365 Admin / Azure Security > App Registrations or App Passwords."}
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <div className="sm:col-span-6 space-y-1.5">
+                                      <label className="block text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">
+                                        SMTP Server Host <span className="text-danger">*</span>
+                                      </label>
+                                      <input
+                                        type="text"
+                                        value={smtpHost}
+                                        onChange={e => setSmtpHost(e.target.value)}
+                                        placeholder="e.g. smtp.mailgun.org or mail.yourdomain.com"
+                                        className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-white/60"
+                                      />
+                                    </div>
+
+                                    <div className="sm:col-span-3 space-y-1.5">
+                                      <label className="block text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">
+                                        SMTP Port <span className="text-danger">*</span>
+                                      </label>
+                                      <input
+                                        type="text"
+                                        value={smtpPort}
+                                        onChange={e => setSmtpPort(e.target.value)}
+                                        placeholder="587"
+                                        className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-white/60"
+                                      />
+                                    </div>
+
+                                    <div className="sm:col-span-3 space-y-1.5 flex flex-col justify-center pt-3">
+                                      <label className="flex items-center gap-2 cursor-pointer text-xs text-foreground">
+                                        <input
+                                          type="checkbox"
+                                          checked={useSsl}
+                                          onChange={e => setUseSsl(e.target.checked)}
+                                          className="size-4 accent-primary rounded"
+                                        />
+                                        <span>Use SSL (Port 465)</span>
+                                      </label>
+                                    </div>
+
+                                    <div className="sm:col-span-12 space-y-1.5">
+                                      <label className="block text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">
+                                        SMTP Password <span className="text-danger">*</span>
+                                      </label>
+                                      <input
+                                        type="password"
+                                        value={emailPassword}
+                                        onChange={e => setEmailPassword(e.target.value)}
+                                        placeholder="Enter SMTP password"
+                                        className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-white/60"
+                                      />
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+
+                              {/* Card Actions Footer */}
+                              <div className="flex items-center justify-between pt-2 border-t border-border/20">
+                                <span className="text-[10px] text-muted-foreground font-mono flex items-center gap-1.5">
+                                  <Lock className="size-3 text-emerald-500" />
+                                  AES-256 GCM encrypted
+                                </span>
+
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={handleTestEmail}
+                                    disabled={isTestingEmail || !emailAddress.trim()}
+                                    className="px-3 py-1.5 border border-border hover:bg-secondary text-xs font-medium text-foreground rounded transition-colors flex items-center gap-1 disabled:opacity-50"
+                                  >
+                                    {isTestingEmail ? (
+                                      <>
+                                        <RefreshCw className="size-3 animate-spin" />
+                                        <span>Verifying...</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Zap className="size-3 text-[#c9a84c] dark:text-[#e5d9c5]" />
+                                        <span>Test</span>
+                                      </>
+                                    )}
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={handleSaveEmail}
+                                    disabled={isSaving.email_mailbox || !emailAddress.trim()}
+                                    className="px-4 py-1.5 bg-primary text-black rounded text-xs font-semibold hover:bg-primary/95 transition-colors disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+                                  >
+                                    {isSaving.email_mailbox ? (
+                                      <>
+                                        <RefreshCw className="size-3 animate-spin" />
+                                        <span>Saving...</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Sparkles className="size-3" />
+                                        <span>Save & Sync</span>
+                                      </>
+                                    )}
+                                  </button>
+                                </div>
+                              </div>
                             </div>
-                          </>
-                        )}
-                      </div>
-
-                      {/* Test Success Feedback */}
-                      {emailTestSuccess && (
-                        <div className="p-3 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-mono flex items-center gap-2 animate-in fade-in duration-150">
-                          <CheckCircle2 className="size-4 shrink-0" />
-                          <span>{emailTestSuccess}</span>
+                          )}
                         </div>
                       )}
-
-                      {/* Card Actions Footer */}
-                      <div className="flex items-center justify-between pt-2 border-t border-border/20">
-                        <span className="text-[10px] text-muted-foreground font-mono flex items-center gap-1.5">
-                          <Lock className="size-3 text-emerald-500" />
-                          AES-256 GCM encrypted
-                        </span>
-
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={handleTestEmail}
-                            disabled={isTestingEmail || !emailAddress.trim()}
-                            className="px-3 py-1.5 border border-border hover:bg-secondary text-xs font-medium text-foreground rounded transition-colors flex items-center gap-1 disabled:opacity-50"
-                          >
-                            {isTestingEmail ? (
-                              <>
-                                <RefreshCw className="size-3 animate-spin" />
-                                <span>Verifying...</span>
-                              </>
-                            ) : (
-                              <>
-                                <Zap className="size-3 text-[#c9a84c] dark:text-[#e5d9c5]" />
-                                <span>Test</span>
-                              </>
-                            )}
-                          </button>
-
-                          {isEmailConnected && (
-                            <button
-                              type="button"
-                              onClick={handleDisconnectEmail}
-                              disabled={isSaving.email_mailbox}
-                              className="px-3 py-1.5 border border-danger/20 hover:bg-danger/10 text-danger rounded text-xs font-semibold transition-colors disabled:opacity-50"
-                            >
-                              Disconnect
-                            </button>
-                          )}
-
-                          <button
-                            type="button"
-                            onClick={handleSaveEmail}
-                            disabled={isSaving.email_mailbox || !emailAddress.trim()}
-                            className="px-4 py-1.5 bg-primary text-black rounded text-xs font-semibold hover:bg-primary/95 transition-colors disabled:opacity-50 flex items-center gap-1.5"
-                          >
-                            {isSaving.email_mailbox ? (
-                              <>
-                                <RefreshCw className="size-3 animate-spin" />
-                                <span>Saving...</span>
-                              </>
-                            ) : (
-                              <>
-                                <Sparkles className="size-3" />
-                                <span>Save & Sync</span>
-                              </>
-                            )}
-                          </button>
-                        </div>
-                      </div>
                     </div>
                   )}
                 </div>
@@ -1743,9 +2155,9 @@ function SettingsPage() {
                                {isConnected && (
                                  <button
                                    type="button"
-                                   onClick={() => handleDisconnect(i.id)}
+                                   onClick={() => setDisconnectTarget({ id: i.id, name: i.name })}
                                    disabled={isSaving[i.id]}
-                                   className="px-3 py-1.5 border border-danger/20 hover:bg-danger/10 text-danger rounded text-xs font-semibold transition-colors disabled:opacity-50 flex items-center gap-1"
+                                   className="px-3 py-1.5 border border-danger/20 hover:bg-danger/10 text-danger rounded text-xs font-semibold transition-colors disabled:opacity-50 flex items-center gap-1 cursor-pointer"
                                  >
                                    {isSaving[i.id] && <Loader2 className="size-3 animate-spin" />}
                                    Disconnect
@@ -1755,7 +2167,7 @@ function SettingsPage() {
                                  type="button"
                                  onClick={() => handleConnect(i.id)}
                                  disabled={isSaving[i.id]}
-                                 className="px-4 py-1.5 bg-primary text-black rounded text-xs font-semibold hover:bg-primary/95 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                                 className="px-4 py-1.5 bg-primary text-black rounded text-xs font-semibold hover:bg-primary/95 transition-colors disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
                                 >
                                  {isSaving[i.id] && <Loader2 className="size-3 animate-spin" />}
                                  Save & Sync
@@ -1767,20 +2179,6 @@ function SettingsPage() {
                     </div>
                   );
                 })}
-              </div>
-              
-              <div className="pt-4 space-y-2">
-                <Row label="Custom Outbound Webhook URL">
-                  <Input
-                    value={webhookUrl}
-                    onChange={e => setWebhookUrl(e.target.value)}
-                    placeholder="https://your-crm.com/api/leads-webhook"
-                  />
-                </Row>
-                <p className="text-[10px] text-muted-foreground">
-                  Sends raw webhook payload of newly captured and qualified builder leads to external endpoints.
-                </p>
-                <Save onClick={handleSaveWebhook} isSaving={isSavingWebhook} saved={webhookSaved} />
               </div>
             </div>
           )}
@@ -1839,7 +2237,7 @@ function SettingsPage() {
                           ACTIVE
                         </span>
                       </div>
-                      <div className="text-xs text-muted-foreground mt-0.5 truncate">
+                      <div className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
                         {currentPlan.description}
                       </div>
                     </div>
@@ -2152,7 +2550,7 @@ function SettingsPage() {
               </div>
 
               {/* Brand & Version Hero Card */}
-              <div className="relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-[#121214] via-[#09090b] to-[#040405] p-6 shadow-xl">
+              <div className="relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-[#161616] via-[#141414] to-[#121212] p-6 shadow-xl">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="flex items-center gap-3.5">
                     <div className="size-12 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center p-2 shadow-inner">
@@ -2290,6 +2688,106 @@ function SettingsPage() {
 
         </Card>
       </div>
+
+      {/* Theme-Styled Disconnect Mailbox Confirmation Modal */}
+      {isDisconnectModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="bg-card border border-border/80 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-5 animate-in zoom-in-95 duration-150">
+            <div className="flex items-start gap-3.5">
+              <div className="size-11 rounded-xl bg-danger/10 border border-danger/20 flex items-center justify-center shrink-0 text-danger">
+                <AlertTriangle className="size-5" />
+              </div>
+              <div className="space-y-1 min-w-0">
+                <h3 className="text-base font-semibold text-foreground">
+                  Disconnect Mailbox?
+                </h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Are you sure you want to disconnect <span className="font-mono font-medium text-foreground">{emailAddress || credentials.email_mailbox?.email || "this mailbox"}</span>?
+                </p>
+                <p className="text-xs text-muted-foreground leading-relaxed pt-1">
+                  The AI will no longer be able to autonomously read or reply to incoming emails from leads until reconnected.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-border/50">
+              <button
+                type="button"
+                onClick={() => setIsDisconnectModalOpen(false)}
+                disabled={isSaving.email_mailbox}
+                className="px-4 py-2 rounded-lg border border-border text-xs font-medium text-foreground hover:bg-secondary transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDisconnectEmail}
+                disabled={isSaving.email_mailbox}
+                className="px-4 py-2 rounded-lg bg-danger text-danger-foreground text-xs font-medium hover:bg-danger/90 transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50 shadow-sm"
+              >
+                {isSaving.email_mailbox ? (
+                  <>
+                    <Loader2 className="size-3.5 animate-spin" />
+                    <span>Disconnecting...</span>
+                  </>
+                ) : (
+                  <span>Disconnect Mailbox</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Theme-Styled Disconnect Integration Confirmation Modal */}
+      {disconnectTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="bg-card border border-border/80 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-5 animate-in zoom-in-95 duration-150">
+            <div className="flex items-start gap-3.5">
+              <div className="size-11 rounded-xl bg-danger/10 border border-danger/20 flex items-center justify-center shrink-0 text-danger">
+                <AlertTriangle className="size-5" />
+              </div>
+              <div className="space-y-1 min-w-0">
+                <h3 className="text-base font-semibold text-foreground">
+                  Disconnect {disconnectTarget.name}?
+                </h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Are you sure you want to disconnect <span className="font-medium text-foreground">{disconnectTarget.name}</span>?
+                </p>
+                <p className="text-xs text-muted-foreground leading-relaxed pt-1">
+                  New leads and deals will no longer be automatically synchronized to this external CRM until reconnected.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-border/50">
+              <button
+                type="button"
+                onClick={() => setDisconnectTarget(null)}
+                disabled={isSaving[disconnectTarget.id]}
+                className="px-4 py-2 rounded-lg border border-border text-xs font-medium text-foreground hover:bg-secondary transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDisconnectIntegration}
+                disabled={isSaving[disconnectTarget.id]}
+                className="px-4 py-2 rounded-lg bg-danger text-danger-foreground text-xs font-medium hover:bg-danger/90 transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50 shadow-sm"
+              >
+                {isSaving[disconnectTarget.id] ? (
+                  <>
+                    <Loader2 className="size-3.5 animate-spin" />
+                    <span>Disconnecting...</span>
+                  </>
+                ) : (
+                  <span>Disconnect</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Shell>
   );
 }

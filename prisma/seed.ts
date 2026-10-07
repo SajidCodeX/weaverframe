@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs'
-import { getDb } from '../src/lib/db'
+import { getDb } from '../src/lib/db.server'
 
 async function main() {
   const prisma = await getDb()
