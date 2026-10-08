@@ -3599,102 +3599,168 @@ export const getReportsData = createServerFn({ method: 'POST' })
   }
 })
 
-export const getIntegrationsStatus = createServerFn({ method: 'GET' }).handler(async () => {
-    const { getTenantDb } = await import('./server-utils.server');
-  const db = await getTenantDb()
-  try {
-    const integrations = await db.integration.findMany()
-    
-    // We map raw stored configs into masked configs to send to the client
-    const mapped = await Promise.all(integrations.map(async item => {
-      let config: Record<string, string> = {}
-      try {
-        if (item.configSecure) {
-          const { decrypt } = await import('./crypto');
-          const decrypted = decrypt(item.configSecure)
-          const parsed = JSON.parse(decrypted)
-          // Mask sensitive password fields
-          Object.keys(parsed).forEach(key => {
-            const lowerKey = key.toLowerCase()
-            if (lowerKey.includes("secret") || lowerKey.includes("token") || lowerKey.includes("key")) {
-              config[key] = "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
-            } else {
-              config[key] = parsed[key]
-            }
-          })
-        }
-      } catch (err) {
-        console.error(`Error decrypting integration config for ${item.platformId}:`, err)
-      }
-
-      return {
-        id: item.platformId,
-        isConnected: item.isConnected,
-        credentials: config
-      }
-    }))
-
-    // Return as a key-value record for ease of frontend lookup
-    const statusMap: Record<string, { isConnected: boolean; credentials: Record<string, string> }> = {}
-    mapped.forEach(m => {
-      statusMap[m.id] = {
-        isConnected: m.isConnected,
-        credentials: m.credentials
-      }
-    })
-
-    return statusMap
-  } catch (error) {
-    console.error("Error in getIntegrationsStatus server function:", error)
-    return {}
+// ─── Rate Limiter for Integration Connection Testing (Max 8 attempts / min per tenant) ───
+const testConnectionRateLimitMap = new Map<string, { count: number; resetAt: number }>();
+function checkTestConnectionRateLimit(key: string, limit = 8, windowMs = 60000): boolean {
+  const now = Date.now();
+  if (testConnectionRateLimitMap.size > 1000) {
+    for (const [k, v] of testConnectionRateLimitMap.entries()) {
+      if (v.resetAt <= now) testConnectionRateLimitMap.delete(k);
+    }
   }
-})
+  const record = testConnectionRateLimitMap.get(key);
+  if (!record || record.resetAt <= now) {
+    testConnectionRateLimitMap.set(key, { count: 1, resetAt: now + windowMs });
+    return true;
+  }
+  if (record.count >= limit) return false;
+  record.count += 1;
+  return true;
+}
 
-export const saveIntegrationCredentials = createServerFn({ method: 'POST' })
-  .inputValidator((data: { platformId: string; credentials: Record<string, string> }) => data)
+function isMaskedValue(val: string): boolean {
+  if (!val) return false;
+  return val.includes('••••') || val.includes('â€¢') || /^[\u2022\u25CF\s*]+$/.test(val);
+}
+
+export const getIntegrationsStatus = createServerFn({ method: 'GET' })
+  .inputValidator((data?: { activeRole?: string | null }) => data)
   .handler(async ({ data }) => {
     const { getTenantDb, requireAuth } = await import('./server-utils.server');
-    const { platformId, credentials } = data
-    const session = await requireAuth()
-    const db = await getTenantDb()
     try {
-      // First, if there's an existing configuration, let's load it to preserve unchanged masked passwords!
-      // If the user saves and keeps the "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" mask, we should not overwrite it with the actual secret value!
-      let finalCredentials = { ...credentials }
+      const session = await requireAuth(data?.activeRole ?? undefined);
+      const db = await getTenantDb(session);
+      const builderId = session.role === 'admin' ? (session.actingAsBuilderId || session.builderId) : session.builderId;
+      if (!builderId) return {};
+
+      // STRICT MULTI-TENANT ISOLATION: Only fetch integrations belonging to this builder
+      const integrations = await db.integration.findMany({
+        where: { builderId }
+      });
+      
+      // We map raw stored configs into masked configs to send to the client
+      const mapped = await Promise.all(integrations.map(async item => {
+        let config: Record<string, string> = {};
+        try {
+          if (item.configSecure) {
+            const { decrypt } = await import('./crypto');
+            let decrypted = item.configSecure;
+            try {
+              decrypted = decrypt(item.configSecure);
+            } catch {}
+            const parsed = JSON.parse(decrypted);
+            // Mask sensitive secret, token, password, and key fields
+            Object.keys(parsed).forEach(key => {
+              const lowerKey = key.toLowerCase();
+              if (
+                lowerKey.includes("secret") ||
+                lowerKey.includes("token") ||
+                lowerKey.includes("key") ||
+                lowerKey.includes("pass") ||
+                lowerKey.includes("auth")
+              ) {
+                config[key] = "••••••••••••••••";
+              } else {
+                config[key] = parsed[key];
+              }
+            });
+          }
+        } catch (err) {
+          console.error(`Error decrypting integration config for ${item.platformId}:`, err);
+        }
+
+        return {
+          id: item.platformId,
+          isConnected: item.isConnected,
+          credentials: config
+        };
+      }));
+
+      // Return as a key-value record for ease of frontend lookup
+      const statusMap: Record<string, { isConnected: boolean; credentials: Record<string, string> }> = {};
+      mapped.forEach(m => {
+        statusMap[m.id] = {
+          isConnected: m.isConnected,
+          credentials: m.credentials
+        };
+      });
+
+      return statusMap;
+    } catch (error) {
+      console.error("Error in getIntegrationsStatus server function:", error);
+      return {};
+    }
+  });
+
+export const saveIntegrationCredentials = createServerFn({ method: 'POST' })
+  .inputValidator((data: { platformId: string; credentials: Record<string, string>; activeRole?: string | null }) => data)
+  .handler(async ({ data }) => {
+    const { getTenantDb, requireAuth } = await import('./server-utils.server');
+    const { platformId, credentials, activeRole } = data;
+    const session = await requireAuth(activeRole ?? undefined);
+    
+    // RBAC: Only admin or builder owner can save integration credentials
+    if (session.role === 'builder' && session.builderRole !== 'owner') {
+      throw new Error("Forbidden: Only builder owners and administrators can configure integrations.");
+    }
+
+    const builderId = session.role === 'admin' ? (session.actingAsBuilderId || session.builderId) : session.builderId;
+    if (!builderId) {
+      throw new Error("No active builder tenant resolved.");
+    }
+
+    // Input validation: whitelist allowed integration platforms
+    const ALLOWED_PLATFORMS = ['email_mailbox', 'hubspot', 'ghl', 'twilio', 'google', 'custom_smtp', 'webhook'];
+    if (!ALLOWED_PLATFORMS.includes(platformId)) {
+      throw new Error(`Invalid integration platform: ${platformId}`);
+    }
+
+    const db = await getTenantDb(session);
+    try {
+      // Sanitize inputs & prevent prototype pollution
+      let finalCredentials: Record<string, string> = {};
+      for (const [k, v] of Object.entries(credentials || {})) {
+        if (typeof v === 'string' && k !== '__proto__' && k !== 'constructor' && k !== 'prototype') {
+          finalCredentials[k] = v.trim();
+        }
+      }
       
       const existing = await db.integration.findUnique({
         where: {
           builderId_platformId: {
-            builderId: session.builderId || '',
+            builderId,
             platformId
           }
         }
-      })
+      });
 
       if (existing && existing.configSecure) {
         try {
           const { decrypt } = await import('./crypto');
-          const decrypted = decrypt(existing.configSecure)
-          const parsed = JSON.parse(decrypted)
+          let decrypted = existing.configSecure;
+          try {
+            decrypted = decrypt(existing.configSecure);
+          } catch {}
+          const parsed = JSON.parse(decrypted);
           
           // Overwrite any keys that came in as the standard mask with their original values
           Object.keys(finalCredentials).forEach(key => {
-            if (finalCredentials[key] === "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" && parsed[key]) {
-              finalCredentials[key] = parsed[key]
+            if (isMaskedValue(finalCredentials[key]) && parsed[key]) {
+              finalCredentials[key] = parsed[key];
             }
-          })
+          });
         } catch (err) {
-          console.error("Failed to decrypt existing config during merge:", err)
+          console.error("Failed to decrypt existing config during merge:", err);
         }
       }
 
       const { encrypt } = await import('./crypto');
-      const encrypted = encrypt(JSON.stringify(finalCredentials))
+      const encrypted = encrypt(JSON.stringify(finalCredentials));
 
       await db.integration.upsert({
         where: {
           builderId_platformId: {
-            builderId: session.builderId || '',
+            builderId,
             platformId
           }
         },
@@ -3703,50 +3769,87 @@ export const saveIntegrationCredentials = createServerFn({ method: 'POST' })
           isConnected: true
         },
         create: {
-          builderId: session.builderId || '',
+          builderId,
           platformId,
           configSecure: encrypted,
           isConnected: true
         }
-      })
+      });
+
+      await db.activity.create({
+        data: {
+          builderId,
+          action: `🔌 Integration connected/updated: ${platformId} (by ${session.displayName || session.email || 'builder owner'})`,
+        }
+      }).catch(() => {});
 
       invalidateCache("dashboard_");
-      return { success: true }
+      return { success: true };
     } catch (error) {
-      console.error(`Error in saveIntegrationCredentials for ${platformId}:`, error)
-      throw error
+      console.error(`Error in saveIntegrationCredentials for ${platformId}:`, error);
+      throw error;
     }
-  })
+  });
 
 export const disconnectIntegration = createServerFn({ method: 'POST' })
-  .inputValidator((data: { platformId: string }) => data)
+  .inputValidator((data: { platformId: string; activeRole?: string | null }) => data)
   .handler(async ({ data }) => {
-    const { getTenantDb } = await import('./server-utils.server');
-    const { platformId } = data
-    const db = await getTenantDb()
-    try {
-      await db.integration.deleteMany({
-        where: { platformId }
-      })
-      invalidateCache("dashboard_");
-      return { success: true }
-    } catch (error) {
-      console.error(`Error in disconnectIntegration for ${platformId}:`, error)
-      throw error
+    const { getTenantDb, requireAuth } = await import('./server-utils.server');
+    const { platformId, activeRole } = data;
+    const session = await requireAuth(activeRole ?? undefined);
+    
+    // RBAC: Only admin or builder owner can disconnect integrations
+    if (session.role === 'builder' && session.builderRole !== 'owner') {
+      throw new Error("Forbidden: Only builder owners and administrators can disconnect integrations.");
     }
-  })
+
+    const builderId = session.role === 'admin' ? (session.actingAsBuilderId || session.builderId) : session.builderId;
+    if (!builderId) {
+      throw new Error("No active builder tenant resolved.");
+    }
+
+    const db = await getTenantDb(session);
+    try {
+      // STRICT TENANT ISOLATION: Only delete the integration row belonging to THIS builder!
+      await db.integration.deleteMany({
+        where: {
+          builderId,
+          platformId,
+        }
+      });
+
+      await db.activity.create({
+        data: {
+          builderId,
+          action: `🔌 Integration disconnected: ${platformId} (by ${session.displayName || session.email || 'builder owner'})`,
+        }
+      }).catch(() => {});
+
+      invalidateCache("dashboard_");
+      return { success: true };
+    } catch (error) {
+      console.error(`Error in disconnectIntegration for ${platformId}:`, error);
+      throw error;
+    }
+  });
 
 export const getGoogleConnectUrl = createServerFn({ method: 'POST' })
-  .inputValidator((data?: { returnTo?: string }) => data)
+  .inputValidator((data?: { returnTo?: string; activeRole?: string | null }) => data)
   .handler(async ({ data }) => {
     const { requireAuth } = await import('./server-utils.server');
-    const session = await requireAuth();
-    const builderId = session.actingAsBuilderId || session.builderId;
+    const session = await requireAuth(data?.activeRole ?? undefined);
+    
+    // RBAC: Only admin or builder owner can initiate Google OAuth connection
+    if (session.role === 'builder' && session.builderRole !== 'owner') {
+      throw new Error("Forbidden: Only builder owners and administrators can connect company mailboxes.");
+    }
+
+    const builderId = session.role === 'admin' ? (session.actingAsBuilderId || session.builderId) : session.builderId;
     if (!builderId) throw new Error("No active builder session found. Please sign in.");
     const { generateGoogleAuthUrl } = await import('./google-oauth.server');
     const returnTo = data?.returnTo || '/settings?tab=integrations';
     return generateGoogleAuthUrl(builderId, returnTo);
-  })
+  });
 
 export const handleGoogleOAuthCallback = createServerFn({ method: 'GET' })
   .inputValidator((data: { code: string; state: string; error?: string }) => data)
@@ -3759,28 +3862,32 @@ export const handleGoogleOAuthCallback = createServerFn({ method: 'GET' })
       return { success: false, redirectUrl: `/settings?tab=integrations&error=missing_oauth_params` };
     }
 
-    let builderId = '';
-    let returnTo = '/settings?tab=integrations';
-    try {
-      const statePayload = JSON.parse(Buffer.from(state, 'base64url').toString('utf8'));
-      builderId = statePayload.builderId;
-      returnTo = statePayload.returnTo || returnTo;
-    } catch {
-      return { success: false, redirectUrl: `/settings?tab=integrations&error=invalid_oauth_state` };
+    // Cryptographic HMAC State Verification & Replay Protection
+    const { verifyOAuthState } = await import('./google-oauth.server');
+    const verified = verifyOAuthState(state);
+    if (!verified || !verified.builderId) {
+      return { success: false, redirectUrl: `/settings?tab=integrations&error=invalid_or_expired_oauth_state` };
     }
 
-    if (!builderId) {
-      return { success: false, redirectUrl: `/settings?tab=integrations&error=unauthorized_builder` };
-    }
+    const builderId = verified.builderId;
+    const returnTo = verified.returnTo || '/settings?tab=integrations';
 
     try {
       const { exchangeGoogleAuthCode, getGoogleUserProfile } = await import('./google-oauth.server');
       const { getDb } = await import('./db.server');
       const { encrypt } = await import('./crypto');
 
+      const db = await getDb();
+      const builder = await db.builder.findUnique({
+        where: { id: builderId },
+        select: { id: true, isActive: true }
+      });
+      if (!builder || !builder.isActive) {
+        return { success: false, redirectUrl: `/settings?tab=integrations&error=unauthorized_builder` };
+      }
+
       const { accessToken, refreshToken, expiresIn } = await exchangeGoogleAuthCode(code);
       const profile = await getGoogleUserProfile(accessToken);
-      const db = await getDb();
 
       const configData = {
         provider: 'google_oauth',
@@ -3830,22 +3937,38 @@ export const handleGoogleOAuthCallback = createServerFn({ method: 'GET' })
       const errMsg = encodeURIComponent(err?.message || 'Failed to complete Google OAuth');
       return { success: false, redirectUrl: `/settings?tab=integrations&error=${errMsg}` };
     }
-  })
+  });
 
 export const testIntegrationConnection = createServerFn({ method: 'POST' })
-  .inputValidator((data: { platformId: string; credentials: Record<string, string> }) => data)
+  .inputValidator((data: { platformId: string; credentials: Record<string, string>; activeRole?: string | null }) => data)
   .handler(async ({ data }) => {
-    const { getTenantDb } = await import('./server-utils.server');
-    const { platformId, credentials } = data;
+    const { requireAuth } = await import('./server-utils.server');
+    const { platformId, credentials, activeRole } = data;
+    const session = await requireAuth(activeRole ?? undefined);
+
+    // RBAC: Only admin or builder owner can test integrations
+    if (session.role === 'builder' && session.builderRole !== 'owner') {
+      throw new Error("Forbidden: Only builder owners and administrators can test integration connections.");
+    }
+
+    const builderId = session.role === 'admin' ? (session.actingAsBuilderId || session.builderId) : session.builderId;
+    if (!builderId) {
+      throw new Error("No active builder tenant resolved.");
+    }
+
+    // Rate limiting: 8 tests per minute per builder to prevent abuse, password brute force, or spamming external endpoints
+    if (!checkTestConnectionRateLimit(builderId, 8, 60000)) {
+      throw new Error("Too many test connection attempts. Please wait 1 minute before testing again.");
+    }
     
     // Simulate real network validation latency
-    await new Promise(resolve => setTimeout(resolve, 1200));
+    await new Promise(resolve => setTimeout(resolve, 800));
 
     if (platformId === "google") {
       if (!credentials.clientId || !credentials.clientSecret || !credentials.locationId) {
         throw new Error("Missing required credentials for Google Business API.");
       }
-      if (credentials.clientSecret !== "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" && credentials.clientSecret.length < 10) {
+      if (!isMaskedValue(credentials.clientSecret) && credentials.clientSecret.length < 10) {
         throw new Error("Invalid Google Client Secret. Secret key must be at least 10 characters.");
       }
     }
@@ -3854,10 +3977,10 @@ export const testIntegrationConnection = createServerFn({ method: 'POST' })
       if (!credentials.accountSid || !credentials.authToken || !credentials.phoneNumber) {
         throw new Error("Missing required credentials for Twilio SMS Outreach Gateway.");
       }
-      if (credentials.accountSid !== "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" && !credentials.accountSid.startsWith("AC")) {
+      if (!isMaskedValue(credentials.accountSid) && !credentials.accountSid.startsWith("AC")) {
         throw new Error("Invalid Twilio Account SID format. Must start with 'AC'.");
       }
-      if (credentials.authToken !== "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" && credentials.authToken.length < 16) {
+      if (!isMaskedValue(credentials.authToken) && credentials.authToken.length < 16) {
         throw new Error("Invalid Twilio Auth Token. Must be at least 16 characters.");
       }
     }
@@ -3884,10 +4007,8 @@ export const testIntegrationConnection = createServerFn({ method: 'POST' })
       // If testing a Google OAuth 2.0 connection
       if (provider === 'google_oauth' || (!credentials.password && credentials.email)) {
         try {
-          const { requireAuth } = await import('./server-utils.server');
-          const session = await requireAuth();
           const { getValidGoogleAccessToken, getGoogleUserProfile } = await import('./google-oauth.server');
-          const oauthData = await getValidGoogleAccessToken(session.builderId || '');
+          const oauthData = await getValidGoogleAccessToken(builderId);
           if (oauthData) {
             const profile = await getGoogleUserProfile(oauthData.accessToken);
             return { success: true, email: profile.email };
@@ -3907,12 +4028,37 @@ export const testIntegrationConnection = createServerFn({ method: 'POST' })
         throw new Error("Missing App Password. Please enter your 16-character Google App Password or connect via Google Workspace Authorization.");
       }
 
-      // If user provided an actual password (not the masked placeholder), perform REAL live Google authentication check
-      if (rawPassword !== "••••••••••••••••") {
+      // If user provided an actual password (not the masked placeholder), perform REAL live authentication check
+      if (!isMaskedValue(rawPassword)) {
         const cleanPassword = rawPassword.replace(/\s+/g, '').trim();
-        const provider = credentials.provider || 'google';
         const smtpHost = provider === 'google' ? 'smtp.gmail.com' : (credentials.smtpHost || 'smtp.gmail.com');
         const smtpPort = provider === 'google' ? 465 : parseInt(credentials.smtpPort || '465', 10);
+
+        // SSRF / Open Relay Security Validation
+        if (provider !== 'google') {
+          const lowerHost = smtpHost.toLowerCase().trim();
+          if (
+            lowerHost === 'localhost' ||
+            lowerHost === '127.0.0.1' ||
+            lowerHost === '::1' ||
+            lowerHost === '0.0.0.0' ||
+            lowerHost.startsWith('127.') ||
+            lowerHost.startsWith('169.254.') ||
+            lowerHost.startsWith('10.') ||
+            lowerHost.startsWith('192.168.') ||
+            /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(lowerHost) ||
+            lowerHost.endsWith('.internal') ||
+            lowerHost.endsWith('.local') ||
+            lowerHost.endsWith('.localhost')
+          ) {
+            throw new Error("Security Alert: Loopback addresses, private subnets, and cloud metadata endpoints are strictly forbidden.");
+          }
+
+          const ALLOWED_MAIL_PORTS = [465, 587, 25, 2525, 993, 995];
+          if (!ALLOWED_MAIL_PORTS.includes(smtpPort)) {
+            throw new Error(`Security Alert: Port ${smtpPort} is not a recognized mail transport port. Permitted ports: ${ALLOWED_MAIL_PORTS.join(', ')}.`);
+          }
+        }
 
         try {
           const nodemailer = await import('nodemailer');
@@ -3939,7 +4085,7 @@ export const testIntegrationConnection = createServerFn({ method: 'POST' })
           const transporter = nodemailer.createTransport(transportOptions);
           await transporter.verify();
         } catch (verifyErr: any) {
-          console.error('[REAL GOOGLE SMTP VERIFY FAILED]:', verifyErr);
+          console.error('[REAL SMTP VERIFY FAILED]:', verifyErr);
           const rawError = verifyErr?.message || '';
           if (rawError.includes('535') || rawError.includes('Username and Password not accepted') || rawError.includes('BadCredentials')) {
             throw new Error(`Google Authentication Failed (535): App Password rejected for ${email.trim()}.\n\nCommon Causes:\n1. Account Mismatch: Ensure the 16-letter App Password was generated while logged into ${email.trim()} (not another Google account).\n2. 2-Step Verification: Ensure 2-Step Verification is ON for ${email.trim()}.\n3. Regular Password Used: Google requires a dedicated 16-character App Password from myaccount.google.com/apppasswords.`);
@@ -3950,7 +4096,7 @@ export const testIntegrationConnection = createServerFn({ method: 'POST' })
     }
 
     return { success: true };
-  })
+  });
 
 export const exportLeadsToCsv = createServerFn({ method: 'POST' })
   .inputValidator((data: { activeRole?: string | null } | undefined) => data)
@@ -4058,7 +4204,11 @@ export const getBuilderProfile = createServerFn({ method: 'POST' })
   
   const user = builder?.users[0];
   
+  const { generateAllPlatformTokens } = await import('./webhook-tokens.server');
+  const platformTokens = builderId ? generateAllPlatformTokens(builderId) : {};
+
   return {
+    id: builderId,
     companyName: builder?.companyName || savedProfile.companyName || "",
     primaryContact: builder?.contactName || savedProfile.primaryContact || user?.displayName || "",
     email: builder?.email || savedProfile.email || user?.email || "",
@@ -4069,6 +4219,7 @@ export const getBuilderProfile = createServerFn({ method: 'POST' })
     homesPerYear: savedProfile.homesPerYear || "25",
     timezone: savedProfile.timezone || "America/Chicago",
     aiContext: savedProfile.aiContext || "",
+    platformWebhookTokens: platformTokens,
   };
 })
 
