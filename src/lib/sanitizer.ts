@@ -93,3 +93,40 @@ export function sanitizeMetadataField(rawText: string, maxLength: number = 120):
   return cleaned.trim().slice(0, maxLength);
 }
 
+/**
+ * Neutralizes dangerous URL schemes (javascript:, vbscript:, data:text/html) to eliminate Stored XSS vectors.
+ */
+export function sanitizeSafeUrl(url: string | null | undefined): string {
+  if (!url || typeof url !== 'string') return '#';
+  const trimmed = url.trim();
+  const sanitized = trimmed.replace(/[\x00-\x1F\x7F\s]/g, '');
+  const lower = sanitized.toLowerCase();
+  
+  if (
+    lower.startsWith('javascript:') ||
+    lower.startsWith('vbscript:') ||
+    lower.startsWith('data:text/html') ||
+    lower.startsWith('data:application/javascript')
+  ) {
+    return '#';
+  }
+
+  // Must start with http://, https://, mailto:, tel:, or /
+  if (
+    lower.startsWith('http://') ||
+    lower.startsWith('https://') ||
+    lower.startsWith('mailto:') ||
+    lower.startsWith('tel:') ||
+    (lower.startsWith('/') && !lower.startsWith('//'))
+  ) {
+    return trimmed;
+  }
+
+  // If protocol-relative (//evil.com), neutralize
+  if (lower.startsWith('//')) {
+    return '#';
+  }
+
+  return '#';
+}
+

@@ -1,5 +1,5 @@
 import { RoutePending } from "@/components/dashboard/RoutePending";
-import { createFileRoute, useRouter } from '@tanstack/react-router'
+import { createFileRoute, useRouter, redirect } from '@tanstack/react-router'
 import { useState, useEffect } from 'react'
 import { Shell } from '@/components/dashboard/Shell'
 import { Card } from '@/components/dashboard/primitives'
@@ -16,7 +16,6 @@ export const Route = createFileRoute('/team')({
     if (typeof window === 'undefined') return
     const session = (context as any).session
     if (session && session.role === 'builder' && (session.builderRole === 'manager' || session.builderRole === 'sales')) {
-      const { redirect } = await import('@tanstack/react-router')
       throw redirect({ to: '/' })
     }
   },
@@ -97,10 +96,8 @@ function TeamRoute() {
   const handleResetPassword = async (id: string) => {
     try {
       const res = await generatePasswordResetLink({ data: id })
-      if (res.success && res.inviteLink) {
-        const link = window.location.origin + res.inviteLink
-        setInviteLink(link)
-        handleCopyLink(link)
+      if (res.success) {
+        toast.success(res.message || "Password reset instructions have been dispatched.")
       }
     } catch (err: any) {
       toast.error(`Failed to generate reset link: ${err?.message}`)

@@ -22,35 +22,14 @@ export const loginFn = createServerFn({ method: 'POST' })
   .inputValidator((data: { email: string; password: string; rememberMe?: boolean }) => data)
   .handler(async ({ data }) => {
     const { handleLogin } = await import('./server-utils.server')
-
-    // Extract client IP from request headers for rate limiting.
-    // TanStack Start exposes getRequestHeader() in server fn context.
-    let ip = 'unknown'
-    try {
-      const { getRequestHeader } = await import('@tanstack/react-start/server')
-      ip =
-        getRequestHeader('cf-connecting-ip') ??        // Cloudflare
-        getRequestHeader('x-forwarded-for')?.split(',')[0].trim() ?? // Reverse proxy
-        getRequestHeader('x-real-ip') ??               // Nginx
-        'unknown'
-    } catch {
-      // Outside request context — use fallback
-    }
-
-    return handleLogin({ ...data, ip })
+    return handleLogin(data)
   })
 
-// ── In-memory Session Cache ──────────────────────────────────────────────────
-// Cache DB validation results for 30 seconds to prevent redundant DB queries
-// on every navigation. JWT verification still happens on every request.
-const sessionCache = new Map<string, { session: AuthSession; expiry: number }>()
-
-export function invalidateSessionCache(userId?: string) {
-  if (userId) {
-    sessionCache.delete(userId)
-  } else {
-    sessionCache.clear()
-  }
+// ── Instant Session Revocation ───────────────────────────────────────────────
+// In-memory 30s session caching is dropped to guarantee immediate tokenVersion
+// and account status enforcement on every request.
+export function invalidateSessionCache(_userId?: string) {
+  // Retained for API compatibility; DB verification is instantaneous
 }
 
 export const getSessionFn = createServerFn({ method: 'POST' })
@@ -60,33 +39,19 @@ export const getSessionFn = createServerFn({ method: 'POST' })
       const { requireAuth, getSessionFromCookie } = await import('./server-utils.server')
 
       // Resolve active role: explicit role > path-derived role
-      // clientPath is passed from beforeLoad (location.pathname) so the server
-      // always has reliable path context even during SSR where getRequestUrl()
-      // may return the internal RPC endpoint rather than the real page URL.
       let activeRole = data?.activeRole ?? undefined
       if (!activeRole && data?.clientPath) {
         activeRole = data.clientPath.startsWith('/admin') ? 'admin' : 'builder'
       }
       
-      // 1. Verify the JWT unconditionally (no DB queries)
+      // 1. Verify the JWT cookie exists
       const jwtSession = await getSessionFromCookie(activeRole)
       if (!jwtSession || !jwtSession.userId) {
         return null
       }
-      
-      // 2. Check cache for recent successful DB validation
-      const now = Date.now()
-      const cached = sessionCache.get(jwtSession.userId)
-      if (cached && cached.expiry > now) {
-        return cached.session
-      }
 
-      // 3. Not cached or expired -> Perform full DB validation
+      // 2. Perform direct DB validation (verifies tokenVersion, isActive, deletedAt)
       const session = await requireAuth(activeRole)
-      
-      // 4. Cache the result for 30 seconds
-      sessionCache.set(session.userId, { session, expiry: now + 30000 })
-      
       return session
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] getSessionFn error:`, err.message || err);

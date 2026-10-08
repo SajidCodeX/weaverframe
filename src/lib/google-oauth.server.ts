@@ -30,8 +30,12 @@ export function getGoogleOAuthConfig(): GoogleOAuthConfig {
 }
 
 import crypto from 'crypto';
+import { assertSecret } from './security-helpers.server';
 
-const OAUTH_STATE_SECRET = process.env.SESSION_SECRET || process.env.ENCRYPTION_KEY || 'weaverframe_oauth_state_secret_2026';
+function getOAuthStateSecret(): string {
+  const secret = process.env.GOOGLE_OAUTH_STATE_SECRET || process.env.SESSION_SECRET || process.env.ENCRYPTION_KEY;
+  return assertSecret('GOOGLE_OAUTH_STATE_SECRET', secret, 32);
+}
 
 /**
  * Cryptographically signs OAuth state payload using HMAC-SHA256 to prevent CSRF / account linking attacks.
@@ -39,7 +43,7 @@ const OAUTH_STATE_SECRET = process.env.SESSION_SECRET || process.env.ENCRYPTION_
 export function signOAuthState(payload: { builderId: string; returnTo?: string; ts: number; nonce: string }): string {
   const json = JSON.stringify(payload);
   const dataB64 = Buffer.from(json, 'utf8').toString('base64url');
-  const hmac = crypto.createHmac('sha256', OAUTH_STATE_SECRET);
+  const hmac = crypto.createHmac('sha256', getOAuthStateSecret());
   hmac.update(dataB64);
   const sig = hmac.digest('base64url');
   return `${dataB64}.${sig}`;
@@ -55,7 +59,14 @@ export function verifyOAuthState(state: string): { builderId: string; returnTo?:
     const [dataB64, sig] = state.split('.');
     if (!dataB64 || !sig) return null;
 
-    const hmac = crypto.createHmac('sha256', OAUTH_STATE_SECRET);
+    let hmacSecret: string;
+    try {
+      hmacSecret = getOAuthStateSecret();
+    } catch {
+      return null;
+    }
+
+    const hmac = crypto.createHmac('sha256', hmacSecret);
     hmac.update(dataB64);
     const expectedSig = hmac.digest('base64url');
 
@@ -323,9 +334,20 @@ export async function sendGmailViaRestApi(
   }
 ): Promise<{ success: boolean; id?: string; error?: string }> {
   try {
-    const recipients = Array.isArray(options.to) ? options.to.join(', ') : options.to;
-    const fromAddress = options.from || 'me';
-    const utf8Subject = `=?utf-8?B?${Buffer.from(options.subject).toString('base64')}?=`;
+    const sanitizeHeader = (val: string, headerName: string): string => {
+      if (/[\r\n\x00-\x1F\x7F]/.test(val)) {
+        throw new Error(`CRLF header injection rejected in ${headerName}`);
+      }
+      return val.trim();
+    };
+
+    const rawRecipients = Array.isArray(options.to) ? options.to.join(', ') : options.to;
+    const recipients = sanitizeHeader(rawRecipients, 'To');
+    const fromAddress = sanitizeHeader(options.from || 'me', 'From');
+    const cleanSubject = sanitizeHeader(options.subject || '', 'Subject');
+    const cleanReplyTo = options.replyTo ? sanitizeHeader(options.replyTo, 'Reply-To') : undefined;
+
+    const utf8Subject = `=?utf-8?B?${Buffer.from(cleanSubject).toString('base64')}?=`;
 
     const bodyContent = options.html || options.text || '';
     const contentType = options.html ? 'text/html; charset=utf-8' : 'text/plain; charset=utf-8';
@@ -337,7 +359,7 @@ export async function sendGmailViaRestApi(
       const headers = [
         `From: ${fromAddress}`,
         `To: ${recipients}`,
-        ...(options.replyTo ? [`Reply-To: ${options.replyTo}`] : []),
+        ...(cleanReplyTo ? [`Reply-To: ${cleanReplyTo}`] : []),
         `Subject: ${utf8Subject}`,
         'MIME-Version: 1.0',
         `Content-Type: ${contentType}`,
@@ -351,7 +373,7 @@ export async function sendGmailViaRestApi(
       const headers = [
         `From: ${fromAddress}`,
         `To: ${recipients}`,
-        ...(options.replyTo ? [`Reply-To: ${options.replyTo}`] : []),
+        ...(cleanReplyTo ? [`Reply-To: ${cleanReplyTo}`] : []),
         `Subject: ${utf8Subject}`,
         'MIME-Version: 1.0',
         `Content-Type: multipart/mixed; boundary="${boundary}"`,

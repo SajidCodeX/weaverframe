@@ -94,9 +94,9 @@ export async function handleInboundLeadDirect(inputData: any = {}, request?: Req
     if (request.url) {
       try {
         const url = new URL(request.url);
-        const queryToken = url.searchParams.get('token') || url.searchParams.get('apiKey') || url.searchParams.get('builderId');
+        const queryToken = url.searchParams.get('token') || url.searchParams.get('apiKey');
         const querySource = url.searchParams.get('source');
-        if (queryToken && !data.token && !data.builderId && !data.apiKey) {
+        if (queryToken && !data.token && !data.apiKey) {
           data.token = queryToken;
         }
         if (querySource && !data.source) {
@@ -136,11 +136,12 @@ export async function handleInboundLeadDirect(inputData: any = {}, request?: Req
       }
 
       // 1.1 Inbound DoS & Spam Protection: 60 submissions / min per token + IP
-      const clientIp = request?.headers?.get('x-forwarded-for')?.split(',')[0]?.trim() || 
-                       request?.headers?.get('x-real-ip') || 
-                       '127.0.0.1';
+      const { getClientIp, checkPublicFormRateLimit } = await import('../lib/rate-limiter.server');
+      const clientIp = getClientIp(request);
       const rateLimitKey = `${authToken}:${clientIp}`;
-      if (!checkInboundRateLimit(rateLimitKey, 60, 60000)) {
+      try {
+        await checkPublicFormRateLimit('inbound', rateLimitKey);
+      } catch {
         return {
           isResponse: true,
           status: 429,
@@ -148,7 +149,7 @@ export async function handleInboundLeadDirect(inputData: any = {}, request?: Req
         };
       }
 
-      // 2. Validate token against cryptographic platform tokens, DB integrations, users, or builder settings
+      // 2. Validate token against cryptographic platform tokens or configured integration credentials
       let authenticatedBuilderId: string | undefined;
       let cryptographicallyVerifiedSource: string | null = null;
 
@@ -171,7 +172,8 @@ export async function handleInboundLeadDirect(inputData: any = {}, request?: Req
           };
         }
       } else {
-        // 2.B: Fallback validation for direct integrations, user API keys, builder settings, or direct builder ID
+        // 2.B: Strict credential check against configured integrations and settings
+        // (Database primary key UUIDs are explicitly NOT accepted as authentication secrets)
         const webhookIntegration = await db.integration.findFirst({
           where: {
             isConnected: true,
@@ -183,35 +185,19 @@ export async function handleInboundLeadDirect(inputData: any = {}, request?: Req
         if (webhookIntegration) {
           authenticatedBuilderId = webhookIntegration.builderId;
         } else {
-          const apiKeyUser = await db.user.findFirst({
-            where: { id: authToken, isActive: true },
-            select: { builderId: true }
+          const buildersWithSettings = await db.builder.findMany({
+            where: { isActive: true },
+            select: { id: true, settings: true }
           });
-          if (apiKeyUser?.builderId) {
-            authenticatedBuilderId = apiKeyUser.builderId;
-          } else {
-            const directBuilder = await db.builder.findFirst({
-              where: { id: authToken, isActive: true },
-              select: { id: true }
-            });
-            if (directBuilder) {
-              authenticatedBuilderId = directBuilder.id;
-            } else {
-              const buildersWithSettings = await db.builder.findMany({
-                where: { isActive: true },
-                select: { id: true, settings: true }
-              });
-              for (const b of buildersWithSettings) {
-                if (b.settings) {
-                  try {
-                    const s = typeof b.settings === 'string' ? JSON.parse(b.settings) : b.settings;
-                    if (s.webhook_token === authToken || s.api_key === authToken || s.integration_token === authToken) {
-                      authenticatedBuilderId = b.id;
-                      break;
-                    }
-                  } catch {}
+          for (const b of buildersWithSettings) {
+            if (b.settings) {
+              try {
+                const s = typeof b.settings === 'string' ? JSON.parse(b.settings) : b.settings;
+                if (s.webhook_token === authToken || s.api_key === authToken || s.integration_token === authToken) {
+                  authenticatedBuilderId = b.id;
+                  break;
                 }
-              }
+              } catch {}
             }
           }
         }
@@ -483,6 +469,15 @@ export const Route = createFileRoute('/api/leads/inbound')({
       try {
         const url = new URL(request.url);
         if (url.searchParams.get('hub.mode') === 'subscribe') {
+          const verifyToken = url.searchParams.get('hub.verify_token');
+          const expectedToken = process.env.META_VERIFY_TOKEN;
+          if (expectedToken && verifyToken !== expectedToken) {
+            return {
+              isResponse: true,
+              status: 403,
+              json: { error: "Forbidden: Invalid Meta verification token" }
+            };
+          }
           const challenge = url.searchParams.get('hub.challenge') || '';
           return challenge;
         }

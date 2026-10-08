@@ -3,113 +3,21 @@ import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 import { getDb } from './db.server'
 
-// ─── Login Rate Limiter (In-Memory) ──────────────────────────────────────────
-// Tracks failed login attempts per key (email + IP).
-// After 10 failures, the key is locked for 15 minutes.
-// NOTE: This resets on server restart. For production at scale, replace with
-// a persistent store (e.g. Upstash Redis). For single-instance deployments
-// this provides solid brute-force protection.
+// ─── Login & Request Rate Limiter (Distributed Upstash + Resilient Local) ───
+import {
+  checkLoginRateLimit,
+  recordFailedLogin,
+  clearLoginAttempts,
+  checkPasswordResetRateLimit,
+} from './rate-limiter.server';
 
-const LOGIN_MAX_ATTEMPTS = 10
-const LOGIN_LOCKOUT_MS = 15 * 60 * 1000 // 15 minutes
+export {
+  checkLoginRateLimit,
+  recordFailedLogin,
+  clearLoginAttempts,
+  checkPasswordResetRateLimit,
+};
 
-interface LoginAttemptRecord {
-  count: number
-  firstAttemptAt: number
-  lockedUntil?: number
-}
-
-// Key format: "email:ip" — dual-keyed to prevent both email enumeration & IP attacks
-const loginAttemptStore = new Map<string, LoginAttemptRecord>()
-
-// Periodic cleanup every 30 minutes — prevents unbounded memory growth
-setInterval(() => {
-  const now = Date.now()
-  for (const [key, record] of loginAttemptStore.entries()) {
-    // Remove entries that are past their lockout window or have expired
-    const expiry = record.lockedUntil ?? (record.firstAttemptAt + LOGIN_LOCKOUT_MS)
-    if (now > expiry) {
-      loginAttemptStore.delete(key)
-    }
-  }
-}, 30 * 60 * 1000)
-
-function getRateLimitKey(email: string, ip: string): string {
-  return `${email.toLowerCase().trim()}:${ip}`
-}
-
-function checkLoginRateLimit(email: string, ip: string): void {
-  const key = getRateLimitKey(email, ip)
-  const now = Date.now()
-  const record = loginAttemptStore.get(key)
-
-  if (!record) return // No previous failures — allow
-
-  // If locked, check if lockout window has expired
-  if (record.lockedUntil) {
-    if (now < record.lockedUntil) {
-      const remainingMs = record.lockedUntil - now
-      const remainingMins = Math.ceil(remainingMs / 60000)
-      throw new Error(
-        `Too many failed login attempts. Your account access has been temporarily locked. ` +
-        `Please try again in ${remainingMins} minute${remainingMins !== 1 ? 's' : ''}.`
-      )
-    } else {
-      // Lockout expired — reset and allow
-      loginAttemptStore.delete(key)
-      return
-    }
-  }
-
-  // Not locked yet — check if window has expired naturally
-  if (now - record.firstAttemptAt > LOGIN_LOCKOUT_MS) {
-    loginAttemptStore.delete(key)
-    return // Window expired — treat as fresh start
-  }
-}
-
-function recordFailedLogin(email: string, ip: string): void {
-  const key = getRateLimitKey(email, ip)
-  const now = Date.now()
-  const record = loginAttemptStore.get(key)
-
-  if (!record) {
-    loginAttemptStore.set(key, { count: 1, firstAttemptAt: now })
-    return
-  }
-
-  // Reset if window has naturally expired
-  if (now - record.firstAttemptAt > LOGIN_LOCKOUT_MS) {
-    loginAttemptStore.set(key, { count: 1, firstAttemptAt: now })
-    return
-  }
-
-  record.count++
-
-  if (record.count >= LOGIN_MAX_ATTEMPTS) {
-    record.lockedUntil = now + LOGIN_LOCKOUT_MS
-    loginAttemptStore.set(key, record)
-    throw new Error(
-      `Too many failed login attempts (${LOGIN_MAX_ATTEMPTS} attempts). ` +
-      `Your account access has been locked for 15 minutes for security. ` +
-      `If this wasn't you, please contact support.`
-    )
-  }
-
-  const remaining = LOGIN_MAX_ATTEMPTS - record.count
-  loginAttemptStore.set(key, record)
-
-  // Surface warning when getting close to lockout
-  if (remaining <= 3) {
-    throw new Error(
-      `Invalid email or password. Warning: ${remaining} attempt${remaining !== 1 ? 's' : ''} remaining before your access is temporarily locked.`
-    )
-  }
-}
-
-function clearLoginAttempts(email: string, ip: string): void {
-  loginAttemptStore.delete(getRateLimitKey(email, ip))
-}
 
 // ─── HMAC Invite Link Signing ────────────────────────────────────────
 // Every public review invite link is signed with HMAC-SHA256 using the
@@ -148,6 +56,7 @@ export type AuthSession = {
   companyName?: string
   email?: string           // The logged-in user's own email — used as Reply-To for outbound lead emails
   companyEmail?: string    // The builder company's general email (e.g. contact@nexora.com) — shown as company sender
+  tokenVersion?: number
 }
 
 const getJwtSecret = () => {
@@ -159,7 +68,11 @@ const getJwtSecret = () => {
 export const signToken = (payload: AuthSession, rememberMe: boolean = false): string => {
   // If rememberMe is checked, token lasts 7 days; otherwise 1 day.
   const expiresIn = rememberMe ? '7d' : '1d'
-  return jwt.sign(payload, getJwtSecret(), { expiresIn })
+  const sessionPayload = {
+    ...payload,
+    tokenVersion: payload.tokenVersion ?? 1,
+  }
+  return jwt.sign(sessionPayload, getJwtSecret(), { expiresIn })
 }
 
 export const verifyToken = (token: string): AuthSession | null => {
@@ -181,7 +94,7 @@ const COOKIE_NAME_MAP: Record<string, string> = {
 export const getSessionFromCookie = async (
   activeRole?: string
 ): Promise<AuthSession | null> => {
-  const { getCookie, deleteCookie, getRequestHeader } = await import('@tanstack/react-start/server')
+  const { getCookie, deleteCookie, getRequestHeader } = await import('@tanstack/react-start-server')
 
   // Try to resolve role from header if not explicitly passed
   let resolvedRole = activeRole
@@ -214,7 +127,7 @@ export const getSessionFromCookie = async (
   if (!resolvedRole) {
     // Last resort for hard refresh: read the request URL from the server context
     try {
-      const { getRequestUrl } = await import('@tanstack/react-start/server')
+      const { getRequestUrl } = await import('@tanstack/react-start-server')
       const url = getRequestUrl()
       if (url) {
         resolvedRole = new URL(url).pathname.startsWith('/admin') ? 'admin' : 'builder'
@@ -224,67 +137,72 @@ export const getSessionFromCookie = async (
     }
   }
 
-  // Role-specific cookie read: if activeRole/resolvedRole is resolved, strictly read that cookie
-  if (resolvedRole && COOKIE_NAME_MAP[resolvedRole]) {
-    const cookieName = COOKIE_NAME_MAP[resolvedRole]
-    const token = getCookie(cookieName)
-    if (!token) return null
-    try {
-      return verifyToken(token) as AuthSession
-    } catch {
-      deleteCookie(cookieName, { path: '/' })
-      return null
+  try {
+    // Role-specific cookie read: if activeRole/resolvedRole is resolved, strictly read that cookie
+    if (resolvedRole && COOKIE_NAME_MAP[resolvedRole]) {
+      const cookieName = COOKIE_NAME_MAP[resolvedRole]
+      const token = getCookie(cookieName)
+      if (!token) return null
+      try {
+        return verifyToken(token) as AuthSession
+      } catch {
+        deleteCookie(cookieName, { path: '/' })
+        return null
+      }
     }
-  }
 
-  // x-active-role not present — Contextless check. 
-  const adminCookie = getCookie('jwt_admin')
-  const builderCookie = getCookie('jwt_builder')
-  const userCookie = getCookie('jwt_user')
-  const fallbackCookie = getCookie('jwt')
+    // x-active-role not present — Contextless check. 
+    const adminCookie = getCookie('jwt_admin')
+    const builderCookie = getCookie('jwt_builder')
+    const userCookie = getCookie('jwt_user')
+    const fallbackCookie = getCookie('jwt')
 
-  const presentCookies = [
-    { name: 'jwt_admin', val: adminCookie },
-    { name: 'jwt_builder', val: builderCookie },
-    { name: 'jwt_user', val: userCookie },
-    { name: 'jwt', val: fallbackCookie }
-  ].filter(c => c.val)
+    const presentCookies = [
+      { name: 'jwt_admin', val: adminCookie },
+      { name: 'jwt_builder', val: builderCookie },
+      { name: 'jwt_user', val: userCookie },
+      { name: 'jwt', val: fallbackCookie }
+    ].filter(c => c.val)
 
-  if (presentCookies.length === 1) {
-    try {
-      return verifyToken(presentCookies[0].val as string) as AuthSession
-    } catch {
-      deleteCookie(presentCookies[0].name, { path: '/' })
-      return null
+    if (presentCookies.length === 1) {
+      try {
+        return verifyToken(presentCookies[0].val as string) as AuthSession
+      } catch {
+        deleteCookie(presentCookies[0].name, { path: '/' })
+        return null
+      }
     }
-  }
 
-  // If multiple cookies are present, gracefully check builder then admin rather than locking the user out
-  if (builderCookie) {
-    try {
-      const s = verifyToken(builderCookie) as AuthSession
-      if (s) return s
-    } catch {
-      deleteCookie('jwt_builder', { path: '/' })
+    // If multiple cookies are present, gracefully check builder then admin rather than locking the user out
+    if (builderCookie) {
+      try {
+        const s = verifyToken(builderCookie) as AuthSession
+        if (s) return s
+      } catch {
+        deleteCookie('jwt_builder', { path: '/' })
+      }
     }
-  }
 
-  if (adminCookie) {
-    try {
-      const s = verifyToken(adminCookie) as AuthSession
-      if (s) return s
-    } catch {
-      deleteCookie('jwt_admin', { path: '/' })
+    if (adminCookie) {
+      try {
+        const s = verifyToken(adminCookie) as AuthSession
+        if (s) return s
+      } catch {
+        deleteCookie('jwt_admin', { path: '/' })
+      }
     }
-  }
 
-  if (fallbackCookie) {
-    try {
-      const s = verifyToken(fallbackCookie) as AuthSession
-      if (s) return s
-    } catch {
-      deleteCookie('jwt', { path: '/' })
+    if (fallbackCookie) {
+      try {
+        const s = verifyToken(fallbackCookie) as AuthSession
+        if (s) return s
+      } catch {
+        deleteCookie('jwt', { path: '/' })
+      }
     }
+  } catch {
+    // Outside active request context or no cookies available
+    return null
   }
 
   return null
@@ -317,6 +235,7 @@ export const requireAuth = async (activeRole?: string): Promise<AuthSession> => 
         isActive: true, 
         deletedAt: true,
         builderRole: true,
+        tokenVersion: true,
         builder: {
           select: { companyName: true, isActive: true, deletedAt: true }
         }
@@ -325,6 +244,13 @@ export const requireAuth = async (activeRole?: string): Promise<AuthSession> => 
     
     if (!user || user.isActive === false || user.deletedAt) {
       throw new Error('UNAUTHORIZED')
+    }
+
+    // Session Invalidation: If tokenVersion exists and does not match DB, invalidate session
+    if (session.tokenVersion !== undefined && user.tokenVersion !== undefined) {
+      if (session.tokenVersion !== user.tokenVersion) {
+        throw new Error('UNAUTHORIZED')
+      }
     }
     
     if (user.builder && (user.builder.isActive === false || user.builder.deletedAt)) {
@@ -377,56 +303,47 @@ export const requireManagerOrAbove = async (activeRole?: string): Promise<AuthSe
 }
 
 export const setAuthCookie = async (payload: AuthSession, rememberMe: boolean = false): Promise<void> => {
-  const { setCookie, deleteCookie } = await import('@tanstack/react-start/server')
-  const token = signToken(payload, rememberMe)
-  const cookieName = COOKIE_NAME_MAP[payload.role] ?? 'jwt'
+  try {
+    const { setCookie, deleteCookie } = await import('@tanstack/react-start-server')
+    const token = signToken(payload, rememberMe)
+    const cookieName = COOKIE_NAME_MAP[payload.role] ?? 'jwt'
 
-  // Proactively clear conflicting role cookies to prevent multi-cookie deadlocks
-  const allCookieNames = ['jwt_admin', 'jwt_builder', 'jwt_user', 'jwt']
-  for (const name of allCookieNames) {
-    if (name !== cookieName) {
-      deleteCookie(name, { path: '/' })
+    // Proactively clear conflicting role cookies to prevent multi-cookie deadlocks
+    const allCookieNames = ['jwt_admin', 'jwt_builder', 'jwt_user', 'jwt']
+    for (const name of allCookieNames) {
+      if (name !== cookieName) {
+        deleteCookie(name, { path: '/' })
+      }
     }
+
+    const isProduction = process.env.NODE_ENV === 'production'
+
+    const cookieOptions: any = {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: 'lax',
+      path: '/',
+    }
+
+    if (rememberMe) {
+      cookieOptions.maxAge = 604800
+    }
+
+    setCookie(cookieName, token, cookieOptions)
+  } catch {
+    // Outside active request context
   }
-
-  // secure:true only in production (HTTPS). In local dev (http://localhost),
-  // most browsers (Firefox, Safari) will NOT send Secure cookies over HTTP,
-  // even on localhost — causing all auth to silently fail.
-  // In production this must be true to prevent MITM interception.
-  const isProduction = process.env.NODE_ENV === 'production'
-
-  const cookieOptions: any = {
-    httpOnly: true,
-    secure: isProduction,
-    sameSite: 'lax',
-    path: '/',
-  }
-
-  // If rememberMe is checked, set persistent cookie for 7 days (604,800s).
-  // If NOT checked, omit maxAge to create a Session Cookie (cleared when browser session ends).
-  if (rememberMe) {
-    cookieOptions.maxAge = 604800
-  }
-
-  setCookie(cookieName, token, cookieOptions)
-
-  // NOTE: We intentionally do NOT set an active_role cookie.
-  // Using a shared active_role cookie caused cross-tab role contamination:
-  // admin (Tab 1) + builder (Tab 2) login would overwrite each other's cookie,
-  // and the wrong role would load on hard refresh.
-  // Role is now determined server-side from the request URL path instead.
 }
 
 export const clearAuthCookie = async (): Promise<void> => {
-  const { deleteCookie } = await import('@tanstack/react-start/server')
-
-  // Unconditionally nuke ALL role cookies on every logout.
-  // For deletion, only path needs to match — do NOT pass secure/httpOnly
-  // because those flags can conflict with how the cookie was originally set,
-  // causing the delete to silently fail and leaving stale sessions alive.
-  const allCookieNames = ['jwt_admin', 'jwt_builder', 'jwt_user', 'jwt']
-  for (const name of allCookieNames) {
-    deleteCookie(name, { path: '/' })
+  try {
+    const { deleteCookie } = await import('@tanstack/react-start-server')
+    const allCookieNames = ['jwt_admin', 'jwt_builder', 'jwt_user', 'jwt']
+    for (const name of allCookieNames) {
+      deleteCookie(name, { path: '/' })
+    }
+  } catch {
+    // Outside active request context
   }
 }
 
@@ -520,16 +437,35 @@ export const getTenantDb = async (preResolvedSession?: AuthSession) => {
 }
 
 
+export async function resolveRequestClientIp(clientIp?: string): Promise<string> {
+  if (clientIp && clientIp !== 'unknown') return clientIp;
+  try {
+    const { getRequestHeader } = await import('@tanstack/react-start-server');
+    const { getClientIp } = await import('./rate-limiter.server');
+    return getClientIp({
+      'cf-connecting-ip': getRequestHeader('cf-connecting-ip'),
+      'x-vercel-forwarded-for': getRequestHeader('x-vercel-forwarded-for'),
+      'x-real-ip': getRequestHeader('x-real-ip'),
+      'x-forwarded-for': getRequestHeader('x-forwarded-for'),
+      'user-agent': getRequestHeader('user-agent'),
+      'accept-language': getRequestHeader('accept-language'),
+    });
+  } catch {
+    const { getClientIp } = await import('./rate-limiter.server');
+    return getClientIp();
+  }
+}
+
 // ─── Login / Invite Handlers ─────────────────────────────────────────────────
 
 export const handleLogin = async (data: { email: string; password: string; rememberMe?: boolean; ip?: string }) => {
   const db = await getDb()
-  const ip = data.ip ?? 'unknown'
+  const ip = await resolveRequestClientIp(data.ip)
 
   // ── Rate Limit Check ─────────────────────────────────────────────────────────
   // Throws if email:ip is currently locked out. Must run BEFORE any DB lookup
   // to prevent timing-based user enumeration via DB query timing differences.
-  checkLoginRateLimit(data.email, ip)
+  await checkLoginRateLimit(data.email, ip)
 
   const user = await db.user.findUnique({ 
     where: { email: data.email },
@@ -538,7 +474,7 @@ export const handleLogin = async (data: { email: string; password: string; remem
 
   // Treat missing user same as wrong password (no user enumeration)
   if (!user || user.deletedAt) {
-    recordFailedLogin(data.email, ip)
+    await recordFailedLogin(data.email, ip)
     throw new Error('Invalid email or password')
   }
 
@@ -550,7 +486,7 @@ export const handleLogin = async (data: { email: string; password: string; remem
   const isValid = await bcrypt.compare(data.password, user.passwordHash)
   if (!isValid) {
     // Record failed attempt — throws with warning/lockout error if threshold hit
-    recordFailedLogin(data.email, ip)
+    await recordFailedLogin(data.email, ip)
     throw new Error('Invalid email or password')
   }
 
@@ -559,7 +495,7 @@ export const handleLogin = async (data: { email: string; password: string; remem
   }
 
   // ── Success: clear any accumulated failed attempts ────────────────────────
-  clearLoginAttempts(data.email, ip)
+  await clearLoginAttempts(data.email, ip)
 
   await db.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } })
 
@@ -574,6 +510,7 @@ export const handleLogin = async (data: { email: string; password: string; remem
     companyName: user.builder?.companyName,
     email: user.email,           // logged-in user's own email → Reply-To header
     companyEmail: user.builder?.email,  // builder's company email → company sender identity
+    tokenVersion: user.tokenVersion ?? 1,
   }
 
   await setAuthCookie(payload, data.rememberMe ?? false)
@@ -587,9 +524,16 @@ export const handleLogin = async (data: { email: string; password: string; remem
 }
 
 export const handleVerifyInvite = async (token: string) => {
+  if (!token || typeof token !== 'string') throw new Error('Invalid or expired invite token')
+  const { hashToken } = await import('./security-helpers.server')
+  const tokenHash = hashToken(token)
   const db = await getDb()
   const user = await db.user.findFirst({
-    where: { resetToken: token, resetTokenExpires: { gt: new Date() }, forcePasswordReset: true },
+    where: {
+      OR: [{ resetTokenHash: tokenHash }, { resetToken: token }],
+      resetTokenExpires: { gt: new Date() },
+      forcePasswordReset: true,
+    },
     include: { builder: true },
   })
   if (!user) throw new Error('Invalid or expired invite token')
@@ -597,10 +541,17 @@ export const handleVerifyInvite = async (token: string) => {
 }
 
 export const handleSetInvitePassword = async (data: { token: string; password: string }) => {
+  if (!data.token) throw new Error('Invalid or expired invite token')
+  const { hashToken } = await import('./security-helpers.server')
+  const tokenHash = hashToken(data.token)
   const db = await getDb()
   const user = await db.user.findFirst({
-    where: { resetToken: data.token, resetTokenExpires: { gt: new Date() }, forcePasswordReset: true },
-    include: { builder: true }
+    where: {
+      OR: [{ resetTokenHash: tokenHash }, { resetToken: data.token }],
+      resetTokenExpires: { gt: new Date() },
+      forcePasswordReset: true,
+    },
+    include: { builder: true },
   })
   if (!user) throw new Error('Invalid or expired invite token')
 
@@ -609,8 +560,10 @@ export const handleSetInvitePassword = async (data: { token: string; password: s
     where: { id: user.id },
     data: {
       passwordHash,
+      tokenVersion: { increment: 1 },
       forcePasswordReset: false,
       resetToken: null,
+      resetTokenHash: null,
       resetTokenExpires: null,
       lastLoginAt: new Date(),
     },
@@ -627,17 +580,23 @@ export const handleSetInvitePassword = async (data: { token: string; password: s
     companyName: user.builder?.companyName,
     email: updated.email,            // team member's own email → Reply-To header
     companyEmail: user.builder?.email, // builder company email → company sender identity
+    tokenVersion: updated.tokenVersion ?? 1,
   }
 
   await setAuthCookie(payload)
   return { success: true }
 }
 
-export const handleRequestPasswordReset = async (email: string) => {
+export const handleRequestPasswordReset = async (email: string, clientIp?: string) => {
   const normalizedEmail = (email || '').trim().toLowerCase();
   if (!normalizedEmail || !normalizedEmail.includes('@')) {
     return { success: false, message: 'Please enter a valid corporate email address.' };
   }
+
+  // Anti-Abuse & Email Bombing Protection (Finding 10.2)
+  const ip = await resolveRequestClientIp(clientIp);
+
+  await checkPasswordResetRateLimit(normalizedEmail, ip);
 
   const db = await getDb();
   const user = await db.user.findFirst({
@@ -657,36 +616,42 @@ export const handleRequestPasswordReset = async (email: string) => {
     };
   }
 
-  const token = crypto.randomBytes(32).toString('hex');
+  const { hashToken } = await import('./security-helpers.server');
+  const rawToken = crypto.randomBytes(32).toString('hex');
+  const tokenHash = hashToken(rawToken);
   const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour expiration
 
   await db.user.update({
     where: { id: user.id },
     data: {
-      resetToken: token,
+      resetToken: null,
+      resetTokenHash: tokenHash,
       resetTokenExpires: expires,
     },
   });
 
   const appBaseUrl = (process.env.APP_BASE_URL || 'http://localhost:8080').replace(/\/+$/, '');
-  const resetUrl = `${appBaseUrl}/reset-password?token=${token}`;
+  const resetUrl = `${appBaseUrl}/reset-password?token=${rawToken}`;
 
-  try {
-    const { sendOutboundEmail, buildPasswordResetEmailHtml } = await import('./email.server');
-    const html = buildPasswordResetEmailHtml({
-      resetUrl,
-      recipientEmail: user.email,
-      displayName: user.displayName,
-    });
+  // Non-blocking asynchronous email delivery
+  setImmediate(async () => {
+    try {
+      const { sendOutboundEmail, buildPasswordResetEmailHtml } = await import('./email.server');
+      const html = buildPasswordResetEmailHtml({
+        resetUrl,
+        recipientEmail: user.email,
+        displayName: user.displayName,
+      });
 
-    await sendOutboundEmail({
-      to: user.email,
-      subject: 'WeaverFrame Security: Password Reset Authorization',
-      html,
-    });
-  } catch (emailErr) {
-    console.error('[AUTH] Failed to dispatch password reset email:', emailErr);
-  }
+      await sendOutboundEmail({
+        to: user.email,
+        subject: 'WeaverFrame Security: Password Reset Authorization',
+        html,
+      });
+    } catch (emailErr) {
+      console.error('[AUTH] Failed to dispatch password reset email:', emailErr);
+    }
+  });
 
   return {
     success: true,
@@ -699,10 +664,12 @@ export const handleVerifyResetToken = async (token: string) => {
     return { valid: false, message: 'Invalid reset link' };
   }
 
+  const { hashToken } = await import('./security-helpers.server');
+  const tokenHash = hashToken(token);
   const db = await getDb();
   const user = await db.user.findFirst({
     where: {
-      resetToken: token,
+      OR: [{ resetTokenHash: tokenHash }, { resetToken: token }],
       resetTokenExpires: { gt: new Date() },
       isActive: true,
       deletedAt: null,
@@ -735,10 +702,12 @@ export const handleResetPassword = async (data: { token: string; password: strin
     throw new Error('Password must be at least 8 characters long.');
   }
 
+  const { hashToken } = await import('./security-helpers.server');
+  const tokenHash = hashToken(data.token);
   const db = await getDb();
   const user = await db.user.findFirst({
     where: {
-      resetToken: data.token,
+      OR: [{ resetTokenHash: tokenHash }, { resetToken: data.token }],
       resetTokenExpires: { gt: new Date() },
       isActive: true,
       deletedAt: null,
@@ -755,8 +724,10 @@ export const handleResetPassword = async (data: { token: string; password: strin
     where: { id: user.id },
     data: {
       passwordHash,
+      tokenVersion: { increment: 1 },
       forcePasswordReset: false,
       resetToken: null,
+      resetTokenHash: null,
       resetTokenExpires: null,
       lastLoginAt: new Date(),
     },
@@ -773,9 +744,124 @@ export const handleResetPassword = async (data: { token: string; password: strin
     companyName: user.builder?.companyName,
     email: updated.email,
     companyEmail: user.builder?.email,
+    tokenVersion: updated.tokenVersion ?? 1,
   };
 
   await setAuthCookie(payload);
   return { success: true };
 };
+
+export async function processMessageAttachments(content: string, leadId: string): Promise<string> {
+  const { processAndUploadContentAttachments } = await import('./storage.server');
+  return processAndUploadContentAttachments(content, leadId);
+}
+
+export async function handleSubmitDemoRequest(data: {
+  name: string;
+  company: string;
+  email: string;
+  phone: string;
+  buildVolume: string;
+}) {
+  const { checkPublicFormRateLimit } = await import('./rate-limiter.server');
+  const clientIp = await resolveRequestClientIp();
+  await checkPublicFormRateLimit('demo', clientIp);
+
+  if (!data.name || data.name.trim().length < 2) {
+    throw new Error('Please enter your full name.');
+  }
+  if (!data.company || data.company.trim().length < 2) {
+    throw new Error('Please enter your building company name.');
+  }
+  if (!data.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email.trim())) {
+    throw new Error('Please enter a valid work email address.');
+  }
+  if (!data.phone || data.phone.trim().length < 5) {
+    throw new Error('Please enter a valid phone number.');
+  }
+
+  const { getDb } = await import('./db.server');
+  const db = await getDb();
+  const { sendOutboundEmail, buildAdminDemoNotificationHtml, buildUserDemoConfirmationHtml } = await import('./email.server');
+  const crypto = await import('crypto');
+
+  try {
+    const platformSettings = await db.platformSettings.findFirst({ select: { supportEmail: true } }).catch(() => null);
+    const portalToken = crypto.randomBytes(16).toString('hex');
+
+    const demoRequest = await db.demoRequest.create({
+      data: {
+        name: data.name.trim(),
+        email: data.email.trim().toLowerCase(),
+        phone: data.phone.trim(),
+        company: data.company.trim(),
+        buildVolume: data.buildVolume || 'Custom Build Inquiry',
+        status: 'new',
+        portalToken,
+        metadata: JSON.stringify({
+          requestType: 'Private Architecture Demonstration Walkthrough',
+          submittedAt: new Date().toISOString(),
+          buildVolume: data.buildVolume,
+        }),
+      }
+    });
+
+    const demoId = demoRequest.id;
+
+    let adminEmail = (typeof process !== 'undefined' ? (process.env.ADMIN_EMAIL || process.env.SMTP_USER || process.env.GMAIL_USER) : '') || '';
+    if (!adminEmail && platformSettings?.supportEmail) {
+      adminEmail = platformSettings.supportEmail;
+    }
+    if (!adminEmail) {
+      adminEmail = 'admin@weaverframe.com';
+    }
+
+    const baseUrl = (typeof process !== 'undefined' ? process.env.APP_BASE_URL : '') || 'https://weaverframe.in';
+    const dashboardUrl = `${baseUrl}/admin/demo-requests`;
+
+    if (adminEmail) {
+      sendOutboundEmail({
+        to: adminEmail,
+        subject: `🚀 [Demo Request] ${data.name.trim()} from ${data.company.trim()} (${data.buildVolume})`,
+        html: buildAdminDemoNotificationHtml({
+          name: data.name.trim(),
+          company: data.company.trim(),
+          email: data.email.trim(),
+          phone: data.phone.trim(),
+          buildVolume: data.buildVolume,
+          dashboardUrl,
+        }),
+        from: 'WeaverFrame Concierge <onboarding@resend.dev>',
+      }).catch((err) => {
+        console.error('[DEMO REQUEST ADMIN EMAIL ERROR]:', err);
+      });
+    }
+
+    sendOutboundEmail({
+      to: data.email.trim(),
+      subject: `WeaverFrame — Private OS Demonstration Request Received`,
+      html: buildUserDemoConfirmationHtml({
+        recipientName: data.name.trim(),
+        company: data.company.trim(),
+        buildVolume: data.buildVolume,
+      }),
+      from: 'WeaverFrame Executive Advisory <onboarding@resend.dev>',
+    }).catch((err) => {
+      console.error('[DEMO REQUEST USER CONFIRMATION ERROR]:', err);
+    });
+
+    const { invalidateCache } = await import('./cache');
+    invalidateCache('dashboard_');
+
+    return {
+      success: true,
+      message: 'Your demonstration request has been received. Our executive advisor will reach out shortly.',
+      demoId,
+      leadId: demoId,
+    };
+  } catch (error: any) {
+    console.error('[DEMO REQUEST ERROR]:', error);
+    throw new Error(error?.message || 'Failed to submit demonstration request. Please try again.');
+  }
+}
 

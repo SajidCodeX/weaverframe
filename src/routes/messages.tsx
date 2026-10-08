@@ -19,6 +19,7 @@ import {
   markConversationUnread,
   archiveConversation,
 } from "@/lib/dashboard";
+import { sanitizeSafeUrl } from "@/lib/sanitizer";
 import {
   MessageSquare,
   MessageSquarePlus,
@@ -2462,7 +2463,7 @@ function MessagesPage() {
                                             <div className="border-t border-white/5 pt-2 flex items-center justify-between">
                                               <span className="text-[9px] text-muted-foreground font-mono">{link.category || "Link"}</span>
                                               <a
-                                                href={link.url}
+                                                href={sanitizeSafeUrl(link.url)}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
                                                 className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-secondary hover:bg-secondary/80 text-foreground text-xs font-medium transition-colors cursor-pointer border border-border"

@@ -9,6 +9,7 @@ export const Route = createFileRoute('/feedback')({
 
 function FeedbackPage() {
   const [inviteId, setInviteId] = useState('');
+  const [sig, setSig] = useState('');
   const [rating, setRating] = useState(3);
   const [feedback, setFeedback] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -20,8 +21,10 @@ function FeedbackPage() {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const id = params.get('inviteId') || params.get('id') || '';
+      const s = params.get('sig') || '';
       const r = parseInt(params.get('rating') || '3');
       setInviteId(id);
+      setSig(s);
       if (!isNaN(r) && r >= 1 && r <= 5) {
         setRating(r);
       }
@@ -45,6 +48,7 @@ function FeedbackPage() {
           rating,
           feedback,
           platform: rating >= 4 ? 'Google Business' : undefined,
+          sig: sig || undefined,
         },
       });
       setIsSubmitted(true);

@@ -1,5 +1,5 @@
 import { RoutePending } from "@/components/dashboard/RoutePending";
-import { createFileRoute, useLoaderData, useRouter } from "@tanstack/react-router";
+import { createFileRoute, useLoaderData, useRouter, redirect } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { useTheme } from "@/components/ThemeProvider";
 import { Shell } from "@/components/dashboard/Shell";
@@ -32,7 +32,6 @@ export const Route = createFileRoute("/settings")({
     if (typeof window === 'undefined') return
     const session = (context as any).session
     if (session && session.role === 'builder' && (session.builderRole === 'manager' || session.builderRole === 'sales')) {
-      const { redirect } = await import('@tanstack/react-router')
       throw redirect({ to: '/' })
     }
   },
