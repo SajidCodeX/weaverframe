@@ -1,5 +1,5 @@
 import { RoutePending } from "@/components/dashboard/RoutePending";
-import { createFileRoute, useLoaderData } from "@tanstack/react-router";
+import { createFileRoute, useLoaderData, redirect } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { FileText, FileSpreadsheet, Mail } from "lucide-react";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
@@ -14,7 +14,6 @@ export const Route = createFileRoute("/reports")({
 
     const session = (context as any).session
     if (session && session.role === 'builder' && session.builderRole === 'sales') {
-      const { redirect } = await import('@tanstack/react-router')
       throw redirect({ to: '/' })
     }
   },

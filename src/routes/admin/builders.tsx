@@ -85,10 +85,8 @@ function BuildersRoute() {
     const { generatePasswordResetLink } = await import('@/lib/dashboard')
     try {
       const res = await generatePasswordResetLink({ data: userId })
-      if (res.success && res.inviteLink) {
-        const link = window.location.origin + res.inviteLink
-        navigator.clipboard.writeText(link)
-        alert(`Reset link generated for owner and copied to clipboard!\n\n${link}`)
+      if (res.success) {
+        alert(res.message || 'Password reset instructions have been dispatched.')
       }
     } catch (err: any) {
       alert(`Failed to generate reset link: ${err?.message}`)

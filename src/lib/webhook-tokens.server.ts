@@ -1,6 +1,10 @@
 import crypto from 'crypto';
+import { assertSecret } from './security-helpers.server';
 
-const HMAC_SECRET = process.env.SESSION_SECRET || process.env.ENCRYPTION_KEY || 'weaverframe_hmac_secret_key_2026';
+function getHmacSecret(): string {
+  const secret = process.env.WEBHOOK_HMAC_ROOT || process.env.SESSION_SECRET || process.env.ENCRYPTION_KEY;
+  return assertSecret('WEBHOOK_HMAC_ROOT', secret, 32);
+}
 
 export const PLATFORM_CONFIGS: Record<string, { code: string; label: string; readableSource: string }> = {
   wordpress: { code: 'wp', label: 'WordPress / Elementor Pro', readableSource: 'WordPress Elementor' },
@@ -44,7 +48,7 @@ export function generatePlatformToken(builderId: string, platformKey: string): s
   if (!builderId) return '';
   const normKey = platformKey.toLowerCase().trim();
 
-  const hmac = crypto.createHmac('sha256', HMAC_SECRET);
+  const hmac = crypto.createHmac('sha256', getHmacSecret());
   hmac.update(`weaverframe:v2:platform_token:${builderId}:${normKey}`);
   const signature48 = hmac.digest('hex').slice(0, 48);
 
@@ -104,7 +108,7 @@ export function verifyPlatformToken(
     for (const b of builders) {
       if (!b.isActive) continue;
       for (const [platformKey, info] of Object.entries(PLATFORM_CONFIGS)) {
-        const hmac = crypto.createHmac('sha256', HMAC_SECRET);
+        const hmac = crypto.createHmac('sha256', getHmacSecret());
         hmac.update(`weaverframe:v2:platform_token:${b.id}:${platformKey}`);
         const candidateSig = hmac.digest('hex').slice(0, 48);
 
@@ -142,7 +146,7 @@ export function verifyPlatformToken(
       if (!b.isActive) continue;
       const candidatePrefix = b.id.replace(/-/g, '').slice(0, 12);
       if (candidatePrefix === builderPrefix) {
-        const hmac = crypto.createHmac('sha256', HMAC_SECRET);
+        const hmac = crypto.createHmac('sha256', getHmacSecret());
         hmac.update(`${b.id}:${code}:${platformKey}`);
         const expectedSig = hmac.digest('hex').slice(0, 20);
 

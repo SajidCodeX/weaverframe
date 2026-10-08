@@ -33,6 +33,7 @@ model Builder {
   reviewPlatforms ReviewPlatform[]
   integrations    Integration[]
   publicReviews   PublicReview[]
+  adSpendLedgers  AdSpendLedger[]
 }
 
 // ─── USERS (ADMIN & BUILDER STAFF) ───────────────────────────────────────────
@@ -46,12 +47,14 @@ model User {
   forcePasswordReset Boolean  @default(false)
   lastLoginAt       DateTime?
   isActive          Boolean   @default(true)
+  tokenVersion      Int       @default(1)          // Incremented on password reset/role change/session invalidation
   
   // Team Permissions
   builderRole       String    @default("owner")    // "owner" | "member"
   permissions       String[]  @default([])         // e.g. ["leads:read", "settings:write"]
   
   resetToken        String?
+  resetTokenHash    String?
   resetTokenExpires DateTime?
   
   createdAt         DateTime  @default(now())
@@ -64,6 +67,7 @@ model User {
 
   @@index([builderId])
   @@index([resetToken])
+  @@index([resetTokenHash])
 }
 
 // ─── LEADS ───────────────────────────────────────────────────────────────────
@@ -332,5 +336,31 @@ model ScheduledAiReply {
   @@index([status, scheduledFor])
   @@index([leadId, status])
   @@index([builderId])
+}
+
+// ─── STRIPE WEBHOOK EVENT IDEMPOTENCY (Finding 4.1) ─────────────────────────
+model StripeWebhookEvent {
+  id        String   @id // stripe event.id (evt_...)
+  type      String
+  processedAt DateTime @default(now())
+
+  @@index([processedAt])
+}
+
+// ─── APPEND-ONLY AD SPEND LEDGER (Finding 4.2) ──────────────────────────────
+model AdSpendLedger {
+  id           String   @id @default(uuid())
+  builderId    String
+  amountCents  Int      // Positive for credits, negative for debits
+  balanceAfter Float
+  source       String   // "stripe_checkout", "admin_adjustment", "campaign_debit"
+  referenceId  String?  // Stripe event ID or session ID for traceability
+  description  String
+  createdAt    DateTime @default(now())
+
+  builder      Builder  @relation(fields: [builderId], references: [id], onDelete: Cascade)
+
+  @@index([builderId])
+  @@index([createdAt])
 }
 

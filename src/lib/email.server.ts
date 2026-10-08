@@ -414,6 +414,19 @@ export function extractAttachmentsAndCleanContent(rawContent: string | null | un
 }
 
 /**
+ * Escapes untrusted input to prevent HTML injection in emails (Finding 9.1).
+ */
+export function escapeHtml(str: string | null | undefined): string {
+  if (!str || typeof str !== 'string') return '';
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
  * Generates an executive B2B architectural HTML email template
  */
 export function buildArchitecturalEmailHtml({
@@ -437,22 +450,27 @@ export function buildArchitecturalEmailHtml({
   links?: Array<{ title: string; url: string; category?: string }>;
   attachmentsList?: Array<{ name: string; size?: string }>;
 }) {
-  // Convert newlines to formatted paragraphs
+  const safeRecipientName = escapeHtml(recipientName);
+  const safeSenderName = escapeHtml(senderName);
+  const safeSenderRole = escapeHtml(senderRole);
+  const safeCompanyName = escapeHtml(companyName);
+
+  // Convert newlines to formatted paragraphs with HTML escaping
   const formattedParagraphs = messageContent
     .split('\n\n')
     .map(p => p.trim())
     .filter(Boolean)
-    .map(p => `<p style="margin: 0 0 16px 0; color: #334155; font-size: 15px; line-height: 1.65;">${p.replace(/\n/g, '<br/>')}</p>`)
+    .map(p => `<p style="margin: 0 0 16px 0; color: #334155; font-size: 15px; line-height: 1.65;">${escapeHtml(p).replace(/\n/g, '<br/>')}</p>`)
     .join('');
 
-  // Format links callout block
+  // Format links callout block with HTML escaping
   const formattedLinks = links && links.length > 0 ? `
     <div style="margin: 24px 0 16px 0; padding: 16px 20px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;">
       <p style="margin: 0 0 10px 0; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.8px;">Shared Online Resources</p>
       ${links.map(l => `
         <div style="margin-top: 8px;">
-          <a href="${l.url}" target="_blank" style="color: #0f172a; text-decoration: none; font-weight: 600; font-size: 14px;">
-            🌐 ${l.title} <span style="color: #64748b; font-size: 12px; font-weight: 400; margin-left: 4px;">(${l.url})</span> &rarr;
+          <a href="${escapeHtml(l.url)}" target="_blank" style="color: #0f172a; text-decoration: none; font-weight: 600; font-size: 14px;">
+            🌐 ${escapeHtml(l.title)} <span style="color: #64748b; font-size: 12px; font-weight: 400; margin-left: 4px;">(${escapeHtml(l.url)})</span> &rarr;
           </a>
         </div>
       `).join('')}
@@ -569,6 +587,13 @@ export function buildAdminDemoNotificationHtml({
   buildVolume: string;
   dashboardUrl?: string;
 }) {
+  const safeName = escapeHtml(name);
+  const safeCompany = escapeHtml(company);
+  const safeEmail = escapeHtml(email);
+  const safePhone = escapeHtml(phone);
+  const safeBuildVolume = escapeHtml(buildVolume);
+  const safeDashboardUrl = escapeHtml(dashboardUrl);
+
   const timestamp = new Date().toLocaleString('en-US', {
     timeZone: 'America/Chicago',
     dateStyle: 'medium',
@@ -616,23 +641,23 @@ export function buildAdminDemoNotificationHtml({
               <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #161720; border-radius: 10px; border: 1px solid rgba(255,255,255,0.08); overflow: hidden; margin-bottom: 28px;">
                 <tr>
                   <td style="padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.06); width: 35%; color: #64748b; font-size: 12px; text-transform: uppercase; font-family: monospace; letter-spacing: 1px;">Contact Name</td>
-                  <td style="padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.06); color: #ffffff; font-size: 14px; font-weight: 600;">${name}</td>
+                  <td style="padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.06); color: #ffffff; font-size: 14px; font-weight: 600;">${safeName}</td>
                 </tr>
                 <tr>
                   <td style="padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.06); color: #64748b; font-size: 12px; text-transform: uppercase; font-family: monospace; letter-spacing: 1px;">Building Company</td>
-                  <td style="padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.06); color: #c9a84c; font-size: 14px; font-weight: 700;">${company}</td>
+                  <td style="padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.06); color: #c9a84c; font-size: 14px; font-weight: 700;">${safeCompany}</td>
                 </tr>
                 <tr>
                   <td style="padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.06); color: #64748b; font-size: 12px; text-transform: uppercase; font-family: monospace; letter-spacing: 1px;">Typical Home Price</td>
-                  <td style="padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.06); color: #10b981; font-size: 14px; font-weight: 700;">${buildVolume}</td>
+                  <td style="padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.06); color: #10b981; font-size: 14px; font-weight: 700;">${safeBuildVolume}</td>
                 </tr>
                 <tr>
                   <td style="padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.06); color: #64748b; font-size: 12px; text-transform: uppercase; font-family: monospace; letter-spacing: 1px;">Work Email</td>
-                  <td style="padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.06); color: #ffffff; font-size: 14px;"><a href="mailto:${email}" style="color: #93c5fd; text-decoration: none;">${email}</a></td>
+                  <td style="padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.06); color: #ffffff; font-size: 14px;"><a href="mailto:${safeEmail}" style="color: #93c5fd; text-decoration: none;">${safeEmail}</a></td>
                 </tr>
                 <tr>
                   <td style="padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.06); color: #64748b; font-size: 12px; text-transform: uppercase; font-family: monospace; letter-spacing: 1px;">Direct Phone</td>
-                  <td style="padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.06); color: #ffffff; font-size: 14px;"><a href="tel:${phone.replace(/[^0-9+]/g, '')}" style="color: #93c5fd; text-decoration: none;">${phone}</a></td>
+                  <td style="padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.06); color: #ffffff; font-size: 14px;"><a href="tel:${safePhone.replace(/[^0-9+]/g, '')}" style="color: #93c5fd; text-decoration: none;">${safePhone}</a></td>
                 </tr>
                 <tr>
                   <td style="padding: 14px 20px; color: #64748b; font-size: 12px; text-transform: uppercase; font-family: monospace; letter-spacing: 1px;">Requested At</td>
@@ -644,7 +669,7 @@ export function buildAdminDemoNotificationHtml({
               <table width="100%" border="0" cellspacing="0" cellpadding="0">
                 <tr>
                   <td align="center">
-                    <a href="${dashboardUrl}" target="_blank" style="display: inline-block; padding: 14px 32px; background-color: #c9a84c; color: #000000; text-decoration: none; font-size: 13px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; border-radius: 8px; box-shadow: 0 4px 14px rgba(201,168,76,0.3);">
+                    <a href="${safeDashboardUrl}" target="_blank" style="display: inline-block; padding: 14px 32px; background-color: #c9a84c; color: #000000; text-decoration: none; font-size: 13px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; border-radius: 8px; box-shadow: 0 4px 14px rgba(201,168,76,0.3);">
                       Open Lead in WeaverFrame &rarr;
                     </a>
                   </td>

@@ -1108,85 +1108,113 @@ export const sendReviewRequest = createServerFn({ method: 'POST' })
   })
 
 export const submitClientReview = createServerFn({ method: 'POST' })
-  .inputValidator((data: { id: string; rating: number; feedback?: string; platform?: string }) => data)
+  .inputValidator((data: { id: string; rating: number; feedback?: string; platform?: string; sig?: string }) => data)
   .handler(async ({ data }) => {
-    const { getTenantDb, requireAuth } = await import('./server-utils.server');
-    const session = await requireAuth()
-    const { id, rating, feedback, platform } = data
-    const db = await getTenantDb()
-    try {
-      const existing = await db.reviewRequest.findUnique({ where: { id } })
-      if (!existing) throw new Error("Review request not found")
+    const { getDb } = await import('./db.server');
+    const { verifyReviewInviteSignature, getSessionFromCookie } = await import('./server-utils.server');
+    const { id, rating, feedback, platform, sig } = data;
+    const db = await getDb();
 
-      let status = "Completed"
-      if (rating <= 3) {
-        status = "Feedback"
+    // Verify cryptographic HMAC signature or valid authenticated session (Finding 10.1 IDOR prevention)
+    let isAuthorized = false;
+    if (sig) {
+      isAuthorized = await verifyReviewInviteSignature(id, sig);
+    }
+    if (!isAuthorized) {
+      const session = await getSessionFromCookie();
+      if (session && session.userId) {
+        isAuthorized = true;
+      }
+    }
+
+    if (!isAuthorized) {
+      throw new Error('UNAUTHORIZED: Invalid or missing cryptographic review invitation signature.');
+    }
+
+    try {
+      const existing = await db.reviewRequest.findUnique({
+        where: { id },
+        include: { lead: true }
+      });
+      if (!existing) throw new Error("Review request not found");
+      if (existing.status === 'Completed') {
+        throw new Error("This review invitation has already been submitted.");
       }
 
-      const updated = await db.reviewRequest.update({
-        where: { id },
+      let status = "Completed";
+      if (rating <= 3) {
+        status = "Feedback";
+      }
+
+      // Atomic single-use consumption to prevent replay submissions
+      const updateRes = await db.reviewRequest.updateMany({
+        where: { id, status: { not: 'Completed' } },
         data: {
           rating,
           feedback: feedback || null,
           platform: rating >= 4 ? (platform || "Google Business") : null,
           status,
         }
-      })
+      });
+
+      if (updateRes.count === 0) {
+        throw new Error("This review invitation has already been submitted.");
+      }
 
       // If positive, increment the reviewCount on the chosen platform
       if (rating >= 4) {
-        const platName = platform || "Google Business"
+        const platName = platform || "Google Business";
         const platformRecord = await db.reviewPlatform.findFirst({
-          where: { name: { contains: platName, mode: 'insensitive' } }
-        })
+          where: { builderId: existing.builderId, name: { contains: platName, mode: 'insensitive' } }
+        });
         if (platformRecord) {
-          const newCount = platformRecord.reviewCount + 1
-          // Compute a slightly adjusted float rating
-          const newRating = parseFloat(((platformRecord.rating * platformRecord.reviewCount + rating) / newCount).toFixed(2))
+          const newCount = platformRecord.reviewCount + 1;
+          const newRating = parseFloat(((platformRecord.rating * platformRecord.reviewCount + rating) / newCount).toFixed(2));
           await db.reviewPlatform.update({
             where: { id: platformRecord.id },
             data: {
               reviewCount: newCount,
               rating: newRating > 5.0 ? 5.0 : newRating
             }
-          })
+          });
         }
 
-        // Add to public reviews feed in database!
+        // Add to public reviews feed in database
         await db.publicReview.create({
           data: {
-            builderId: session.builderId || '',
+            builderId: existing.builderId,
             clientName: existing.clientName,
             platform: platName,
             rating: rating,
-            reviewText: feedback || `Incredible custom building experience with ${session.companyName || 'our team'}! Extremely satisfied with their professionalism and quality.`,
+            reviewText: feedback || `Incredible custom building experience! Extremely satisfied with their professionalism and quality.`,
             projectType: "Custom Home Build",
             location: existing.lead?.city ? `${existing.lead.city}${existing.lead.state ? `, ${existing.lead.state}` : ''}` : "Verified Client",
             status: "Unanswered"
           }
-        })
+        });
       }
 
       if (existing.leadId) {
         const activityAction = rating >= 4
           ? `Client submitted positive ${rating}-Star Review for ${platform || 'Google Business'}.`
-          : `Client submitted private feedback: "${feedback}" (${rating} Stars). Safeguarded from public profiles.`
+          : `Client submitted private feedback: "${feedback}" (${rating} Stars). Safeguarded from public profiles.`;
 
         await db.activity.create({
           data: {
-            builderId: session.builderId || '',
+            builderId: existing.builderId,
             leadId: existing.leadId,
             action: activityAction
           }
-        })
+        });
       }
 
-      return updated
+      const res = { success: true, status };
+      return Object.assign(res, { result: res });
     } catch (error) {
-      console.error("Error in submitClientReview:", error)
-      throw error
+      console.error("Error in submitClientReview:", error);
+      throw error;
     }
-  })
+  });
 
 export const getPublicReviews = createServerFn({ method: 'GET' }).handler(async () => {
   const { getTenantDb, requireAuth } = await import('./server-utils.server');
@@ -1334,21 +1362,22 @@ export const getBillingProfile = createServerFn({ method: 'GET' }).handler(async
 });
 
 export const updateBillingProfile = createServerFn({ method: 'POST' })
-  .inputValidator((data: { adSpendBalance?: number; paymentMethod?: string }) => data)
+  .inputValidator((data: { paymentMethod?: string }) => data)
   .handler(async ({ data }) => {
     const { getTenantDb, requireAuth } = await import('./server-utils.server');
     const session = await requireAuth();
     const db = await getTenantDb();
     try {
       if (!session.builderId) throw new Error('Not a builder account');
+      // adSpendBalance cannot be forged by client; only paymentMethod and preferences
       const updated = await db.builder.update({
         where: { id: session.builderId },
         data: {
-          adSpendBalance: data.adSpendBalance !== undefined ? data.adSpendBalance : undefined,
           paymentMethod: data.paymentMethod !== undefined ? data.paymentMethod : undefined
         }
       });
-      return { success: true, builder: updated };
+      const res = { success: true, builder: updated };
+      return Object.assign(res, { result: res });
     } catch (error) {
       console.error("Error in updateBillingProfile:", error);
       throw error;
@@ -1510,7 +1539,9 @@ export async function callAiEngine(
 export const generateGroqCompletion = createServerFn({ method: 'POST' })
   .inputValidator((data: { messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> }) => data)
   .handler(async ({ data }) => {
-    const { getTenantDb } = await import('./server-utils.server');
+    const { requireAuth, getTenantDb } = await import('./server-utils.server');
+    const session = await requireAuth();
+
     const GROQ_API_KEY = process.env.GROQ_API_KEY;
     const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
@@ -1519,8 +1550,6 @@ export const generateGroqCompletion = createServerFn({ method: 'POST' })
     // Fallback Mock Engine in case no API keys are configured
     const hasKeys = (GEMINI_API_KEY && GEMINI_API_KEY.trim() !== "") || (GROQ_API_KEY && GROQ_API_KEY.trim() !== "");
     if (!hasKeys) {
-      const { requireAuth } = await import('./server-utils.server');
-      const session = await requireAuth().catch(() => ({ companyName: "our company" }));
       console.log("No API keys found. Simulating AI completion...");
       const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')?.content || "";
 
@@ -2789,8 +2818,8 @@ export const sendMessage = createServerFn({ method: 'POST' })
       const { leadId, content, subject, isInternal } = data
 
       // Upload any local base64 attachments to Cloudflare R2 to keep PostgreSQL lightweight
-      const { processAndUploadContentAttachments } = await import('./storage.server');
-      const processedContent = await processAndUploadContentAttachments(content, leadId);
+      const { processMessageAttachments } = await import('./server-utils.server');
+      const processedContent = await processMessageAttachments(content, leadId);
 
       // 1. Create message in DB
       const userMsg = await db.message.create({
@@ -2972,40 +3001,47 @@ export const assignLeadToUser = createServerFn({ method: 'POST' })
   .inputValidator((data: { leadId: string; userId: string | null; activeRole?: string | null }) => data)
   .handler(async ({ data }) => {
     const { getTenantDb, requireAuth } = await import('./server-utils.server');
+    const { assertTenantContext } = await import('./security-helpers.server');
     const session = await requireAuth(data?.activeRole ?? undefined);
+    const tenantId = assertTenantContext(session);
     const db = await getTenantDb(session);
     try {
       const { leadId, userId } = data;
 
-      const lead = await db.lead.findUnique({
-        where: { id: leadId },
-        select: { id: true, name: true, assignedToId: true }
+      // 1. Verify lead strictly belongs to caller's tenant
+      const lead = await db.lead.findFirst({
+        where: { id: leadId, builderId: tenantId },
+        select: { id: true, name: true, assignedToId: true },
       });
-      if (!lead) throw new Error("Lead not found");
+      if (!lead) throw new Error('Lead not found or access denied');
 
       let assignedUser: { id: string; displayName: string | null; email: string; builderRole: string } | null = null;
       if (userId) {
-        assignedUser = await db.user.findUnique({
-          where: { id: userId },
-          select: { id: true, displayName: true, email: true, builderRole: true }
+        // 2. Strict IDOR protection: assigned user MUST belong to the caller's tenant and be active
+        assignedUser = await db.user.findFirst({
+          where: { id: userId, builderId: tenantId, deletedAt: null, isActive: true },
+          select: { id: true, displayName: true, email: true, builderRole: true },
         });
+        if (!assignedUser) {
+          throw new Error('User not found or does not belong to this organization');
+        }
       }
 
       await db.lead.update({
         where: { id: leadId },
-        data: { assignedToId: userId }
+        data: { assignedToId: userId },
       });
 
       const assigneeLabel = assignedUser ? (assignedUser.displayName || assignedUser.email) : 'Unassigned';
       await db.activity.create({
         data: {
-          builderId: session.builderId || '',
+          builderId: tenantId,
           leadId,
           action: `👤 Lead assigned to ${assigneeLabel} by ${session.displayName || 'Team Member'}`,
-        }
+        },
       }).catch(() => {});
 
-      return {
+      const result = {
         success: true,
         leadId,
         assignedToId: userId,
@@ -3016,11 +3052,13 @@ export const assignLeadToUser = createServerFn({ method: 'POST' })
           builderRole: assignedUser.builderRole,
         } : null,
       };
+
+      return Object.assign(result, { result });
     } catch (error) {
-      console.error("Error in assignLeadToUser:", error);
+      console.error('Error in assignLeadToUser:', error);
       throw error;
     }
-  })
+  });
 
 export const getLatestInboundMessages = createServerFn({ method: 'POST' })
   .inputValidator((data?: { since?: string; activeRole?: string | null }) => data)
@@ -4114,25 +4152,28 @@ export const exportLeadsToCsv = createServerFn({ method: 'POST' })
         orderBy: { purchaseDate: 'desc' }
       })
       
-      // Construct CSV header & rows with double quotes around text content containing commas
+      const { sanitizeCsvCell } = await import('./security-helpers.server');
+      
+      // Construct CSV header & rows with formula injection sanitization (Finding 5.2)
       const headers = ["ID", "Name", "Phone", "Email", "County", "State", "Land Price", "Estimated Budget", "Purchase Date", "Status", "Score Tier", "Source"];
       const rows = leads.map(l => [
-        l.id,
-        `"${(l.name || "").replace(/"/g, '""')}"`,
-        l.phone || "",
-        l.email || "",
-        `"${(l.county || "").replace(/"/g, '""')}"`,
-        l.state || "",
-        l.landPrice || 0,
-        l.estimatedBudget || 0,
-        l.purchaseDate ? l.purchaseDate.toISOString() : "",
-        l.status || "",
-        l.scoreTier || "",
-        `"${(l.source || "").replace(/"/g, '""')}"`
+        sanitizeCsvCell(l.id),
+        sanitizeCsvCell(l.name),
+        sanitizeCsvCell(l.phone),
+        sanitizeCsvCell(l.email),
+        sanitizeCsvCell(l.county),
+        sanitizeCsvCell(l.state),
+        sanitizeCsvCell(l.landPrice || 0),
+        sanitizeCsvCell(l.estimatedBudget || 0),
+        sanitizeCsvCell(l.purchaseDate ? l.purchaseDate.toISOString() : ""),
+        sanitizeCsvCell(l.status),
+        sanitizeCsvCell(l.scoreTier),
+        sanitizeCsvCell(l.source)
       ]);
 
       const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
-      return { csvContent };
+      const res = { csvContent };
+      return Object.assign(res, { result: res });
     } catch (error) {
       console.error("Error exporting CSV:", error);
       throw error;
@@ -4167,6 +4208,14 @@ export async function writeSettingJson(platformId: string, value: Record<string,
   const { requireAuth } = await import('./server-utils.server');
   const { getDb } = await import('./db.server');
   const session = preResolvedSession ?? await requireAuth()
+  
+  // Finding 5.1: RBAC on builder settings. Sales representatives cannot modify settings.
+  if (session.role === 'builder') {
+    if (session.builderRole !== 'owner' && session.builderRole !== 'admin') {
+      throw new Error('FORBIDDEN: Only Owners and Administrators can modify workspace settings.');
+    }
+  }
+
   const db = await getDb()
   
   const builderId = session.role === 'admin' ? (session.actingAsBuilderId || session.builderId) : session.builderId;
@@ -4365,9 +4414,20 @@ export const getWebhookUrl = createServerFn({ method: 'GET' }).handler(async () 
 export const saveWebhookUrl = createServerFn({ method: 'POST' })
   .inputValidator((url: string) => url)
   .handler(async ({ data: url }) => {
-    const { getTenantDb } = await import('./server-utils.server');
-    await writeSettingJson('webhook_url', { url })
-    return { success: true }
+    const { requireAuth } = await import('./server-utils.server');
+    const { validateOutboundWebhookUrl } = await import('./security-helpers.server');
+    const session = await requireAuth();
+
+    if (session.role === 'builder') {
+      if (session.builderRole !== 'owner' && session.builderRole !== 'admin') {
+        throw new Error('FORBIDDEN: Only Owners and Administrators can modify webhook endpoints.');
+      }
+    }
+
+    const cleanUrl = url && url.trim().length > 0 ? await validateOutboundWebhookUrl(url) : '';
+    await writeSettingJson('webhook_url', { url: cleanUrl }, session);
+    const res = { success: true, url: cleanUrl };
+    return Object.assign(res, { result: res });
   })
 
 // â”€â”€â”€ Per-lead AI Concierge toggle persistence â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -4621,16 +4681,30 @@ function generateRealisticPermits(targetMarket: string, count: number): any[] {
 export const getTeamData = createServerFn({ method: 'POST' })
   .inputValidator((data: { activeRole?: string | null } | undefined) => data)
   .handler(async ({ data }) => {
-  const { getTenantDb, requireAuth } = await import('./server-utils.server');
-  const session = await requireAuth(data?.activeRole ?? undefined);
-  const db = await getTenantDb(session)
-  const users = await db.user.findMany({
-    where: { builderId: session.builderId || undefined },
-    select: { id: true, displayName: true, email: true, builderRole: true, lastLoginAt: true, isActive: true },
-    orderBy: { createdAt: 'desc' }
-  })
-  return users
-})
+    const { getTenantDb, requireAuth } = await import('./server-utils.server');
+    const { assertTenantContext } = await import('./security-helpers.server');
+    const session = await requireAuth(data?.activeRole ?? undefined);
+    const tenantId = assertTenantContext(session);
+    const db = await getTenantDb(session);
+
+    const users = await db.user.findMany({
+      where: {
+        builderId: tenantId,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        displayName: true,
+        email: true,
+        builderRole: true,
+        lastLoginAt: true,
+        isActive: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return Object.assign(users, { result: users });
+  });
 
 export const createTeamInvite = createServerFn({ method: 'POST' })
   .inputValidator((data: { name: string; email: string; role: string }) => data)
@@ -4719,74 +4793,141 @@ export const removeTeamMember = createServerFn({ method: 'POST' })
   .inputValidator((userId: string) => userId)
   .handler(async ({ data: userId }) => {
     const { getTenantDb, requireAuth } = await import('./server-utils.server');
+    const { assertTenantContext } = await import('./security-helpers.server');
     const session = await requireAuth();
+    const tenantId = assertTenantContext(session);
 
+    // 1. Prevent self-removal
+    if (userId === session.userId) {
+      throw new Error('FORBIDDEN: Cannot remove your own account.');
+    }
+
+    // 2. Role permissions: Only Owners and Admins can remove team members
     if (session.role === 'builder') {
       if (session.builderRole === 'sales' || session.builderRole === 'manager') {
-        throw new Error('FORBIDDEN: Only Owners and Admins can remove team members.')
+        throw new Error('FORBIDDEN: Only Owners and Admins can remove team members.');
       }
     }
 
-    const db = await getTenantDb()
+    const db = await getTenantDb(session);
     try {
-      const targetUser = await db.user.findUnique({
-        where: { id: userId },
-        select: { id: true, builderRole: true }
-      })
+      // 3. Strict tenant isolation: target user MUST belong to caller's tenant and not already deleted
+      const targetUser = await db.user.findFirst({
+        where: { id: userId, builderId: tenantId, deletedAt: null },
+        select: { id: true, builderRole: true },
+      });
 
-      if (!targetUser) throw new Error("User not found")
+      if (!targetUser) throw new Error('User not found or access denied');
 
+      // 4. Role Hierarchy rules
       if (session.role === 'builder') {
         if (targetUser.builderRole === 'owner') {
-          throw new Error('FORBIDDEN: Cannot remove Owner account.')
+          // Check if there are other owners remaining
+          const remainingOwners = await db.user.count({
+            where: {
+              builderId: tenantId,
+              builderRole: 'owner',
+              deletedAt: null,
+              id: { not: userId },
+            },
+          });
+          if (remainingOwners === 0) {
+            throw new Error('FORBIDDEN: Cannot remove the last Owner account.');
+          }
         }
         if (session.builderRole === 'admin' && targetUser.builderRole === 'admin') {
-          throw new Error('FORBIDDEN: Admins cannot remove other Admin accounts.')
+          throw new Error('FORBIDDEN: Admins cannot remove other Admin accounts.');
         }
       }
 
-      await db.user.delete({
-        where: { id: userId, builderId: session.builderId || undefined }
-      })
-      return { success: true }
+      // 5. Soft-delete user to maintain audit trails and foreign key integrity
+      await db.user.update({
+        where: { id: userId },
+        data: {
+          deletedAt: new Date(),
+          isActive: false,
+          tokenVersion: { increment: 1 },
+          resetToken: null,
+          resetTokenHash: null,
+          resetTokenExpires: null,
+        },
+      });
+
+      const res = { success: true };
+      return Object.assign(res, { result: res });
     } catch (err) {
-      console.error("Error in removeTeamMember:", err)
-      throw err
+      console.error('Error in removeTeamMember:', err);
+      throw err;
     }
-  })
+  });
 
 export const generatePasswordResetLink = createServerFn({ method: 'POST' })
   .inputValidator((userId: string) => userId)
   .handler(async ({ data: userId }) => {
     const { getTenantDb, requireAuth } = await import('./server-utils.server');
+    const { hashToken, sanitizeResetResponse } = await import('./security-helpers.server');
     const session = await requireAuth();
     const db = await getTenantDb();
     
-    // FIX-4: Enforce tenant isolation at the DB query level (not post-hoc in application code).
-    // The WHERE clause atomically ensures the target user belongs to the caller's own builder
-    // tenant. If the userId belongs to a different tenant, findUnique returns null and we throw
-    // before reading any cross-tenant data. This eliminates the IDOR race condition.
-    const tenantScopedWhere = session.role === 'admin'
-      ? { id: userId }                                         // Admin can reset any user
-      : { id: userId, builderId: session.builderId ?? '' }     // Builder can only reset own tenant's users
+    // Strict RBAC Allow-list: Super Admin OR Builder Owner / Admin only
+    const isSuperAdmin = session.role === 'admin';
+    const isBuilderOwnerOrAdmin =
+      session.role === 'builder' &&
+      (session.builderRole === 'owner' || session.builderRole === 'admin');
 
-    const userToReset = await db.user.findUnique({ where: tenantScopedWhere });
+    if (!isSuperAdmin && !isBuilderOwnerOrAdmin) {
+      throw new Error('FORBIDDEN: Only organization owners and administrators can generate password reset links.');
+    }
+
+    // Atomic tenant isolation: target user must belong to caller's tenant
+    const tenantScopedWhere = isSuperAdmin
+      ? { id: userId }
+      : { id: userId, builderId: session.builderId ?? '' };
+
+    const userToReset = await db.user.findFirst({ where: tenantScopedWhere });
     if (!userToReset) throw new Error('User not found or access denied');
 
     const crypto = await import('crypto');
-    const token = crypto.randomBytes(32).toString('hex');
-    const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = hashToken(rawToken);
+    const expires = new Date(Date.now() + 60 * 60 * 1000); // Strict 1-hour TTL
     
+    // Store only SHA-256 hash — NEVER plaintext token
     await db.user.update({
       where: { id: userId },
       data: {
-        resetToken: token,
+        resetToken: null,
+        resetTokenHash: tokenHash,
         resetTokenExpires: expires,
         forcePasswordReset: true,
       }
     });
 
-    return { success: true, inviteLink: `/invite/${token}` };
+    const appBaseUrl = (process.env.APP_BASE_URL || 'https://weaverframe.in').replace(/\/+$/, '');
+    const resetUrl = `${appBaseUrl}/reset-password?token=${rawToken}`;
+
+    // Non-blocking async email delivery to target user
+    setImmediate(async () => {
+      try {
+        const { sendOutboundEmail, buildPasswordResetEmailHtml } = await import('./email.server');
+        const html = buildPasswordResetEmailHtml({
+          resetUrl,
+          recipientEmail: userToReset.email,
+          displayName: userToReset.displayName,
+        });
+
+        await sendOutboundEmail({
+          to: userToReset.email,
+          subject: 'WeaverFrame Security: Password Reset Authorization',
+          html,
+        });
+      } catch (err) {
+        console.error('[SECURITY] Failed to dispatch password reset email:', err);
+      }
+    });
+
+    // Zero-token leakage: NEVER return the rawToken or reset link in the API response
+    return sanitizeResetResponse();
   });
 
 export const createStripeCheckoutSession = createServerFn({ method: 'POST' })
@@ -4822,6 +4963,7 @@ export const createStripeCheckoutSession = createServerFn({ method: 'POST' })
         where: { id: session.builderId || '' }
       });
 
+      const { getSafeRedirectUrl } = await import('./security-helpers.server');
       const params = new URLSearchParams();
       params.append('payment_method_types[0]', 'card');
       params.append('line_items[0][price_data][currency]', 'usd');
@@ -4830,8 +4972,8 @@ export const createStripeCheckoutSession = createServerFn({ method: 'POST' })
       params.append('line_items[0][price_data][unit_amount]', selectedPlan.amountCents.toString());
       params.append('line_items[0][quantity]', '1');
       params.append('mode', 'subscription');
-      params.append('success_url', `${data.returnUrl || 'https://weaverframe.in'}/settings?billing=success`);
-      params.append('cancel_url', `${data.returnUrl || 'https://weaverframe.in'}/settings?billing=cancel`);
+      params.append('success_url', getSafeRedirectUrl(data.returnUrl, '/settings?billing=success'));
+      params.append('cancel_url', getSafeRedirectUrl(data.returnUrl, '/settings?billing=cancel'));
       params.append('client_reference_id', session.builderId || '');
       if (builder?.email) {
         params.append('customer_email', builder.email);
@@ -4900,10 +5042,11 @@ export const createStripeCustomerPortalSession = createServerFn({ method: 'POST'
         };
       }
 
+      const { getSafeRedirectUrl } = await import('./security-helpers.server');
       // 2. Create Billing Portal Session
       const params = new URLSearchParams();
       params.append('customer', customer.id);
-      params.append('return_url', `${data.returnUrl || 'https://weaverframe.in'}/settings`);
+      params.append('return_url', getSafeRedirectUrl(data.returnUrl, '/settings'));
 
       const portalRes = await fetch('https://api.stripe.com/v1/billing_portal/sessions', {
         method: 'POST',
@@ -4935,110 +5078,8 @@ export const submitDemoRequest = createServerFn({ method: 'POST' })
     buildVolume: string;
   }) => data)
   .handler(async ({ data }) => {
-    // 1. Validate Input
-    if (!data.name || data.name.trim().length < 2) {
-      throw new Error('Please enter your full name.');
-    }
-    if (!data.company || data.company.trim().length < 2) {
-      throw new Error('Please enter your building company name.');
-    }
-    if (!data.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email.trim())) {
-      throw new Error('Please enter a valid work email address.');
-    }
-    if (!data.phone || data.phone.trim().length < 5) {
-      throw new Error('Please enter a valid phone number.');
-    }
-
-    const { getDb } = await import('./db.server');
-    const db = await getDb();
-    const { sendOutboundEmail, buildAdminDemoNotificationHtml, buildUserDemoConfirmationHtml } = await import('./email.server');
-    const crypto = await import('crypto');
-
-    try {
-      // 2. Resolve platform settings (support email) if available
-      const platformSettings = await db.platformSettings.findFirst({ select: { supportEmail: true } }).catch(() => null);
-
-      // 3. Create portal token
-      const portalToken = crypto.randomBytes(16).toString('hex');
-
-      // 4. Create isolated DemoRequest in DB (Zero builder association, zero AI auto-reply)
-      const demoRequest = await db.demoRequest.create({
-        data: {
-          name: data.name.trim(),
-          email: data.email.trim().toLowerCase(),
-          phone: data.phone.trim(),
-          company: data.company.trim(),
-          buildVolume: data.buildVolume || 'Custom Build Inquiry',
-          status: 'new',
-          portalToken,
-          metadata: JSON.stringify({
-            requestType: 'Private Architecture Demonstration Walkthrough',
-            submittedAt: new Date().toISOString(),
-            buildVolume: data.buildVolume,
-          }),
-        }
-      });
-
-      const demoId = demoRequest.id;
-
-      // 5. Resolve Platform Admin Email for Notification
-      let adminEmail = (typeof process !== 'undefined' ? (process.env.ADMIN_EMAIL || process.env.SMTP_USER || process.env.GMAIL_USER) : '') || '';
-      if (!adminEmail && platformSettings?.supportEmail) {
-        adminEmail = platformSettings.supportEmail;
-      }
-      if (!adminEmail) {
-        adminEmail = 'admin@weaverframe.com';
-      }
-
-      const baseUrl = (typeof process !== 'undefined' ? process.env.APP_BASE_URL : '') || 'https://weaverframe.in';
-      const dashboardUrl = `${baseUrl}/admin/demo-requests`;
-
-      // 6. Dispatch Email 1: Notification to Admin â€” fire-and-forget (non-blocking)
-      if (adminEmail) {
-        sendOutboundEmail({
-          to: adminEmail,
-          subject: `🚀 [Demo Request] ${data.name.trim()} from ${data.company.trim()} (${data.buildVolume})`,
-          html: buildAdminDemoNotificationHtml({
-            name: data.name.trim(),
-            company: data.company.trim(),
-            email: data.email.trim(),
-            phone: data.phone.trim(),
-            buildVolume: data.buildVolume,
-            dashboardUrl,
-          }),
-          from: 'WeaverFrame Concierge <onboarding@resend.dev>',
-        }).catch((err) => {
-          console.error('[DEMO REQUEST ADMIN EMAIL ERROR]:', err);
-        });
-      }
-
-      // 7. Dispatch Email 2: Confirmation Receipt to Prospect â€” fire-and-forget (non-blocking)
-      sendOutboundEmail({
-        to: data.email.trim(),
-        subject: `WeaverFrame â€” Private OS Demonstration Request Received`,
-        html: buildUserDemoConfirmationHtml({
-          recipientName: data.name.trim(),
-          company: data.company.trim(),
-          buildVolume: data.buildVolume,
-        }),
-        from: 'WeaverFrame Executive Advisory <onboarding@resend.dev>',
-      }).catch((err) => {
-        console.error('[DEMO REQUEST USER CONFIRMATION ERROR]:', err);
-      });
-
-      const { invalidateCache } = await import('./cache');
-      invalidateCache('dashboard_');
-
-      return {
-        success: true,
-        message: 'Your demonstration request has been received. Our executive advisor will reach out shortly.',
-        demoId,
-        leadId: demoId,
-      };
-    } catch (error: any) {
-      console.error('[DEMO REQUEST ERROR]:', error);
-      throw new Error(error?.message || 'Failed to submit demonstration request. Please try again.');
-    }
+    const { handleSubmitDemoRequest } = await import('./server-utils.server');
+    return handleSubmitDemoRequest(data);
   });
 
 export const prewarmConnection = createServerFn({ method: 'GET' })

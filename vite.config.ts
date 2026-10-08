@@ -34,6 +34,62 @@ export default defineConfig({
         external: ["ws"],
       },
     },
+    plugins: [
+      {
+        name: 'node-browser-shims',
+        enforce: 'pre',
+        resolveId(id, _importer, options) {
+          if (options?.ssr || this.environment?.name === 'server') {
+            return null;
+          }
+          if (id === 'node:stream' || id === 'stream') {
+            return '\0virtual:node-stream-shim';
+          }
+          if (id === 'node:async_hooks' || id === 'async_hooks') {
+            return '\0virtual:node-async-hooks-shim';
+          }
+          return null;
+        },
+        load(id) {
+          if (id === '\0virtual:node-stream-shim') {
+            return `
+              export class Readable {}
+              export class Writable {}
+              export class Transform {}
+              export class PassThrough {}
+              export class Stream {}
+              export const pipeline = () => {};
+              export const finished = () => {};
+              export default {
+                Readable,
+                Writable,
+                Transform,
+                PassThrough,
+                Stream,
+                pipeline,
+                finished,
+              };
+            `;
+          }
+          if (id === '\0virtual:node-async-hooks-shim') {
+            return `
+              export class AsyncLocalStorage {
+                getStore() { return undefined; }
+                run(store, callback, ...args) { return typeof callback === 'function' ? callback(...args) : undefined; }
+                enterWith(store) {}
+                disable() {}
+                exit(callback, ...args) { return typeof callback === 'function' ? callback(...args) : undefined; }
+              }
+              export class AsyncResource {
+                runInAsyncScope(fn, thisArg, ...args) { return fn.apply(thisArg, args); }
+              }
+              export default { AsyncLocalStorage, AsyncResource };
+            `;
+          }
+          return null;
+        },
+      },
+    ],
     preview: {
       allowedHosts: true,
     },
