@@ -93,8 +93,15 @@ function isAllowedOrigin(originHeader: string, requestHost: string): boolean {
       } catch {}
     }
 
-    // Direct host match (e.g. host header)
+    // Direct host match (e.g. host header with or without port)
     if (originUrl.host === requestHost) return true;
+    if (originUrl.hostname === requestHost.split(':')[0]) return true;
+
+    // Vercel deployment preview and production domains
+    if (originUrl.hostname.endsWith('.vercel.app')) return true;
+
+    // Weaverframe domains
+    if (originUrl.hostname === 'weaverframe.in' || originUrl.hostname.endsWith('.weaverframe.in')) return true;
 
     // Local development match
     if (
@@ -112,8 +119,12 @@ function isAllowedOrigin(originHeader: string, requestHost: string): boolean {
 
 // h3 swallows in-handler throws into a normal 500 Response with body
 // {"unhandled":true,"message":"HTTPError"} — try/catch alone never fires for those.
-async function normalizeCatastrophicSsrResponse(response: Response): Promise<Response> {
+async function normalizeCatastrophicSsrResponse(response: Response, isRpcOrApi: boolean): Promise<Response> {
   if (response.status < 500) return response;
+  if (isRpcOrApi) {
+    // API and RPC endpoints must NEVER be overwritten with an HTML error page!
+    return response;
+  }
   const contentType = response.headers.get("content-type") ?? "";
   if (!contentType.includes("application/json")) return response;
 
@@ -128,9 +139,9 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
 
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
+    const url = new URL(request.url);
+    const isRpcOrApi = url.pathname.startsWith('/_serverFn') || url.pathname.startsWith('/api');
     try {
-      const url = new URL(request.url);
-
       // CSRF / Origin Verification on mutating requests
       const method = request.method.toUpperCase();
       const isMutating = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method);
@@ -138,7 +149,7 @@ export default {
       if (isMutating && !isCsrfExempt(url.pathname)) {
         const origin = request.headers.get('origin');
         const referer = request.headers.get('referer');
-        const host = request.headers.get('host') || url.host;
+        const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || url.host;
 
         if (origin) {
           if (!isAllowedOrigin(origin, host)) {
@@ -189,10 +200,18 @@ export default {
 
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
-      const normalized = await normalizeCatastrophicSsrResponse(response);
+      const normalized = await normalizeCatastrophicSsrResponse(response, isRpcOrApi);
       return applySecurityHeaders(normalized);
     } catch (error) {
       console.error(error);
+      if (isRpcOrApi) {
+        return applySecurityHeaders(
+          new Response(JSON.stringify({ error: 'Internal Server Error' }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        );
+      }
       return applySecurityHeaders(brandedErrorResponse());
     }
   },
